@@ -9,4 +9,5 @@ __pycache__
 src/CMakeLists.txt
 *:Zone.Identifier
 *.caffemodel
+*.pcd
 svmmodel_*.npz
