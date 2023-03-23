@@ -1,0 +1,12 @@
+build/
+devel/
+install/
+aarapsi_offrobot_ws.code-workspace
+.vscode/
+src/aarapsi_intro_pack/data/
+.prof
+__pycache__
+src/CMakeLists.txt
+*:Zone.Identifier
+*.caffemodel
+svmmodel_*.npz
