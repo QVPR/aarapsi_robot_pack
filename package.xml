@@ -7,8 +7,8 @@
   <maintainer email="claxtono@qut.edu.au">Owen Claxton (@owenclaxton-QUT)</maintainer>
   <license>MIT</license>
   <url type="website">https://github.com/QVPR/aarapsiproject</url>
-  <url type="website">https://github.com/owenclaxton-QUT/aarapsi_offrobot_ws</url>
-  <url type="website">https://github.com/owenclaxton-QUT/aarapsi_robot_ws</url>
+  <url type="website">https://github.com/QVPR/aarapsi_offrobot_ws</url>
+  <url type="website">https://github.com/QVPR/aarapsi_robot_ws</url>
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>geometry_msgs</build_depend>
@@ -47,6 +47,8 @@
   <exec_depend>tf2</exec_depend>
   <exec_depend>tf</exec_depend>
   <exec_depend>message_runtime</exec_depend>
+  <exec_depend>rospy_message_converter</exec_depend>
+  <exec_depend>image_geometry</exec_depend>
 
   <exec_depend>python3-rospkg</exec_depend>
   <exec_depend>python3-cv_bridge</exec_depend>	
@@ -61,7 +63,7 @@
   <exec_depend>python3-sklearnex</exec_depend> <!-- pip install scikit-learn-intelex -->
   <exec_depend>python3-enum</exec_depend>
   <exec_depend>python3-tqdm</exec_depend>
-  
+ 
   <export>
   </export>
 </package>

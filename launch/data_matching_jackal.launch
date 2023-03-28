@@ -31,7 +31,7 @@
 
 	<!-- Odom corrupter -->
 	<node pkg="teach_repeat" type="odom_corrupter.py" name="odom_corrupter" output="screen" if="$(arg use_corrupted_odom)">
-		<remap from="odom" to="odometry/filtered" />
+		<remap from="odom" to="odom/filtered" />
 		<rosparam param="translation_error_factor" subst_value="True">$(arg odom_corruption_factor)</rosparam>
 		<!--rosparam param="rotation_error_factor" subst_value="True">$(arg odom_corruption_factor)</rosparam-->
 		<rosparam param="rotation_error_factor">1.0</rosparam>
