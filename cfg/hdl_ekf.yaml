@@ -2,7 +2,7 @@
 
 ekf_se_map:
   frequency: 50
-  publish_tf: false
+  publish_tf: true
   publish_acceleration: false
   two_d_mode: true
 
