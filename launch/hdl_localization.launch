@@ -1,6 +1,8 @@
 <?xml version="1.0"?>
 <launch>
   <!-- arguments -->
+  <arg name="offline" default="false"/>
+  <arg name="nodelet_style" default="standalone"/>
   <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
   <arg name="points_topic" default="/velodyne_points" />
   <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
@@ -17,20 +19,20 @@
   <arg name="robot_odom_frame_id" value="odom" />
   <arg name="plot_estimation_errors" value="false" />
 
-  <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" />
+  <include if="$(arg offline)" file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" />
 
   <!-- in case you use velodyne_driver, comment out the following line -->
   <!-- <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/> -->
 
   <!-- globalmap_server_nodelet -->
-  <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="load hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
+  <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="$(arg nodelet_style) hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
     <param name="globalmap_pcd" value="$(find aarapsi_robot_pack)/data/s11_center_map.pcd" />
     <param name="convert_utm_to_local" value="true" />
     <param name="downsample_resolution" value="0.1" />
   </node>
 
   <!-- hdl_localization_nodelet -->
-  <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" args="load hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
+  <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" args="$(arg nodelet_style) hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
     <remap from="/velodyne_points" to="$(arg points_topic)" />
     <remap from="/status" to="/scan_matching_status" />
     <remap from="/gpsimu_driver/imu_data" to="$(arg imu_topic)" />
