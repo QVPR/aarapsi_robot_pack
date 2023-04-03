@@ -1,0 +1,69 @@
+<launch>
+    <!-- s1_ccw_o0_e0_a0        s1_ccw_o0_e0_a1         s1_ccw_o0_e0_a2 -->
+    <!-- s2_ccw_o0_e0_a0        s2_ccw_o0_e1_a0         s2_ccw_o1_e0_a0 -->
+    <!-- s1_cw_o0_e0_a0        s2_cw_o0_e1_a0 -->
+
+    <arg name="img_dims"                        default="(32,32)"/>
+    <arg name="cal_qry_dataset_name"            default="s1_cw_o0_e0_a0"/>
+    <arg name="cal_ref_dataset_name"            default="s2_cw_o0_e1_a0"/>
+    <arg name="log_level"                       default="1"/>
+    <arg name="rate"                            default="12"/>
+
+    <group>
+        <arg name="port"                        default="5006"/> 
+        <arg name="launch_webserver"            default="true"/>
+        <arg name="id"                          default="a"/>
+        <arg name="dataset_name"                default="s1_ccw_o0_e0_a0"/> 
+        <arg name="ref_root"                    default="$(find aarapsi_robot_pack)/data/$(arg dataset_name)/"/>
+
+        <arg name="cruncher_node_name"          default="vpr_cruncher_$(arg id)"/>
+        <arg name="monitor_node_name"           default="vpr_monitor_$(arg id)"/>
+        <arg name="plotter_node_name"           default="vpr_plotter_$(arg id)"/>
+        <arg name="namespace"                   default="/vpr_nodes/set_$(arg id)"/>
+        <include file="$(find aarapsi_robot_pack)/launch/vprp_bokeh.launch" pass_all_args="true"/>
+    </group>
+
+    <group>
+        <arg name="port"                        default="5007"/> 
+        <arg name="launch_webserver"            default="false"/>
+        <arg name="id"                          default="b"/>
+        <arg name="dataset_name"                default="s1_ccw_o0_e0_a1"/> 
+        <arg name="ref_root"                    default="$(find aarapsi_robot_pack)/data/$(arg dataset_name)/"/>
+
+        <arg name="cruncher_node_name"          default="vpr_cruncher_$(arg id)"/>
+        <arg name="monitor_node_name"           default="vpr_monitor_$(arg id)"/>
+        <arg name="plotter_node_name"           default="vpr_plotter_$(arg id)"/>
+        <arg name="namespace"                   default="/vpr_nodes/set_$(arg id)"/>
+        <include file="$(find aarapsi_robot_pack)/launch/vprp_bokeh.launch" pass_all_args="true"/>
+    </group>
+
+    <group>
+        <arg name="port"                        default="5008"/> 
+        <arg name="launch_webserver"            default="false"/>
+        <arg name="id"                          default="c"/>
+        <arg name="dataset_name"                default="s2_ccw_o0_e0_a0"/> 
+        <arg name="ref_root"                    default="$(find aarapsi_robot_pack)/data/$(arg dataset_name)/"/>
+
+        <arg name="cruncher_node_name"          default="vpr_cruncher_$(arg id)"/>
+        <arg name="monitor_node_name"           default="vpr_monitor_$(arg id)"/>
+        <arg name="plotter_node_name"           default="vpr_plotter_$(arg id)"/>
+        <arg name="namespace"                   default="/vpr_nodes/set_$(arg id)"/>
+        <include file="$(find aarapsi_robot_pack)/launch/vprp_bokeh.launch" pass_all_args="true"/>
+    </group>
+
+    <group>
+        <arg name="port"                        default="5009"/> 
+        <arg name="launch_webserver"            default="false"/>
+        <arg name="id"                          default="d"/>
+        <arg name="dataset_name"                default="s2_ccw_o0_e1_a0"/> 
+        <arg name="ref_root"                    default="$(find aarapsi_robot_pack)/data/$(arg dataset_name)/"/>
+
+        <arg name="cruncher_node_name"          default="vpr_cruncher_$(arg id)"/>
+        <arg name="monitor_node_name"           default="vpr_monitor_$(arg id)"/>
+        <arg name="plotter_node_name"           default="vpr_plotter_$(arg id)"/>
+        <arg name="namespace"                   default="/vpr_nodes/set_$(arg id)"/>
+        <include file="$(find aarapsi_robot_pack)/launch/vprp_bokeh.launch" pass_all_args="true"/>
+    </group>
+
+</launch>
+

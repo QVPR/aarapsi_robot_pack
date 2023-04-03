@@ -1,0 +1,3 @@
+sensor_msgs/CompressedImage image
+aarapsi_robot_pack/ImageStructure data
+std_msgs/Header header

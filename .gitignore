@@ -3,7 +3,8 @@ devel/
 install/
 aarapsi_offrobot_ws.code-workspace
 .vscode/
-src/aarapsi_intro_pack/data/
+data/
+build/
 .prof
 __pycache__
 src/CMakeLists.txt
@@ -11,4 +12,5 @@ src/CMakeLists.txt
 *.caffemodel
 *.avi
 *.pcd
+*.pyc
 svmmodel_*.npz

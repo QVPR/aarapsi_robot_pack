@@ -1,0 +1,4 @@
+bool generate # Whether or not to make a new one
+---
+bool success # Whether or not succeeded
+string topic # topic published on

@@ -3,7 +3,7 @@
 import rospy
 import argparse as ap
 from sensor_msgs.msg import Image, CompressedImage
-from aarapsi_intro_pack.core import check_positive_float, check_positive_two_int_tuple, check_bool
+from aarapsi_robot_pack.core import check_positive_float, check_positive_two_int_tuple, check_bool
 
 class Throttle_Topic:
     def __init__(self, topic_in, topic_out, exts, types, rate, hist_len=3, transform=None):

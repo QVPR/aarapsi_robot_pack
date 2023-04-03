@@ -1,0 +1,3 @@
+[submodule "src/aarapsi_robot_pack/src/aarapsi_robot_pack/Patch-NetVLAD"]
+	path = src/aarapsi_robot_pack/src/aarapsi_robot_pack/Patch-NetVLAD
+	url = https://github.com/QVPR/Patch-NetVLAD

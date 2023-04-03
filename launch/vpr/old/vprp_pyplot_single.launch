@@ -1,0 +1,43 @@
+<launch>
+    <arg name="dataset_name" default="s1_ccw_z_230208_o0_e0"/>
+    
+    <arg name="rate" default="20.0"/>
+    <arg name="node_name" default="vpr_primer"/>
+    <arg name="anon" default="True"/>
+
+    <arg name="database_path" default="$(find aarapsi_robot_pack)/data/compressed_sets"/>
+    <arg name="ref_root" default="$(find aarapsi_robot_pack)/data/$(arg dataset_name)/"/>
+    <!-- <arg name="ref_imgs_path" default="[$(arg ref_root)forward,$(arg ref_root)left,$(arg ref_root)right,$(arg ref_root)panorama]"/> -->
+    <arg name="ref_imgs_path" default="$(arg ref_root)forward"/>
+    <arg name="ref_odom_path" default="$(arg ref_root)odometry.csv"/>
+    <arg name="image_topic_in" default="/ros_indigosdk_occam/image0"/>
+    <arg name="odometry_topic_in" default="/odometry/filtered"/>
+
+    <arg name="img_dims" default="(32,32)"/>
+    <arg name="ft_type" default="1"/>
+
+    <arg name="tol_mode" default="2"/>
+    <arg name="tol_thresh" default="1.0"/>
+
+    <arg name="compress_in" default="True"/>
+    <arg name="compress_out" default="False"/>
+    <arg name="do_plotting" default="True"/>
+    <arg name="make_images" default="True"/>
+    <arg name="groundtruth" default="True"/>
+    <arg name="make_labels" default="True"/>
+
+    <arg name="time_history_length" default="20"/>
+    <arg name="icon_info" default="(50,20)"/>
+    <arg name="namespace" default="/vpr_nodes"/>
+    <arg name="frame_id" default="base_link"/>
+    
+    <node pkg="aarapsi_robot_pack" type="vpr_all_in_one.py" name="$(arg node_name)" output="screen" 
+        args="$(arg dataset_name) $(arg database_path) $(arg ref_imgs_path) $(arg ref_odom_path)
+              $(arg image_topic_in) $(arg odometry_topic_in) 
+              -Ci $(arg compress_in) -Co $(arg compress_out) -P $(arg do_plotting) -I $(arg make_images) -G $(arg groundtruth) -L $(arg make_labels)
+              -r $(arg rate) -l $(arg time_history_length) -i $(arg img_dims) -F $(arg ft_type) 
+              -t $(arg tol_mode) -T $(arg tol_thresh) -p $(arg icon_info) 
+              -N $(arg node_name) -a $(arg anon) -n $(arg namespace) -f $(arg frame_id)">
+    </node>
+
+</launch>
