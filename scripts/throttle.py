@@ -64,7 +64,7 @@ def img_resize(msg, resize_dims=None):
         img         = bridge.compressed_imgmsg_to_cv2(msg, "passthrough")
         resized_img = cv2.resize(img, resize_dims, interpolation=cv2.INTER_AREA)
         rospy.loginfo_once("[CompressedImage] Resizing from %s" % (str(img.shape)))
-        resized_msg = bridge.cv2_to_compressed_imgmsg(resized_img, "jpg")
+        resized_msg = bridge.cv2_to_compressed_imgmsg(resized_img, "jpeg")
         return resized_msg
     elif isinstance(msg, Image):
         img         = bridge.imgmsg_to_cv2(msg, "passthrough")
