@@ -85,7 +85,7 @@ if __name__ == '__main__':
     parser.add_argument('--node-name', '-N', default="throttle", help="Specify node name (default: %(default)s).")
     parser.add_argument('--anon', '-a', type=check_bool, default=True, help="Specify whether node should be anonymous (default: %(default)s).")
     parser.add_argument('--log-level', '-V', type=int, choices=[1,2,4,8,16], default=2, help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--mode', '-m', type=int, choices=[0,1,2], default=2. help="Specify whether to throttle raw (0), compressed (1), or both (2) topics (default: %(default)s).")
+    parser.add_argument('--mode', '-m', type=int, choices=[0,1,2], default=2, help="Specify whether to throttle raw (0), compressed (1), or both (2) topics (default: %(default)s).")
 
     raw_args = parser.parse_known_args()
     args = vars(raw_args[0])
