@@ -13,7 +13,6 @@
 # 3. Made this file, and set packages/package_dir variables to the python package information
 # 4. Moved my first .py file into the new to-be-python-package directory
 # 5. Created a __init__.py file in the new to-be-python-package directory
-# 6. Added my "shorthands" into __init__.py
 
 # How to use:
 # - Remake the catkin workspace
