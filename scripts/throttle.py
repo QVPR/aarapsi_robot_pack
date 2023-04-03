@@ -85,6 +85,7 @@ if __name__ == '__main__':
     parser.add_argument('--node-name', '-N', default="throttle", help="Specify node name (default: %(default)s).")
     parser.add_argument('--anon', '-a', type=check_bool, default=True, help="Specify whether node should be anonymous (default: %(default)s).")
     parser.add_argument('--log-level', '-V', type=int, choices=[1,2,4,8,16], default=2, help="Specify ROS log level (default: %(default)s).")
+    parser.add_argument('--mode', '-m', type=int, choices=[0,1,2], default=2. help="Specify whether to throttle raw (0), compressed (1), or both (2) topics (default: %(default)s).")
 
     raw_args = parser.parse_known_args()
     args = vars(raw_args[0])
@@ -94,18 +95,30 @@ if __name__ == '__main__':
     log_level   = args['log_level']
     node_name   = args['node_name']
     anon        = args['anon']
+    mode        = args['mode']
 
     rospy.init_node(node_name, anonymous=anon, log_level=log_level)
-    rospy.logdebug("PARAMETERS:\n\t\t\t\tNode Name: %s\n\t\t\t\tAnonymous: %s\n\t\t\t\tLogging Level: %s\n\t\t\t\tRate: %s\n\t\t\t\tResize Dimensions: %s" \
-                   % (str(node_name), str(anon), str(log_level), str(rate), str(resize_dims)))
+    rospy.logdebug("PARAMETERS:\n\t\t\t\tNode Name: %s\n\t\t\t\tMode: %s\n\t\t\t\tAnonymous: %s\n\t\t\t\tLogging Level: %s\n\t\t\t\tRate: %s\n\t\t\t\tResize Dimensions: %s" \
+                   % (str(node_name), str(mode), str(anon), str(log_level), str(rate), str(resize_dims)))
     rate_obj    = rospy.Rate(rate)
 
     # set up topics
     c_in, c_out = get_cam_topics()
+    if mode == 0:
+       exts = ['']
+       types = [Image]
+    elif mode == 1:
+       exts = ['/compressed']
+       types = [CompressedImage]
+    elif mode == 2:
+       exts = ['', '/compressed']
+       types = [Image, CompressedImage]
+    else:
+       raise Exception('Unknown mode')
 
     # set up throttles
     throttled_topics = [Throttle_Topic(c_in[i], c_out[i], \
-                                       ['', '/compressed'], [Image, CompressedImage], rate, transform=lambda x: img_resize(x, resize_dims)) \
+                                       exts, types, rate, transform=lambda x: img_resize(x, resize_dims)) \
                             for i in range(len(c_in))]
     
     # loop forever until signal shutdown
