@@ -11,6 +11,7 @@ import torch
 from tqdm.auto import tqdm
 import cv2
 from PIL import Image
+from aarapsi_robot_pack.vpr_classes.download_models import download_hybridnet_models
 
 class PlaceDataset(torch.utils.data.Dataset):
     def __init__(self, image_data, dims=None):
@@ -81,7 +82,8 @@ class HybridNet_Container:
 
         model_path = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/src/aarapsi_robot_pack/HybridNet/"
         model_file = os.path.join(model_path,'HybridNet.caffemodel')
-
+        if not isfile(model_file):
+            download_hybridnet_models()
         self.logger('Loading HybridNet model')
 
         self.net = caffe.Net(os.path.join(model_path,'deploy.prototxt'), model_file, caffe.TEST)

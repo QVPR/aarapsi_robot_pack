@@ -45,8 +45,8 @@ import numpy as np
 from PIL import Image
 
 from patchnetvlad.models.models_generic import get_backend, get_model, get_pca_encoding
-from patchnetvlad.tools import PATCHNETVLAD_ROOT_DIR
-from download_models import download_all_models
+from aarapsi_robot_pack.vpr_classes.download_models import PATCHNETVLAD_ROOT_DIR
+from aarapsi_robot_pack.vpr_classes.download_models import download_netvlad_models
 
 class PlaceDataset(torch.utils.data.Dataset):
     def __init__(self, image_data, transform, dims=None):
@@ -135,7 +135,7 @@ class NetVLAD_Container:
         if not isfile(resume_ckpt):
             resume_ckpt = join(PATCHNETVLAD_ROOT_DIR, resume_ckpt)
             if not isfile(resume_ckpt):
-                download_all_models(ask_for_permission=True)
+                download_netvlad_models(ask_for_permission=True)
 
         if isfile(resume_ckpt):
             self.logger("=> Trying to load checkpoint '{}'".format(resume_ckpt))
