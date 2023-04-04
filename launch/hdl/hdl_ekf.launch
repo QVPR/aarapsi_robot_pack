@@ -3,6 +3,7 @@
     <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/hdl_ekf.yaml"/>
 
     <node pkg="robot_localization" type="ekf_localization_node" name="slam_ekf" clear_params="true">
-      <remap from="odometry/filtered" to="odom/filtered"/>
+      <remap from="odometry/filtered" to="/odom/filtered"/>
+      <remap from="/diagnostics" to="/diagnostics/slam_ekf"/>
     </node>
 </launch>
