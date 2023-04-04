@@ -26,7 +26,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: PointCloud2
+    SyncSource: /globalmap
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -58,6 +58,8 @@ Visualization Manager:
         imu_link:
           Value: true
         left_cam:
+          Value: true
+        map:
           Value: true
         mid_mount:
           Value: true
@@ -92,7 +94,46 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        {}
+        map:
+          odom:
+            base_link:
+              chassis_link:
+                front_fender_link:
+                  front_fender_accessory_link:
+                    {}
+                front_left_wheel_link:
+                  {}
+                front_right_wheel_link:
+                  {}
+                imu_link:
+                  {}
+                mid_mount:
+                  ark_enclosure_link:
+                    {}
+                  front_mount:
+                    left_cam:
+                      {}
+                    right_cam:
+                      {}
+                    um7_imu_link:
+                      {}
+                  occam:
+                    {}
+                  rear_mount:
+                    {}
+                  sensors_link:
+                    {}
+                  velodyne:
+                    {}
+                navsat_link:
+                  {}
+                rear_fender_link:
+                  rear_fender_accessory_link:
+                    {}
+                rear_left_wheel_link:
+                  {}
+                rear_right_wheel_link:
+                  {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -107,7 +148,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
@@ -122,7 +163,7 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: false
+      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -242,7 +283,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 71.89826965332031
+      Distance: 42.49616622924805
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -258,9 +299,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.2897965908050537
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
-      Yaw: 1.336647629737854
+      Yaw: 4.884830474853516
     Saved: ~
 Window Geometry:
   Displays:
