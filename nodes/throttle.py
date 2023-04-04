@@ -2,6 +2,7 @@
 
 import rospy
 import argparse as ap
+import copy
 from sensor_msgs.msg import Image, CompressedImage
 from aarapsi_robot_pack.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_bool
 
@@ -15,7 +16,7 @@ class Throttle_Topic:
         self.transform  = transform
         if transform is None:
             self.transform = self.empty
-        self.subs       = [rospy.Subscriber(self.topic_in + self.exts[i], self.types[i], lambda x: self.cb(x, i), queue_size=1) \
+        self.subs       = [rospy.Subscriber(self.topic_in + self.exts[i], self.types[i], self.cb, queue_size=1) \
                            for i in range(len(self.exts))]
         self.pubs       = [rospy.Publisher(self.topic_out + self.exts[i], self.types[i], queue_size=1) \
                            for i in range(len(self.exts))]
@@ -25,7 +26,8 @@ class Throttle_Topic:
         exts_string     = ''.join(self.exts)
         rospy.loginfo("Throttling %s[%s] to %s[%s] at %0.2f Hz" % (topic_in, exts_string, topic_out, exts_string, rate))
 
-    def cb(self, msg, index):
+    def cb(self, msg):
+        index = self.types.index(type(msg))
         self.msgs[index].append(msg)
         while len(self.msgs[index]) > self.hist_len:
             self.msgs[index].pop(0)
@@ -37,7 +39,8 @@ class Throttle_Topic:
     def timer(self, event):
         for i in range(len(self.pubs)):
             if len(self.msgs[i]) > 0:
-                self.pubs[i].publish(self.transform(self.msgs[i].pop(0)))
+                msg_to_pub = self.msgs[i].pop(0)
+                self.pubs[i].publish(self.transform(msg_to_pub))
 
 def get_cam_topics():
 # Helper function to abstract topic generation
@@ -56,7 +59,7 @@ from cv_bridge import CvBridge
 import cv2
 bridge = CvBridge()
 
-def img_resize(msg, resize_dims=None):
+def img_resize(msg, resize_dims=None, frame_id="occam"):
     if resize_dims is None:
         return msg
     global bridge
@@ -65,16 +68,19 @@ def img_resize(msg, resize_dims=None):
         resized_img = cv2.resize(img, resize_dims, interpolation=cv2.INTER_AREA)
         rospy.loginfo_once("[CompressedImage] Resizing from %s" % (str(img.shape)))
         resized_msg = bridge.cv2_to_compressed_imgmsg(resized_img, "jpeg")
-        return resized_msg
     elif isinstance(msg, Image):
         img         = bridge.imgmsg_to_cv2(msg, "passthrough")
         resized_img = cv2.resize(img, resize_dims, interpolation=cv2.INTER_AREA)
         rospy.loginfo_once("[Image] Resizing from %s" % (str(img.shape)))
         resized_msg = bridge.cv2_to_imgmsg(resized_img, "bgr8")
-        return resized_msg
     else:
         print(type(msg))
         raise Exception("msg is not of type Image or CompressedImage")
+    # update header:
+    resized_msg.header.stamp = rospy.Time.now()
+    resized_msg.header.frame_id = frame_id
+    resized_msg.header.seq = msg.header.seq
+    return resized_msg
 
 if __name__ == '__main__':
     parser = ap.ArgumentParser(prog="topic throttle", 
@@ -115,10 +121,11 @@ if __name__ == '__main__':
        types = [Image, CompressedImage]
     else:
        raise Exception('Unknown mode')
-
-    # set up throttles
-    throttled_topics = [Throttle_Topic(c_in[i], c_out[i], \
-                                       exts, types, rate, transform=lambda x: img_resize(x, resize_dims)) \
+    
+    transformfunc    = lambda x: img_resize(x, resize_dims)
+    # set up throttles 
+    #                   Throttle_Topic(topic_in, topic_out, exts, types, rate, hist_len=3, transform=None):
+    throttled_topics = [Throttle_Topic(c_in[i], c_out[i], exts, types, rate, transform=transformfunc) \
                             for i in range(len(c_in))]
     
     # loop forever until signal shutdown
