@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <launch>
     <!-- SLAM Node: -->
-    <include file="$(find aarapsi_robot_pack)/launch/hdl_localization.launch"/>
+    <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_localization.launch"/>
     <!-- SLAM EKF Node: -->
-    <include file="$(find aarapsi_robot_pack)/launch/hdl_ekf.launch"/>
+    <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_ekf.launch"/>
     <!-- Camera Topic Throttling Node: -->
     <node pkg="aarapsi_robot_pack" node="throttle.py" name="throttler" />
 </launch>
