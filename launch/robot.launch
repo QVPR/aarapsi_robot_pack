@@ -5,5 +5,5 @@
     <!-- SLAM EKF Node: -->
     <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_ekf.launch"/>
     <!-- Camera Topic Throttling Node: -->
-    <node pkg="aarapsi_robot_pack" node="throttle.py" name="throttler" />
+    <node pkg="aarapsi_robot_pack" type="throttle.py" name="throttler" args="-m 1" />
 </launch>
