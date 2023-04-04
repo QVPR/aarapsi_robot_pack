@@ -54,7 +54,7 @@ class VPRImageProcessor: # main ROS class
             self.IMG_DIMS = dims
 
         if not self.allow_build and (self.init_hybridnet or self.init_hybridnet):
-            self.print("Initialisation request for hybridnet or netvlad but generation of new libraries and feature extraction is disabled")
+            self.print("Initialisation request for hybridnet or netvlad but generation of new libraries and feature extraction is disabled", State.INFO)
         elif self.allow_build:
             if self.init_netvlad:
                 if dims is None: raise Exception("init_netvlad specified true but dims not provided")
