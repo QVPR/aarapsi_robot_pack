@@ -20,7 +20,7 @@
     <arg name="cal_ref_dataset_name"    default="s2_cw_o0_e1_a0"/>
     <!-- s1_cw_o0_e0_a0        s2_cw_o0_e1_a0 -->
 
-    <arg name="image_topic_in"          default="/ros_indigosdk_occam/image0"/>
+    <arg name="image_topic_in"          default="/occam/image0"/>
     <arg name="odometry_topic_in"       default="/odom/filtered"/>
     
     <arg name="rate"                    default="12.0"/>

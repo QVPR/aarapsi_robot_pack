@@ -7,7 +7,7 @@
     <arg name="ft_type"                 default="1"/>
 
     <arg name="database_path"           default="$(find aarapsi_robot_pack)/data/compressed_sets"/>
-    <arg name="image_topic_in"          default="/ros_indigosdk_occam/image0"/>
+    <arg name="image_topic_in"          default="/occam/image0"/>
     <arg name="odometry_topic_in"       default="/odom/filtered"/>
 
     <arg name="rate"                    default="12.0"/>
