@@ -13,4 +13,5 @@ src/CMakeLists.txt
 *.avi
 *.pcd
 *.pyc
+*.swp
 svmmodel_*.npz
