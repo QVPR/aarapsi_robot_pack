@@ -20,8 +20,23 @@
 # -> But ensure PYTHONPATH is correct, with reference to the catkin_workspace (must have: /path/to/catkin/workspace/devel/lib/python3/dist-packages)
 # - import and go!
 
-from distutils.core import setup
+from setuptools import setup
 from catkin_pkg.python_setup import generate_distutils_setup
+import subprocess
+import os
+
+aarapsi_setup_location      = os.path.abspath(os.path.dirname(__file__))
+patchnetvlad_setup_location = os.path.join(aarapsi_setup_location, 'src/Patch-NetVLAD')
+pyaarapsi_setup_location    = os.path.join(aarapsi_setup_location, 'src/pyaarapsi')
+
+subprocess.call(
+            "pip3 install --no-deps -e %s" % str(patchnetvlad_setup_location), shell=True
+        )
+
+# This 'equivalent' is handled below in setup()
+# subprocess.call(
+#             "pip3 install --no-deps -e %s" % str(pyaarapsi_setup_location), shell=True
+#         )
 
 # fetch values from package.xml
 setup_args = generate_distutils_setup(
