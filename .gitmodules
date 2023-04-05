@@ -1,0 +1,4 @@
+[submodule "src/pyaarapsi"]
+	path = src/pyaarapsi
+	url = https://github.com/QVPR/pyaarapsi
+	branch = main
