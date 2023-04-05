@@ -64,7 +64,9 @@ add_message_files(
   ImageLabelStamped.msg
   CompressedImageLabelStamped.msg
   ImageDetails.msg
-  CompressedImageDetails.msg 
+  CompressedImageDetails.msg
+  ImageOdom.msg
+  CompressedImageOdom.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -82,8 +84,9 @@ add_service_files(
 
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
- DEPENDENCIES   
- sensor_msgs   
+ DEPENDENCIES
+ nav_msgs
+ sensor_msgs
  std_msgs
 )
 
