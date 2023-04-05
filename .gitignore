@@ -1,9 +1,5 @@
-build/
-devel/
-install/
 aarapsi_offrobot_ws.code-workspace
 .vscode/
-data/
 build/
 .prof
 __pycache__
@@ -14,4 +10,4 @@ src/CMakeLists.txt
 *.pcd
 *.pyc
 *.swp
-svmmodel_*.npz
+*.npz
