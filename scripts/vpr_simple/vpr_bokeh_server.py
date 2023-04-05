@@ -14,14 +14,14 @@ import copy
 from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, \
     ImageDetails, CompressedImageDetails, MonitorDetails, CompressedMonitorDetails # Our custom msg structures
 from aarapsi_robot_pack.srv import GetSVMField, GetSVMFieldRequest, GetSVMFieldResponse
-from aarapsi_robot_pack.vpr_simple import VPRImageProcessor, FeatureType, \
+from pyaarapsi.vpr_simple import VPRImageProcessor, FeatureType, \
                                             doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, \
                                             updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateSVMMFigBokeh
 
-from aarapsi_robot_pack.core.enum_tools import enum_value_options, enum_get, enum_name
-from aarapsi_robot_pack.core.argparse_tools import check_positive_float, check_bool, check_positive_two_int_tuple, check_positive_int, check_valid_ip, check_enum, check_string
-from aarapsi_robot_pack.core.helper_tools import formatException, getArrayDetails
-from aarapsi_robot_pack.core.ros_tools import ROS_Param
+from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
+from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_positive_two_int_tuple, check_positive_int, check_valid_ip, check_enum, check_string
+from pyaarapsi.core.helper_tools import formatException, getArrayDetails
+from pyaarapsi.core.ros_tools import ROS_Param
 
 from functools import partial
 from bokeh.layouts import column, row

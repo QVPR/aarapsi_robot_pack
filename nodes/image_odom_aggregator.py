@@ -7,7 +7,7 @@ from sensor_msgs.msg import CompressedImage, Image
 from nav_msgs.msg import Odometry
 from aarapsi_robot_pack.msg import ImageOdom, CompressedImageOdom
 
-from aarapsi_robot_pack.core.argparse_tools import check_positive_float, check_bool, check_string
+from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
 
 class mrc:
     def __init__(self, node_name="image_odom_aggregator", rate=10.0, anon=True, \

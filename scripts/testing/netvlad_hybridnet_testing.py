@@ -7,9 +7,9 @@ import sys
 import time
 import rospy
 import torch
-from aarapsi_robot_pack.vpr_simple import VPRImageProcessor, FeatureType
-from aarapsi_robot_pack.core.helper_tools import vis_dict
-from aarapsi_robot_pack.vpr_classes import NetVLAD_Container, HybridNet_Container
+from pyaarapsi.vpr_simple.vpr_feature_tool import VPRImageProcessor, FeatureType
+from pyaarapsi.core.helper_tools import vis_dict
+from pyaarapsi.vpr_classes import NetVLAD_Container, HybridNet_Container
 
 gpu_exists      = torch.cuda.is_available()
 cam             = 'forward'

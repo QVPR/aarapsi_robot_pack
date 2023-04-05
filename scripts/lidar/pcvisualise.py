@@ -19,9 +19,6 @@ import matplotlib
 matplotlib.use("Qt5agg")
 from matplotlib import pyplot as plt
 
-from aarapsi_robot_pack.core.missing_pixel_filler import fill_swath_fast,fill_swath_with_neighboring_pixel 
-from aarapsi_robot_pack.core.helper_tools import Timer
-
 class mrc:
     def __init__(self, node_name='pcvisualise', anon=True, rate_num=20.0):
         rospy.init_node(node_name, anonymous=anon)

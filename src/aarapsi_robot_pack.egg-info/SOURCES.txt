@@ -1,0 +1,7 @@
+README.md
+setup.py
+src/aarapsi_robot_pack.egg-info/PKG-INFO
+src/aarapsi_robot_pack.egg-info/SOURCES.txt
+src/aarapsi_robot_pack.egg-info/dependency_links.txt
+src/aarapsi_robot_pack.egg-info/top_level.txt
+src/pyaarapsi/__init__.py

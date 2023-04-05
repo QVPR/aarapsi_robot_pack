@@ -11,8 +11,8 @@ import sys
 import torch
 from tqdm.auto import tqdm
 
-from aarapsi_robot_pack.core.helper_tools import vis_dict
-from aarapsi_robot_pack.vpr_simple import FeatureType, VPRImageProcessor
+from pyaarapsi.core.helper_tools import vis_dict
+from pyaarapsi.vpr_simple.vpr_feature_tool import FeatureType, VPRImageProcessor
 
 ### Example usage:
 if __name__ == '__main__':

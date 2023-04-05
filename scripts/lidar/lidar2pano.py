@@ -13,8 +13,8 @@ import matplotlib
 matplotlib.use("Qt5agg")
 from matplotlib import pyplot as plt
 from sensor_msgs.msg import CompressedImage
-from aarapsi_robot_pack.core.missing_pixel_filler import fill_swath_fast,fill_swath_with_neighboring_pixel 
-from aarapsi_robot_pack.core.helper_tools import Timer
+from pyaarapsi.core.missing_pixel_filler import fill_swath_fast,fill_swath_with_neighboring_pixel 
+from pyaarapsi.core.helper_tools import Timer
 import time
 
 class mrc:

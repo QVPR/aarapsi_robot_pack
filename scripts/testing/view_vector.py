@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import argparse as ap
 
-from aarapsi_robot_pack.core.argparse_tools import check_positive_float, check_string, check_bool
+from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool
 
 class Viewer:
     def __init__(self, node_name, anon, log_level, rate, mode, topic=None):

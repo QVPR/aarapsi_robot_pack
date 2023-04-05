@@ -16,12 +16,12 @@ import sys
 from scipy.spatial.distance import cdist
 
 from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, ImageOdom, CompressedImageOdom # Our custom msg structures
-from aarapsi_robot_pack.vpr_simple import VPRImageProcessor, Tolerance_Mode, FeatureType, labelImage, makeImage, grey2dToColourMap, \
+from pyaarapsi.vpr_simple import VPRImageProcessor, Tolerance_Mode, FeatureType, labelImage, makeImage, grey2dToColourMap, \
                                             doMtrxFig, updateMtrxFig, doDVecFig, updateDVecFig, doOdomFig, updateOdomFig
 
-from aarapsi_robot_pack.core.enum_tools import enum_value_options, enum_get, enum_name
-from aarapsi_robot_pack.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_positive_int, check_bool, check_str_list, check_enum, check_string
-from aarapsi_robot_pack.core.ros_tools import ROS_Param
+from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
+from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_positive_int, check_bool, check_str_list, check_enum, check_string
+from pyaarapsi.core.ros_tools import ROS_Param
 
 class mrc: # main ROS class
     def __init__(self, database_path, ref_images_path, ref_odometry_path, data_topic, dataset_name, odom_topic=None,\
