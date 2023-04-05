@@ -15,7 +15,7 @@ import sys
 
 from scipy.spatial.distance import cdist
 
-from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped # Our custom msg structures
+from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, ImageOdom, CompressedImageOdom # Our custom msg structures
 from aarapsi_robot_pack.vpr_simple import VPRImageProcessor, Tolerance_Mode, FeatureType, labelImage, makeImage, grey2dToColourMap, \
                                             doMtrxFig, updateMtrxFig, doDVecFig, updateDVecFig, doOdomFig, updateOdomFig
 
@@ -24,7 +24,7 @@ from aarapsi_robot_pack.core.argparse_tools import check_positive_float, check_p
 from aarapsi_robot_pack.core.ros_tools import ROS_Param
 
 class mrc: # main ROS class
-    def __init__(self, database_path, ref_images_path, ref_odometry_path, image_feed_input, odometry_input, dataset_name, \
+    def __init__(self, database_path, ref_images_path, ref_odometry_path, data_topic, dataset_name, odom_topic=None,\
                     compress_in=True, compress_out=False, do_plotting=False, do_image=False, do_groundtruth=False, do_label=True, \
                     rate_num=20.0, ft_type=FeatureType.RAW, img_dims=(64,64), icon_settings=(50,20), \
                     tolerance_threshold=5.0, tolerance_mode=Tolerance_Mode.METRE_LINE, \
@@ -51,9 +51,6 @@ class mrc: # main ROS class
         self.REF_DATA_NAME          = ROS_Param(self.NODESPACE + "ref/data_name", dataset_name, check_string, force=reset)
         self.REF_IMG_PATH           = ROS_Param(self.NODESPACE + "ref/images_path", ref_images_path, check_string, force=reset)
         self.REF_ODOM_PATH          = ROS_Param(self.NODESPACE + "ref/odometry_path", ref_odometry_path, check_string, force=reset)
-
-        self.FEED_TOPIC             = image_feed_input
-        self.ODOM_TOPIC             = odometry_input
 
         self.TOL_MODE               = ROS_Param("tolerance/mode", enum_name(tolerance_mode), lambda x: check_enum(x, Tolerance_Mode), namespace=self.NAMESPACE, force=reset)
         self.TOL_THRES              = ROS_Param("tolerance/threshold", tolerance_threshold, check_positive_float, namespace=self.NAMESPACE, force=reset)
@@ -89,8 +86,8 @@ class mrc: # main ROS class
 
         self.img_folder             = 'forward'
 
-        self._compress_on           = {'topic': "/compressed", 'image': CompressedImage, 'label': CompressedImageLabelStamped}
-        self._compress_off          = {'topic': "", 'image': Image, 'label': ImageLabelStamped}
+        self._compress_on           = {'topic': "/compressed", 'image': CompressedImage, 'label': CompressedImageLabelStamped, 'data': CompressedImageOdom}
+        self._compress_off          = {'topic': "", 'image': Image, 'label': ImageLabelStamped, 'data': ImageOdom}
         # Handle ROS details for input topics:
         if self.COMPRESS_IN.get():
             self.INPUTS             = self._compress_on
@@ -108,8 +105,15 @@ class mrc: # main ROS class
             self.vpr_feed_pub       = rospy.Publisher(self.NAMESPACE + "/image" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
 
         if self.MAKE_LABEL.get():
-            self.img_sub            = rospy.Subscriber(self.FEED_TOPIC + self.INPUTS['topic'], self.INPUTS['image'], self.img_callback, queue_size=1) 
-            self.odom_sub           = rospy.Subscriber(self.ODOM_TOPIC, Odometry, self.odom_callback, queue_size=1)
+
+            self.FEED_TOPIC         = data_topic
+            self.ODOM_TOPIC         = odom_topic
+            if (self.ODOM_TOPIC is None) or (self.ODOM_TOPIC == ''):
+                self.data_sub           = rospy.Subscriber(self.FEED_TOPIC + self.INPUTS['topic'], self.INPUTS['data'], self.data_callback, queue_size=1) 
+            else:
+                self.img_sub            = rospy.Subscriber(self.FEED_TOPIC + self.INPUTS['topic'], self.INPUTS['image'], self.img_callback, queue_size=1) 
+                self.odom_sub           = rospy.Subscriber(self.ODOM_TOPIC, Odometry, self.odom_callback, queue_size=1)
+            
             self.vpr_label_pub      = rospy.Publisher(self.NAMESPACE + "/label" + self.OUTPUTS['topic'], self.OUTPUTS['label'], queue_size=1)
             self.rolling_mtrx       = rospy.Publisher(self.NAMESPACE + "/matrices/rolling" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
             self.rolling_mtrx_img   = np.zeros((len(self.ref_dict['odom']['position']['x']), len(self.ref_dict['odom']['position']['x']))) # Make similarity matrix figure
@@ -181,6 +185,12 @@ class mrc: # main ROS class
             self.store_query    = self.bridge.imgmsg_to_cv2(self.request.queryImage, "passthrough")
 
         self.new_query          = True
+
+    def data_callback(self, msg):
+    # /data/img_odom (aarapsi_robot_pack/(Compressed)ImageOdom)
+
+        self.odom_callback(msg.odom)
+        self.img_callback(msg.image)
 
     def odom_callback(self, msg):
     # /odometry/filtered (nav_msgs/Odometry)
@@ -361,37 +371,36 @@ def do_args():
                                 epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
     
     # Positional Arguments:
-    parser.add_argument('dataset-name', help='Specify name of dataset (for fast loading; matches are made on names starting with provided string).')
-    parser.add_argument('database-path', help="Specify path to where compressed databases exist (for fast loading).")
-    parser.add_argument('ref-imgs-path', type=check_str_list, help="Specify path to reference images (for slow loading).")
-    parser.add_argument('ref-odom-path', help="Specify path to reference odometry (for slow loading).")
-    parser.add_argument('image-topic-in', help="Specify input image topic (exclude /compressed).")
-    parser.add_argument('odometry-topic-in', help="Specify input odometry topic (exclude /compressed).")
+    parser.add_argument('dataset-name',             type=check_string,                                              help='Specify name of dataset (for fast loading; matches are made on names starting with provided string).')
+    parser.add_argument('database-path',            type=check_string,                                              help="Specify path to where compressed databases exist (for fast loading).")
+    parser.add_argument('ref-imgs-path',            type=check_str_list,                                            help="Specify path to reference images (for slow loading).")
+    parser.add_argument('ref-odom-path',            type=check_string,                                              help="Specify path to reference odometry (for slow loading).")
+    parser.add_argument('data-topic-in',            type=check_string,                                              help="Specify input data topic (exclude /compressed). If --odom-topic-in is left unspecified, must be [Compressed]ImageOdom messages. Otherwise, [Compressed]Image messages.")
 
     # Optional Arguments:
-    parser.add_argument('--compress-in', '-Ci', type=check_bool, default=False, help='Enable image compression on input (default: %(default)s)')
-    parser.add_argument('--compress-out', '-Co', type=check_bool, default=False, help='Enable image compression on output (default: %(default)s)')
-    parser.add_argument('--do-plotting', '-P', type=check_bool, default=False, help='Enable matplotlib visualisations (default: %(default)s)')
-    parser.add_argument('--make-images', '-I', type=check_bool, default=False, help='Enable image topic generation (default: %(default)s)')
-    parser.add_argument('--groundtruth', '-G', type=check_bool, default=False, help='Enable groundtruth inclusion (default: %(default)s)')
-    parser.add_argument('--make-labels', '-L', type=check_bool, default=True, help='Enable label topic generation; false enables a subscriber instead (default: %(default)s)')
-    parser.add_argument('--rate', '-r', type=check_positive_float, default=10.0, help='Set node rate (default: %(default)s).')
-    parser.add_argument('--time-history-length', '-l', type=check_positive_int, default=10, help='Set keep history size for logging true rate (default: %(default)s).')
-    parser.add_argument('--img-dims', '-i', type=check_positive_two_int_tuple, default=(64,64), help='Set image dimensions (default: %(default)s).')
-    ft_options, ft_options_text = enum_value_options(FeatureType, skip=FeatureType.NONE)
-    parser.add_argument('--ft-type', '-F', type=int, choices=ft_options, default=ft_options[0], \
-                        help='Choose feature type for extraction, types: %s (default: %s).' % (ft_options_text, '%(default)s'))
-    tolmode_options, tolmode_options_text = enum_value_options(Tolerance_Mode)
-    parser.add_argument('--tol-mode', '-t', type=int, choices=tolmode_options, default=tolmode_options[0], \
-                        help='Choose tolerance mode for ground truth, types: %s (default: %s).' % (tolmode_options_text, '%(default)s'))
-    parser.add_argument('--tol-thresh', '-T', type=check_positive_float, default=1.0, help='Set tolerance threshold for ground truth (default: %(default)s).')
-    parser.add_argument('--icon-info', '-p', dest='(size, distance)', type=check_positive_two_int_tuple, default=(50,20), help='Set icon (size, distance) (default: %(default)s).')
-    parser.add_argument('--node-name', '-N', default="vpr_all_in_one", help="Specify node name (default: %(default)s).")
-    parser.add_argument('--anon', '-a', type=check_bool, default=True, help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace', '-n', default="/vpr_nodes", help="Specify namespace for topics (default: %(default)s).")
-    parser.add_argument('--frame-id', '-f', default="base_link", help="Specify frame_id for messages (default: %(default)s).")
-    parser.add_argument('--log-level', '-V', type=int, choices=[1,2,4,8,16], default=2, help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--reset', '-R', type=check_bool, default=False, help='Force reset of parameters to specified ones (default: %(default)s)')
+    ft_options, ft_options_text             = enum_value_options(FeatureType, skip=FeatureType.NONE)
+    tolmode_options, tolmode_options_text   = enum_value_options(Tolerance_Mode)
+
+    parser.add_argument('--odom-topic-in',  '-o',   type=check_string,                  default=None,               help="Specify input odometry topic (exclude /compressed) (default: %(default)s).")
+    parser.add_argument('--compress-in',    '-Ci',  type=check_bool,                    default=False,              help='Enable image compression on input (default: %(default)s).')
+    parser.add_argument('--compress-out',   '-Co',  type=check_bool,                    default=False,              help='Enable image compression on output (default: %(default)s).')
+    parser.add_argument('--do-plotting',    '-P',   type=check_bool,                    default=False,              help='Enable matplotlib visualisations (default: %(default)s).')
+    parser.add_argument('--make-images',    '-I',   type=check_bool,                    default=False,              help='Enable image topic generation (default: %(default)s).')
+    parser.add_argument('--groundtruth',    '-G',   type=check_bool,                    default=False,              help='Enable groundtruth inclusion (default: %(default)s).')
+    parser.add_argument('--make-labels',    '-L',   type=check_bool,                    default=True,               help='Enable label topic generation; false enables a subscriber instead (default: %(default)s).')
+    parser.add_argument('--rate', '-r',             type=check_positive_float,          default=10.0,               help='Set node rate (default: %(default)s).')
+    parser.add_argument('--time-hist',      '-l',   type=check_positive_int,            default=10,                 help='Set keep history size for logging true rate (default: %(default)s).')
+    parser.add_argument('--img-dims',       '-i',   type=check_positive_two_int_tuple,  default=(64,64),            help='Set image dimensions (default: %(default)s).')
+    parser.add_argument('--ft-type',        '-F',   type=int, choices=ft_options,       default=ft_options[0],      help='Choose feature type for extraction, types: %s (default: %s).' % (ft_options_text, '%(default)s'))
+    parser.add_argument('--tol-mode',       '-t',   type=int, choices=tolmode_options,  default=tolmode_options[0], help='Choose tolerance mode for ground truth, types: %s (default: %s).' % (tolmode_options_text, '%(default)s'))
+    parser.add_argument('--tol-thresh',     '-T',   type=check_positive_float,          default=1.0,                help='Set tolerance threshold for ground truth (default: %(default)s).')
+    parser.add_argument('--icon-info',      '-p',   type=check_positive_two_int_tuple,  default=(50,20),            help='Set icon (size, distance) (default: %(default)s).')
+    parser.add_argument('--node-name',      '-N',   type=check_string,                  default="vpr_all_in_one",   help="Specify node name (default: %(default)s).")
+    parser.add_argument('--anon',           '-a',   type=check_bool,                    default=True,               help="Specify whether node should be anonymous (default: %(default)s).")
+    parser.add_argument('--namespace',      '-n',   type=check_string,                  default="/vpr_nodes",       help="Specify namespace for topics (default: %(default)s).")
+    parser.add_argument('--frame-id',       '-f',   type=check_string,                  default="base_link",        help="Specify frame_id for messages (default: %(default)s).")
+    parser.add_argument('--log-level',      '-V',   type=int, choices=[1,2,4,8,16],     default=2,                  help="Specify ROS log level (default: %(default)s).")
+    parser.add_argument('--reset',          '-R',   type=check_bool,                    default=False,              help='Force reset of parameters to specified ones (default: %(default)s).')
 
     # Parse args...
     raw_args = parser.parse_known_args()
@@ -402,12 +411,12 @@ if __name__ == '__main__':
         args = do_args()
         
         # Hand to class ...
-        nmrc = mrc(args['database-path'], args['ref-imgs-path'], args['ref-odom-path'], args['image-topic-in'], args['odometry-topic-in'], \
-                    args['dataset-name'], compress_in=args['compress_in'], compress_out=args['compress_out'], do_plotting=args['do_plotting'], do_image=args['make_images'], \
+        nmrc = mrc(args['database-path'], args['ref-imgs-path'], args['ref-odom-path'], args['data-topic-in'], args['dataset-name'], \
+                    odom_topic=args['odom-topic-in'], compress_in=args['compress_in'], compress_out=args['compress_out'], do_plotting=args['do_plotting'], do_image=args['make_images'], \
                     do_groundtruth=args['groundtruth'], do_label=args['make_labels'], rate_num=args['rate'], ft_type=enum_get(args['ft_type'], FeatureType), \
                     img_dims=args['img_dims'], icon_settings=args['(size, distance)'], tolerance_threshold=args['tol_thresh'], \
                     tolerance_mode=enum_get(args['tol_mode'], Tolerance_Mode), match_metric='euclidean', namespace=args['namespace'], \
-                    time_history_length=args['time_history_length'], frame_id=args['frame_id'], \
+                    time_history_length=args['time_hist'], frame_id=args['frame_id'], \
                     node_name=args['node_name'], anon=args['anon'], log_level=args['log_level'], reset=args['reset']\
                 )
 

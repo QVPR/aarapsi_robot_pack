@@ -23,7 +23,7 @@ from aarapsi_robot_pack.core.helper_tools import formatException
 from aarapsi_robot_pack.core.ros_tools import ROS_Param
 
 class mrc: # main ROS class
-    def __init__(self, cal_qry_dataset_name, cal_ref_dataset_name, database_path, image_feed_input, odometry_input, \
+    def __init__(self, cal_qry_dataset_name, cal_ref_dataset_name, database_path, \
                     compress_in=True, compress_out=False, \
                     rate_num=20.0, ft_type=FeatureType.RAW, img_dims=(64,64), \
                     namespace="/vpr_nodes", node_name='vpr_monitor', anon=True, frame_id='base_link', \
@@ -50,9 +50,6 @@ class mrc: # main ROS class
         self.CAL_QRY_DATA_NAME      = ROS_Param(self.NODESPACE + "cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
         self.CAL_REF_DATA_NAME      = ROS_Param(self.NODESPACE + "cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
         self.CAL_FOLDER             = ROS_Param(self.NODESPACE + "cal/folder", cal_folder, check_string, force=reset)
-        
-        self.FEED_TOPIC             = image_feed_input
-        self.ODOM_TOPIC             = odometry_input
 
         #!# Enable/Disable Features (Label topic will always be generated):
         self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "compress/in", compress_in, check_bool, force=reset)
@@ -202,8 +199,6 @@ def do_args():
     parser.add_argument('cal-qry-dataset-name', help='Specify name of calibration query dataset (for fast loading; matches are made on names starting with provided string).')
     parser.add_argument('cal-ref-dataset-name', help='Specify name of calibration reference dataset (for fast loading; matches are made on names starting with provided string).')
     parser.add_argument('database-path', help="Specify path to where compressed databases exist (for fast loading).")
-    parser.add_argument('image-topic-in', help="Specify input image topic (exclude /compressed).")
-    parser.add_argument('odometry-topic-in', help="Specify input odometry topic (exclude /compressed).")
 
     # Optional Arguments:
     parser.add_argument('--compress-in', '-Ci', type=check_bool, default=False, help='Enable image compression on input (default: %(default)s)')
@@ -230,7 +225,7 @@ if __name__ == '__main__':
         args = do_args()
 
         # Hand to class ...
-        nmrc = mrc(args['cal-qry-dataset-name'], args['cal-ref-dataset-name'], args['database-path'], args['image-topic-in'], args['odometry-topic-in'], \
+        nmrc = mrc(args['cal-qry-dataset-name'], args['cal-ref-dataset-name'], args['database-path'], \
                     compress_in=args['compress_in'], compress_out=args['compress_out'], \
                     rate_num=args['rate'], ft_type=enum_get(args['ft_type'], FeatureType), img_dims=args['img_dims'], \
                     namespace=args['namespace'], node_name=args['node_name'], anon=args['anon'],  frame_id=args['frame_id'], \

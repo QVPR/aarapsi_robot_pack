@@ -20,8 +20,8 @@
     <arg name="cal_ref_dataset_name"    default="s2_cw_o0_e1_a0"/>
     <!-- s1_cw_o0_e0_a0        s2_cw_o0_e1_a0 -->
 
-    <arg name="image_topic_in"          default="/occam/image0"/>
-    <arg name="odometry_topic_in"       default="/odom/filtered"/>
+    <arg name="data_topic"              default="/data/img_odom"/>
+    <arg name="odom_topic"              default=""/>
     
     <arg name="rate"                    default="12.0"/>
     <arg name="cruncher_node_name"      default="vpr_cruncher"/>
@@ -60,9 +60,8 @@
     
     <group ns="$(arg namespace)">
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_all_in_one.py" name="$(arg cruncher_node_name)" output="screen" 
-            args="$(arg dataset_name) $(arg database_path) $(arg ref_imgs_path) $(arg ref_odom_path)
-                $(arg image_topic_in) $(arg odometry_topic_in) 
-                -Ci $(arg cruncher_compress_in) -Co $(arg cruncher_compress_out) -P $(arg cruncher_do_plotting) -I $(arg cruncher_make_images) -G $(arg cruncher_groundtruth) -L $(arg cruncher_make_labels)
+            args="$(arg dataset_name) $(arg database_path) $(arg ref_imgs_path) $(arg ref_odom_path) $(arg data_topic)
+                -o $(arg odometry_topic_in) -Ci $(arg cruncher_compress_in) -Co $(arg cruncher_compress_out) -P $(arg cruncher_do_plotting) -I $(arg cruncher_make_images) -G $(arg cruncher_groundtruth) -L $(arg cruncher_make_labels)
                 -r $(arg rate) -l $(arg time_history_length) -i $(arg img_dims) -F $(arg ft_type) 
                 -t $(arg tol_mode) -T $(arg tol_thresh) -p $(arg icon_info) 
                 -N $(arg cruncher_node_name) -a $(arg anon) -n $(arg namespace) -f $(arg frame_id) -V $(arg log_level) -R $(arg reset)">
@@ -70,7 +69,6 @@
         
         <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="$(arg monitor_node_name)" output="screen" 
             args="$(arg cal_qry_dataset_name) $(arg cal_ref_dataset_name) $(arg database_path)
-                $(arg image_topic_in) $(arg odometry_topic_in) 
                 -Ci $(arg monitor_compress_in) -Co $(arg monitor_compress_out)
                 -r $(arg rate) -i $(arg img_dims) -F $(arg ft_type) -p $(arg print_prediction)
                 -N $(arg monitor_node_name) -a $(arg anon) -n $(arg namespace) -V $(arg log_level) -R $(arg reset)">
