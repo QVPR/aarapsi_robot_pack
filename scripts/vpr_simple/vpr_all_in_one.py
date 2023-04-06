@@ -2,6 +2,7 @@
 
 import rospy
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Image, CompressedImage
 from std_msgs.msg import String
 from cv_bridge import CvBridge
@@ -12,6 +13,8 @@ from matplotlib import pyplot as plt
 import argparse as ap
 import os
 import sys
+
+from tf.transformations import quaternion_from_euler
 
 from scipy.spatial.distance import cdist
 
@@ -71,7 +74,8 @@ class mrc: # main ROS class
         self.GROUND_TRUTH           = ROS_Param(self.NODESPACE + "method/groundtruth", do_groundtruth, check_bool, force=reset)
         self.MAKE_LABEL             = ROS_Param(self.NODESPACE + "method/label", do_label, check_bool, force=reset)
 
-        self.ego                    = [0.0, 0.0, 0.0] # robot position
+        self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
+        self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
 
         self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
 
@@ -99,7 +103,8 @@ class mrc: # main ROS class
         else:
             self.OUTPUTS            = self._compress_off
         
-        self.param_checker_sub      = rospy.Subscriber("/vpr_nodes/params_update", String, self.param_callback, queue_size=100)
+        self.param_checker_sub      = rospy.Subscriber(self.NAMESPACE + "/params_update", String, self.param_callback, queue_size=100)
+        self.odom_estimate_pub      = rospy.Publisher(self.NAMESPACE + "/vpr_odom", Odometry, queue_size=1)
 
         if self.MAKE_IMAGE.get():
             self.vpr_feed_pub       = rospy.Publisher(self.NAMESPACE + "/image" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
@@ -129,6 +134,7 @@ class mrc: # main ROS class
         self.new_odom               = False # new odometry set
         self.main_ready             = False # rate limiter via timer
         self.do_show                = False # plot rate limiter  via timer
+        self.ego_known              = False # whether or not an initial position has been found
 
         self.last_time              = rospy.Time.now()
         self.time_history           = []
@@ -213,9 +219,24 @@ class mrc: # main ROS class
     def getMatchInd(self, ft_qry, metric='euclidean'):
     # top matching reference index for query
 
-        dMat = cdist(self.ref_dict['img_feats'][enum_name(self.FEAT_TYPE.get())][self.img_folder], np.matrix(ft_qry), metric) # metric: 'euclidean' or 'cosine'
-        mInd = np.argmin(dMat[:])
-        return mInd, dMat
+        dvc = cdist(self.ref_dict['img_feats'][enum_name(self.FEAT_TYPE.get())][self.img_folder], np.matrix(ft_qry), metric) # metric: 'euclidean' or 'cosine'
+        dvc_max_val = np.max(dvc[:])
+        dvc_norm = dvc/dvc_max_val
+        if self.ego_known: # then perform biasing via distance:
+            spd = cdist(np.transpose(np.matrix([self.ref_dict['odom']['position']['x'], self.ref_dict['odom']['position']['y']])), \
+                np.matrix([self.vpr_ego[0], self.vpr_ego[1]]))
+            spd_max_val = np.max(spd[:])
+            spd_norm = spd/spd_max_val 
+            spd_x_dvc = (spd_norm**2 + dvc_norm) / 2 # TODO: vary bias with velocity, weighted sum
+            mInd = np.argmin(spd_x_dvc[:])
+            return mInd, spd_x_dvc
+        else:
+            mInd = np.argmin(dvc[:])
+            return mInd, dvc_norm
+    
+        
+        spd_max_val = np.max(spd[:])
+        dvc_max_val = np.max(dvc[:])
     
     def getTrueInd(self):
     # Compare measured odometry to reference odometry and find best match
@@ -257,11 +278,27 @@ class mrc: # main ROS class
         struct_to_pub.header.frame_id = fid
         struct_to_pub.header.stamp = rospy.Time.now()
 
+        q = quaternion_from_euler(0, 0, self.ref_dict['odom']['position']['yaw'][mInd]) # roll, pitch, yaw
+
+        odom_to_pub = Odometry()
+        odom_to_pub.pose.pose.position.x = self.ref_dict['odom']['position']['x'][mInd]
+        odom_to_pub.pose.pose.position.y = self.ref_dict['odom']['position']['y'][mInd]
+        odom_to_pub.pose.pose.orientation.x = q[0]
+        odom_to_pub.pose.pose.orientation.y = q[1]
+        odom_to_pub.pose.pose.orientation.z = q[2]
+        odom_to_pub.pose.pose.orientation.w = q[3]
+        odom_to_pub.header.stamp = rospy.Time.now()
+        odom_to_pub.header.frame_id = fid
+
         self.rolling_mtrx.publish(ros_matrix_to_pub)
+        self.odom_estimate_pub.publish(odom_to_pub)
         if self.MAKE_IMAGE.get():
             self.vpr_feed_pub.publish(ros_image_to_pub) # image feed publisher
         if self.MAKE_LABEL.get():
             self.vpr_label_pub.publish(struct_to_pub) # label publisher
+
+        self.vpr_ego = [self.ref_dict['odom']['position']['x'][mInd], self.ref_dict['odom']['position']['y'][mInd], self.ref_dict['odom']['position']['yaw'][mInd]]
+        self.ego_known = True
 
     def exit(self):
         rospy.loginfo("Quit received.")
@@ -381,7 +418,7 @@ def do_args():
     ft_options, ft_options_text             = enum_value_options(FeatureType, skip=FeatureType.NONE)
     tolmode_options, tolmode_options_text   = enum_value_options(Tolerance_Mode)
 
-    parser.add_argument('--odom-topic-in',  '-o',   type=check_string,                  default=None,               help="Specify input odometry topic (exclude /compressed) (default: %(default)s).")
+    parser.add_argument('--odom-topic-in',  '-o',   type=check_string,                  default=None,               help="Specify input odometry topic (default: %(default)s).")
     parser.add_argument('--compress-in',    '-Ci',  type=check_bool,                    default=False,              help='Enable image compression on input (default: %(default)s).')
     parser.add_argument('--compress-out',   '-Co',  type=check_bool,                    default=False,              help='Enable image compression on output (default: %(default)s).')
     parser.add_argument('--do-plotting',    '-P',   type=check_bool,                    default=False,              help='Enable matplotlib visualisations (default: %(default)s).')
@@ -398,7 +435,7 @@ def do_args():
     parser.add_argument('--node-name',      '-N',   type=check_string,                  default="vpr_all_in_one",   help="Specify node name (default: %(default)s).")
     parser.add_argument('--anon',           '-a',   type=check_bool,                    default=True,               help="Specify whether node should be anonymous (default: %(default)s).")
     parser.add_argument('--namespace',      '-n',   type=check_string,                  default="/vpr_nodes",       help="Specify namespace for topics (default: %(default)s).")
-    parser.add_argument('--frame-id',       '-f',   type=check_string,                  default="base_link",        help="Specify frame_id for messages (default: %(default)s).")
+    parser.add_argument('--frame-id',       '-f',   type=check_string,                  default="odom",             help="Specify frame_id for messages (default: %(default)s).")
     parser.add_argument('--log-level',      '-V',   type=int, choices=[1,2,4,8,16],     default=2,                  help="Specify ROS log level (default: %(default)s).")
     parser.add_argument('--reset',          '-R',   type=check_bool,                    default=False,              help='Force reset of parameters to specified ones (default: %(default)s).')
 
@@ -412,9 +449,9 @@ if __name__ == '__main__':
         
         # Hand to class ...
         nmrc = mrc(args['database-path'], args['ref-imgs-path'], args['ref-odom-path'], args['data-topic-in'], args['dataset-name'], \
-                    odom_topic=args['odom-topic-in'], compress_in=args['compress_in'], compress_out=args['compress_out'], do_plotting=args['do_plotting'], do_image=args['make_images'], \
+                    odom_topic=args['odom_topic_in'], compress_in=args['compress_in'], compress_out=args['compress_out'], do_plotting=args['do_plotting'], do_image=args['make_images'], \
                     do_groundtruth=args['groundtruth'], do_label=args['make_labels'], rate_num=args['rate'], ft_type=enum_get(args['ft_type'], FeatureType), \
-                    img_dims=args['img_dims'], icon_settings=args['(size, distance)'], tolerance_threshold=args['tol_thresh'], \
+                    img_dims=args['img_dims'], icon_settings=args['icon_info'], tolerance_threshold=args['tol_thresh'], \
                     tolerance_mode=enum_get(args['tol_mode'], Tolerance_Mode), match_metric='euclidean', namespace=args['namespace'], \
                     time_history_length=args['time_hist'], frame_id=args['frame_id'], \
                     node_name=args['node_name'], anon=args['anon'], log_level=args['log_level'], reset=args['reset']\
