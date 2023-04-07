@@ -1,3 +1,4 @@
+<?xml version="1.0"?>
 <launch>
     <arg name="ref_dataset_name"        default="s1_ccw_o0_e0"/>
     <arg name="cal_qry_dataset_name"    default="s1_cw_o0_e0"/>
