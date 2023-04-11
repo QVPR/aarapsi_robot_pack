@@ -59,7 +59,7 @@ from cv_bridge import CvBridge
 import cv2
 bridge = CvBridge()
 
-def img_resize(msg, resize_dims=None, frame_id="occam"):
+def img_resize_square(msg, resize_dims=None, frame_id="occam"):
     if resize_dims is None:
         return msg
     global bridge
@@ -70,6 +70,35 @@ def img_resize(msg, resize_dims=None, frame_id="occam"):
         resized_msg = bridge.cv2_to_compressed_imgmsg(resized_img, "jpeg")
     elif isinstance(msg, Image):
         img         = bridge.imgmsg_to_cv2(msg, "passthrough")
+        resized_img = cv2.resize(img, resize_dims, interpolation=cv2.INTER_AREA)
+        rospy.loginfo_once("[Image] Resizing from %s" % (str(img.shape)))
+        resized_msg = bridge.cv2_to_imgmsg(resized_img, "bgr8")
+    else:
+        print(type(msg))
+        raise Exception("msg is not of type Image or CompressedImage")
+    # update header:
+    resized_msg.header.stamp = rospy.Time.now()
+    resized_msg.header.frame_id = frame_id
+    resized_msg.header.seq = msg.header.seq
+    return resized_msg
+
+def img_resize_rect(msg, resize_dim=None, frame_id="occam"):
+    if resize_dim is None:
+        return msg
+    global bridge
+    if isinstance(msg, CompressedImage):
+        img         = bridge.compressed_imgmsg_to_cv2(msg, "passthrough")
+        img_size    = img.shape
+        resize_dims = (round((img_size[1]/img_size[0])*resize_dim), resize_dim)
+        print(resize_dims, img_size)
+        resized_img = cv2.resize(img, resize_dims, interpolation=cv2.INTER_AREA)
+        rospy.loginfo_once("[CompressedImage] Resizing from %s" % (str(img.shape)))
+        resized_msg = bridge.cv2_to_compressed_imgmsg(resized_img, "jpeg")
+    elif isinstance(msg, Image):
+        img         = bridge.imgmsg_to_cv2(msg, "passthrough")
+        img_size    = img.shape
+        resize_dims = (round((img_size[1]/img_size[0])*resize_dim), resize_dim)
+        print(resize_dims, img_size)
         resized_img = cv2.resize(img, resize_dims, interpolation=cv2.INTER_AREA)
         rospy.loginfo_once("[Image] Resizing from %s" % (str(img.shape)))
         resized_msg = bridge.cv2_to_imgmsg(resized_img, "bgr8")
@@ -122,11 +151,14 @@ if __name__ == '__main__':
     else:
        raise Exception('Unknown mode')
     
-    transformfunc    = lambda x: img_resize(x, resize_dims)
+    rect_resize = lambda x: img_resize_rect(x, resize_dims[1])
+    square_resize = lambda x: img_resize_square(x, resize_dims)
     # set up throttles 
     #                   Throttle_Topic(topic_in, topic_out, exts, types, rate, hist_len=3, transform=None):
-    throttled_topics = [Throttle_Topic(c_in[i], c_out[i], exts, types, rate, transform=transformfunc) \
-                            for i in range(len(c_in))]
+    throttled_topics = [Throttle_Topic(c_in[i], c_out[i], exts, types, rate, transform=rect_resize) \
+                        if 'stitched' in c_in[i] else \
+                        Throttle_Topic(c_in[i], c_out[i], exts, types, rate, transform=square_resize) \
+                        for i in range(len(c_in))]
     
     # loop forever until signal shutdown
     while not rospy.is_shutdown():
