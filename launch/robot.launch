@@ -15,19 +15,21 @@
 
     <!-- Camera Topic Throttling Node: -->
     <group>
-        <arg name="tt_node_name"   value="throttle"/>
-        <arg name="tt_rate"        value="10.0"/>
-        <arg name="tt_mode"        value="1"/>
-        <arg name="tt_img_dims"    value="(64,64)"/>
+        <arg name="tt_node_name"    value="throttle"/>
+        <arg name="tt_anon"         value="True"/>
+        <arg name="tt_rate"         value="10.0"/>
+        <arg name="tt_mode"         value="1"/>
+        <arg name="tt_img_dims"     value="(64,64)"/>
 
         <node pkg="aarapsi_robot_pack" type="throttle.py" name="$(arg tt_node_name)"
-                args="-N $(arg tt_node_name) -r $(arg tt_rate) -a False -m $(arg tt_mode) -V $(arg log_level)
+                args="-N $(arg tt_node_name) -r $(arg tt_rate) -a $(arg tt_anon) -m $(arg tt_mode) -V $(arg log_level)
                         -i $(arg tt_img_dims)" />
     </group>
 
     <!-- Image+Odom Aggregation Node: -->
     <group>
         <arg name="ioa_node_name"   value="img_odom_agg"/>
+        <arg name="ioa_anon"        value="True"/>
         <arg name="ioa_rate"        value="10.0"/>
         <arg name="ioa_compress"    value="True"/>
         <arg name="ioa_img_topic"   value="/occam/image0"/>
@@ -35,7 +37,34 @@
         <arg name="ioa_pub_topic"   value="/data/img_odom"/>
 
         <node pkg="aarapsi_robot_pack" type="image_odom_aggregator.py" name="$(arg ioa_node_name)" 
-                args="-N $(arg ioa_node_name) -r $(arg ioa_rate) -a False -C $(arg ioa_compress) -V $(arg log_level)
+                args="-N $(arg ioa_node_name) -r $(arg ioa_rate) -a $(arg ioa_anon) -C $(arg ioa_compress) -V $(arg log_level)
                         --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic)" />
+    
+    <!-- Twist2Joy Node: -->
+    </group>
+        <arg name="tj_node_name"    value="twist2joy"/>
+        <arg name="tj_anon"         value="True"/>
+        <arg name="tj_rate"         value="10.0"/>
+
+        <arg name="tj_twist_topic"  value="/twist2joy/in"/>
+        <arg name="tj_joy_sub_tpc"  value="/bluetooth_teleop/joy"/>
+        <arg name="tj_joy_pub_tpc"  value="/bluetooth_teleop/joy"/>
+
+        <node pkg="aarapsi_robot_pack" type="throttle.py" name="$(arg tt_node_name)"
+                args="$(arg tj_twist_topic) $(arg tj_joy_sub_tpc) $(arg tj_joy_pub_tpc) 
+                -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level)
+                        -i $(arg tt_img_dims)" />
+    <group>
+
+    <!-- Follower Node: -->
+    </group>
+        <arg name="fw_node_name"    value="follower"/>
+        <arg name="fw_anon"         value="True"/>
+        <arg name="fw_rate"         value="10.0"/>
+
+        <node pkg="aarapsi_robot_pack" type="throttle.py" name="$(arg tt_node_name)"
+                args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level)"/>
+    <group>
+
     </group>
 </launch>
