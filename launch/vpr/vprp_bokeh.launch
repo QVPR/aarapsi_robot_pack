@@ -6,6 +6,7 @@
     <arg name="launch_webserver"        default="true"/>
     <arg name="launch_throttle"         default="true"/>
     <arg name="launch_aggregator"       default="true"/>
+    <arg name="launch_paramwatcher"     default="true"/>
     <arg name="launch_ekf"              default="false"/> <!-- use at own risk --> 
 
     <arg name="port"                    default="5006"/>
@@ -85,6 +86,12 @@
                 -N $(arg plotter_node_name) -a $(arg anon) -n $(arg namespace) -f $(arg frame_id)
                 -P $(arg port) -A $(arg address) -V $(arg log_level) -R $(arg reset)">
         </node>
+    </group>
+
+    <!-- Param Watcher Node: -->
+    <group if="$(arg launch_paramwatcher)">
+        <arg name="pw_node_name"   value="param_watcher"/>
+        <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="$(arg pw_node_name)"/>
     </group>
 
     <!-- Camera Topic Throttling Node: -->
