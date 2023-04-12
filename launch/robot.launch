@@ -50,10 +50,9 @@
         <arg name="tj_joy_sub_tpc"  value="/bluetooth_teleop/joy"/>
         <arg name="tj_joy_pub_tpc"  value="/bluetooth_teleop/joy"/>
 
-        <node pkg="aarapsi_robot_pack" type="throttle.py" name="$(arg tt_node_name)"
+        <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tt_node_name)"
                 args="$(arg tj_twist_topic) $(arg tj_joy_sub_tpc) $(arg tj_joy_pub_tpc) 
-                -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level)
-                        -i $(arg tt_img_dims)" />
+                -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level)"/>
     <group>
 
     <!-- Follower Node: -->
@@ -62,7 +61,7 @@
         <arg name="fw_anon"         value="True"/>
         <arg name="fw_rate"         value="10.0"/>
 
-        <node pkg="aarapsi_robot_pack" type="throttle.py" name="$(arg tt_node_name)"
+        <node pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)"
                 args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level)"/>
     <group>
 
