@@ -7,7 +7,7 @@ import argparse as ap
 
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, PoseArray, Pose, Point
-from std_msgs.msg import Header
+from std_msgs.msg import Header, Float64
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
 from pyaarapsi.core.ros_tools import roslogger, LogType, yaw_from_q        
@@ -22,34 +22,47 @@ class mrc:
         self.dt             = 1/rate
         self.rate_obj       = rospy.Rate(self.rate_num)
 
+        self.current_yaw    = 0.0
+        self.target_yaw     = 0.0
+        self.old_sensor_cmd = None
+
         self.target_update  = False
 
         self.time           = rospy.Time.now().to_sec()
 
-        self.odom_sub       = rospy.Subscriber('/vpr_nodes/vpr_odom', Odometry,  self.odom_cb, queue_size=1)
-        self.twist_pub      = rospy.Publisher('/twist2joy/in',        Twist,                   queue_size=1)
+        self.vpr_odom_sub   = rospy.Subscriber('/vpr_nodes/vpr_odom',               Odometry,  self.vpr_odom_cb,  queue_size=1)
+        self.sensors_sub    = rospy.Subscriber('/jackal_velocity_controller/odom',  Odometry,  self.sensors_cb,   queue_size=1)
+        self.twist_pub      = rospy.Publisher('/twist2joy/in',                      Twist,                        queue_size=1)
+        self.yaw_pub        = rospy.Publisher('/vpr_nodes/' + node_name + '/yaw',   Float64,                      queue_size=1)
 
         self.ready          = True
 
-        self.current_yaw    = 0.0
-        self.target_yaw     = 0.0
-
         self.main()
 
-    def odom_cb(self, msg):
+    def vpr_odom_cb(self, msg):
         if not self.ready:
             return
         
         self.target_yaw     = yaw_from_q(msg.pose.pose.orientation)
         self.target_update  = True
+    
+    def sensors_cb(self, msg):
+        if not self.ready:
+            return
+        if self.old_sensor_cmd is None:
+            self.old_sensor_cmd = msg
+            return
         
+        self.delta_yaw      = yaw_from_q(msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_cmd.pose.pose.orientation)
+        self.current_yaw    = self.current_yaw + self.delta_yaw
+        self.old_sensor_cmd = msg
+        self.yaw_pub.publish(Float64(data=self.current_yaw))
 
     def main(self):
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
 
             yaw_cmd             = (self.target_yaw - self.current_yaw) * self.dt
-            self.current_yaw    = self.current_yaw + yaw_cmd
             new_twist           = Twist()
             new_twist.linear.x  = 0.5
             new_twist.angular.z = yaw_cmd
