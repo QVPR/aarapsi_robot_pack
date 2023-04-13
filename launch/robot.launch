@@ -50,7 +50,7 @@
         <arg name="tj_joy_sub_tpc"  value="/bluetooth_teleop/joy"/>
         <arg name="tj_joy_pub_tpc"  value="/bluetooth_teleop/joy"/>
 
-        <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tt_node_name)"
+        <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)"
                 args="$(arg tj_twist_topic) $(arg tj_joy_sub_tpc) $(arg tj_joy_pub_tpc) 
                 -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level)"/>
     <group>
