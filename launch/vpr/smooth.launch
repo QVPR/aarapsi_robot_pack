@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<launch>
+    <group>
+        <arg name="node_name"   value="smooth"/>
+        <arg name="anon"        value="Tue"/>
+        <arg name="rate"        value="10.0"/>
+        <arg name="log_level"   value="1"/>
+        <node pkg="aarapsi_robot_pack" type="smooth.py" name="$(arg node_name)" output="screen"
+              args="-N $(arg node_name) -a $(arg anon) -r $(arg rate) -V $(arg log_level)">
+            <remap from="/odom/in"    to="/vpr_nodes/vpr_odom"/>
+            <remap from="/cmd_vel/in" to="/jackal_velocity_controller/cmd_vel"/>
+            <remap from="/odom/out"   to="/vpr_nodes/vpr_odom/filtered"/>
+            <remap from="/state/fit"  to="/vpr_nodes/state/fit"/>
+            <remap from="/state/raw"  to="/vpr_nodes/state/raw"/>
+        </node>
+    </group>
+</launch>

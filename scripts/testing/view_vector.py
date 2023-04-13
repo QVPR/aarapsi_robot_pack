@@ -332,7 +332,7 @@ class Viewer:
 if __name__ == '__main__':
     try:
         parser = ap.ArgumentParser(prog="vector viewer", 
-                                description="ROS Topic Throttle Tool",
+                                description="ROS Vector Viewer Tool",
                                 epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
         parser.add_argument('--mode', '-m', type=check_string, choices=["imu","odom", "dOdom"], default="odom", help="Specify ROS log level (default: %(default)s).")
         parser.add_argument('--topic', '-t', type=check_string, default=None, help='Set node rate (default: %(default)s).')

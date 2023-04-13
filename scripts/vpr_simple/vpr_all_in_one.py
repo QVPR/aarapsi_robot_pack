@@ -23,7 +23,7 @@ from pyaarapsi.vpr_simple import VPRImageProcessor, Tolerance_Mode, FeatureType,
                                             doMtrxFig, updateMtrxFig, doDVecFig, updateDVecFig, doOdomFig, updateOdomFig
 
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
-from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_positive_int, check_bool, check_str_list, check_enum, check_string
+from pyaarapsi.core.argparse_tools import check_bounded_float, check_positive_float, check_positive_two_int_tuple, check_positive_int, check_bool, check_str_list, check_enum, check_string
 from pyaarapsi.core.ros_tools import ROS_Param
 
 class mrc: # main ROS class
@@ -76,6 +76,8 @@ class mrc: # main ROS class
 
         self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
         self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
+    
+        self.DVC_WEIGHT             = ROS_Param(self.NODESPACE + "dvc_weight", 1, lambda x: check_bounded_float(x, 0, 1, 'both'), force=reset) # Hz
 
         self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
 
@@ -220,23 +222,19 @@ class mrc: # main ROS class
     # top matching reference index for query
 
         dvc = cdist(self.ref_dict['img_feats'][enum_name(self.FEAT_TYPE.get())][self.img_folder], np.matrix(ft_qry), metric) # metric: 'euclidean' or 'cosine'
-        dvc_max_val = np.max(dvc[:])
-        dvc_norm = dvc/dvc_max_val
-        if self.ego_known: # then perform biasing via distance:
+        if self.ego_known and self.DVC_WEIGHT.get() < 1: # then perform biasing via distance:
             spd = cdist(np.transpose(np.matrix([self.ref_dict['odom']['position']['x'], self.ref_dict['odom']['position']['y']])), \
                 np.matrix([self.vpr_ego[0], self.vpr_ego[1]]))
             spd_max_val = np.max(spd[:])
+            dvc_max_val = np.max(dvc[:])
             spd_norm = spd/spd_max_val 
-            spd_x_dvc = (spd_norm**2 + dvc_norm) / 2 # TODO: vary bias with velocity, weighted sum
+            dvc_norm = dvc/dvc_max_val
+            spd_x_dvc = ((1-self.DVC_WEIGHT.get())*spd_norm**2 + (self.DVC_WEIGHT.get())*dvc_norm) # TODO: vary bias with velocity, weighted sum
             mInd = np.argmin(spd_x_dvc[:])
             return mInd, spd_x_dvc
         else:
             mInd = np.argmin(dvc[:])
-            return mInd, dvc_norm
-    
-        
-        spd_max_val = np.max(spd[:])
-        dvc_max_val = np.max(dvc[:])
+            return mInd, dvc
     
     def getTrueInd(self):
     # Compare measured odometry to reference odometry and find best match

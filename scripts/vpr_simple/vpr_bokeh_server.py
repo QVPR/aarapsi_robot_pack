@@ -15,8 +15,8 @@ from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStampe
     ImageDetails, CompressedImageDetails, MonitorDetails, CompressedMonitorDetails # Our custom msg structures
 from aarapsi_robot_pack.srv import GetSVMField, GetSVMFieldRequest, GetSVMFieldResponse
 from pyaarapsi.vpr_simple import VPRImageProcessor, FeatureType, \
-                                            doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, \
-                                            updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateSVMMFigBokeh
+                                            doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, doXYWVFigBokeh, \
+                                            updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
 
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
 from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_positive_two_int_tuple, check_positive_int, check_valid_ip, check_enum, check_string
@@ -106,6 +106,7 @@ class mrc: # main ROS class
         self.fig_fdvc_handles = doFDVCFigBokeh(self, self.ref_dict['odom']) # Make filtered dvc figure
         self.fig_cntr_handles = doCntrFigBokeh(self, self.ref_dict['odom']) # Make contour figure
         self.fig_svmm_handles = doSVMMFigBokeh(self, self.ref_dict['odom']) # Make SVM metrics figure
+        self.fig_xywv_handles = doXYWVFigBokeh(self, self.ref_dict['odom']) # Make linear&angular metrics figure
 
         # Last item as it sets a flag that enables main loop execution.
         self.main_ready = True
@@ -162,6 +163,7 @@ def main_loop(nmrc):
     updateDVecFigBokeh(nmrc, matchInd, trueInd, dvc, nmrc.ref_dict['odom'])
     updateOdomFigBokeh(nmrc, matchInd, trueInd, dvc, nmrc.ref_dict['odom'])
     updateFDVCFigBokeh(nmrc, matchInd, trueInd, dvc, nmrc.ref_dict['odom'])
+    updateXYWVFigBokeh(nmrc, matchInd, trueInd, dvc, nmrc.ref_dict['odom'])
     if nmrc.field_exists:
         updateCntrFigBokeh(nmrc, matchInd, trueInd, dvc, nmrc.ref_dict['odom'])
         updateSVMMFigBokeh(nmrc, matchInd, trueInd, dvc, nmrc.ref_dict['odom'])
@@ -224,7 +226,7 @@ def main(doc):
 
         doc.add_root(row(   column(nmrc.fig_iframe_feed_, row(nmrc.fig_iframe_mtrx_)), \
                             column(nmrc.fig_dvec_handles['fig'], nmrc.fig_odom_handles['fig'], nmrc.fig_fdvc_handles['fig']), \
-                            column(nmrc.fig_cntr_handles['fig'], nmrc.fig_svmm_handles['fig']) \
+                            column(nmrc.fig_cntr_handles['fig'], nmrc.fig_svmm_handles['fig'], nmrc.fig_xywv_handles['fig']) \
                         ))
 
         rospy.loginfo("[Bokeh Server] Initialisation complete. Listening for queries...")
