@@ -49,7 +49,7 @@
     </group>
     
     <!-- Twist2Joy Node: -->
-    </group if="$(arg launch_twist2joy)">
+    <group if="$(arg launch_twist2joy)">
         <arg name="tj_node_name"    default="twist2joy"/>
         <arg name="tj_anon"         default="True"/>
         <arg name="tj_rate"         default="10.0"/>
@@ -61,23 +61,21 @@
         <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)"
                 args="$(arg tj_twist_topic) $(arg tj_joy_sub_tpc) $(arg tj_joy_pub_tpc) 
                 -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level)"/>
-    <group>
+    </group>
 
     <!-- Follower Node: -->
-    </group if="$(arg launch_follower)">
+    <group if="$(arg launch_follower)">
         <arg name="fw_node_name"    default="follower"/>
         <arg name="fw_anon"         default="True"/>
         <arg name="fw_rate"         default="10.0"/>
 
         <node pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)"
                 args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level)"/>
-    <group>
+    </group>
 
     <!-- Param Watcher Node: -->
     <group if="$(arg launch_paramwatcher)">
         <arg name="pw_node_name"   default="param_watcher"/>
         <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="$(arg pw_node_name)"/>
-    </group>
-
     </group>
 </launch>
