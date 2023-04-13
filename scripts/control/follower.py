@@ -34,6 +34,7 @@ class mrc:
         self.sensors_sub    = rospy.Subscriber('/jackal_velocity_controller/odom',  Odometry,  self.sensors_cb,   queue_size=1)
         self.twist_pub      = rospy.Publisher('/twist2joy/in',                      Twist,                        queue_size=1)
         self.yaw_pub        = rospy.Publisher('/vpr_nodes/' + node_name + '/yaw',   Float64,                      queue_size=1)
+        self.dyaw_pub       = rospy.Publisher('/vpr_nodes/' + node_name + '/dyaw',  Float64,                      queue_size=1)
 
         self.ready          = True
 
@@ -62,12 +63,13 @@ class mrc:
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
 
-            yaw_cmd             = (self.target_yaw - self.current_yaw) * self.dt
+            yaw_cmd             = (self.target_yaw - self.current_yaw)
             new_twist           = Twist()
             new_twist.linear.x  = 0.5
             new_twist.angular.z = yaw_cmd
 
             self.twist_pub.publish(new_twist)
+            self.dyaw_pub.publish(Float64(data=yaw_cmd))
             
         rospy.loginfo("Exit state reached.")
 
