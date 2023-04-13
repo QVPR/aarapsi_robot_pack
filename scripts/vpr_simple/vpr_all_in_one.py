@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 import rospy
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped
+
+from nav_msgs.msg import Odometry, Path
+from geometry_msgs.msg import PoseStamped, Point
 from sensor_msgs.msg import Image, CompressedImage
-from std_msgs.msg import String
+from std_msgs.msg import String, Header
+
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
@@ -14,17 +16,16 @@ import argparse as ap
 import os
 import sys
 
-from tf.transformations import quaternion_from_euler
-
 from scipy.spatial.distance import cdist
 
 from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, ImageOdom, CompressedImageOdom # Our custom msg structures
+from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse
 from pyaarapsi.vpr_simple import VPRImageProcessor, Tolerance_Mode, FeatureType, labelImage, makeImage, grey2dToColourMap, \
                                             doMtrxFig, updateMtrxFig, doDVecFig, updateDVecFig, doOdomFig, updateOdomFig
 
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
 from pyaarapsi.core.argparse_tools import check_bounded_float, check_positive_float, check_positive_two_int_tuple, check_positive_int, check_bool, check_str_list, check_enum, check_string
-from pyaarapsi.core.ros_tools import ROS_Param
+from pyaarapsi.core.ros_tools import ROS_Param, q_from_yaw
 
 class mrc: # main ROS class
     def __init__(self, database_path, ref_images_path, ref_odometry_path, data_topic, dataset_name, odom_topic=None,\
@@ -90,6 +91,8 @@ class mrc: # main ROS class
         except:
             self.exit()
 
+        self.generate_path(self.ref_dict['odom']['position'], self.ref_dict['times'])
+
         self.img_folder             = 'forward'
 
         self._compress_on           = {'topic': "/compressed", 'image': CompressedImage, 'label': CompressedImageLabelStamped, 'data': CompressedImageOdom}
@@ -108,6 +111,9 @@ class mrc: # main ROS class
         self.param_checker_sub      = rospy.Subscriber(self.NAMESPACE + "/params_update", String, self.param_callback, queue_size=100)
         self.odom_estimate_pub      = rospy.Publisher(self.NAMESPACE + "/vpr_odom", Odometry, queue_size=1)
 
+        self.send_path_plan         = rospy.Service('/vpr_nodes/path', GenerateObj, self.handle_GetPathPlan)
+        self.path_pub               = rospy.Publisher('/vpr_nodes/path', Path, queue_size=1)
+
         if self.MAKE_IMAGE.get():
             self.vpr_feed_pub       = rospy.Publisher(self.NAMESPACE + "/image" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
 
@@ -116,10 +122,10 @@ class mrc: # main ROS class
             self.FEED_TOPIC         = data_topic
             self.ODOM_TOPIC         = odom_topic
             if (self.ODOM_TOPIC is None) or (self.ODOM_TOPIC == ''):
-                self.data_sub           = rospy.Subscriber(self.FEED_TOPIC + self.INPUTS['topic'], self.INPUTS['data'], self.data_callback, queue_size=1) 
+                self.data_sub       = rospy.Subscriber(self.FEED_TOPIC + self.INPUTS['topic'], self.INPUTS['data'], self.data_callback, queue_size=1) 
             else:
-                self.img_sub            = rospy.Subscriber(self.FEED_TOPIC + self.INPUTS['topic'], self.INPUTS['image'], self.img_callback, queue_size=1) 
-                self.odom_sub           = rospy.Subscriber(self.ODOM_TOPIC, Odometry, self.odom_callback, queue_size=1)
+                self.img_sub        = rospy.Subscriber(self.FEED_TOPIC + self.INPUTS['topic'], self.INPUTS['image'], self.img_callback, queue_size=1) 
+                self.odom_sub       = rospy.Subscriber(self.ODOM_TOPIC, Odometry, self.odom_callback, queue_size=1)
             
             self.vpr_label_pub      = rospy.Publisher(self.NAMESPACE + "/label" + self.OUTPUTS['topic'], self.OUTPUTS['label'], queue_size=1)
             self.rolling_mtrx       = rospy.Publisher(self.NAMESPACE + "/matrices/rolling" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
@@ -159,6 +165,34 @@ class mrc: # main ROS class
 
         # Last item as it sets a flag that enables main loop execution.
         self.main_timer             = rospy.Timer(rospy.Duration(1/self.RATE_NUM.get()), self.main_cb) # Main loop rate limiter
+
+    def handle_GetPathPlan(self, req):
+    # /vpr_nodes/path service
+        ans = GenerateObjResponse()
+        success = True
+
+        try:
+            if req.generate == True:
+                self.generate_path()
+            self.path_pub.publish(self.path_msg)
+        except:
+            success = False
+
+        ans.success = success
+        ans.topic = self.NAMESPACE + "/path"
+        rospy.logdebug("Service requested [Gen=%s], Success=%s" % (str(req.generate), str(success)))
+        return ans
+
+    def generate_path(self, position_dict, times):
+        self.path_msg = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
+        for (c, (x, y, w, t)) in enumerate(zip(position_dict['x'], position_dict['y'], position_dict['yaw'], times)):
+            if not c % 3 == 0:
+                continue
+            new_pose = PoseStamped(header=Header(stamp=rospy.Time.from_sec(t), frame_id="map", seq=c))
+            new_pose.pose.position = Point(x=x, y=y, z=0)
+            new_pose.pose.orientation = q_from_yaw(w)
+            self.path_msg.poses.append(new_pose)
+            del new_pose
 
     def param_callback(self, msg):
         rospy.logdebug("Param update: %s" % msg.data)
@@ -276,15 +310,10 @@ class mrc: # main ROS class
         struct_to_pub.header.frame_id = fid
         struct_to_pub.header.stamp = rospy.Time.now()
 
-        q = quaternion_from_euler(0, 0, self.ref_dict['odom']['position']['yaw'][mInd]) # roll, pitch, yaw
-
         odom_to_pub = Odometry()
         odom_to_pub.pose.pose.position.x = self.ref_dict['odom']['position']['x'][mInd]
         odom_to_pub.pose.pose.position.y = self.ref_dict['odom']['position']['y'][mInd]
-        odom_to_pub.pose.pose.orientation.x = q[0]
-        odom_to_pub.pose.pose.orientation.y = q[1]
-        odom_to_pub.pose.pose.orientation.z = q[2]
-        odom_to_pub.pose.pose.orientation.w = q[3]
+        odom_to_pub.pose.pose.orientation = q_from_yaw(self.ref_dict['odom']['position']['yaw'][mInd])
         odom_to_pub.header.stamp = rospy.Time.now()
         odom_to_pub.header.frame_id = fid
 

@@ -14,7 +14,7 @@ import cv2
 
 from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, MonitorDetails, \
                                     ImageDetails, CompressedImageDetails, CompressedMonitorDetails# Our custom structures
-from aarapsi_robot_pack.srv import GetSVMField, GetSVMFieldResponse
+from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse
 from pyaarapsi.vpr_simple import SVMModelProcessor, Tolerance_Mode, FeatureType
 from pyaarapsi.vpred import *
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
@@ -76,7 +76,7 @@ class mrc: # main ROS class
         self.vpr_label_sub          = rospy.Subscriber(self.NAMESPACE + "/label" + self.INPUTS['topic'], self.INPUTS['label'], self.label_callback, queue_size=1)
         self.svm_state_pub          = rospy.Publisher(self.NAMESPACE + "/monitor/state" + self.INPUTS['topic'], self.OUTPUTS['mon_dets'], queue_size=1)
         self.svm_field_pub          = rospy.Publisher(self.NAMESPACE + "/monitor/field" + self.INPUTS['topic'], self.OUTPUTS['img_dets'], queue_size=1)
-        self.svm_field_srv          = rospy.Service(self.NAMESPACE + '/GetSVMField', GetSVMField, self.handle_GetSVMField)
+        self.svm_field_srv          = rospy.Service(self.NAMESPACE + '/GetSVMField', GenerateObj, self.handle_GetSVMField)
 
         # flags to denest main loop:
         self.new_label              = False # new label received
@@ -100,7 +100,7 @@ class mrc: # main ROS class
 
     def handle_GetSVMField(self, req):
     # /vpr_nodes/GetSVMField service
-        ans = GetSVMFieldResponse()
+        ans = GenerateObjResponse()
         success = True
 
         try:

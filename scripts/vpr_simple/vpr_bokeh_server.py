@@ -13,7 +13,7 @@ import copy
 
 from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, \
     ImageDetails, CompressedImageDetails, MonitorDetails, CompressedMonitorDetails # Our custom msg structures
-from aarapsi_robot_pack.srv import GetSVMField, GetSVMFieldRequest, GetSVMFieldResponse
+from aarapsi_robot_pack.srv import GenerateObj, GenerateObjRequest
 from pyaarapsi.vpr_simple import VPRImageProcessor, FeatureType, \
                                             doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, doXYWVFigBokeh, \
                                             updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
@@ -79,7 +79,7 @@ class mrc: # main ROS class
         self.param_checker_sub      = rospy.Subscriber("/vpr_nodes/params_update", String, self.param_callback, queue_size=100)
         self.svm_state_sub          = rospy.Subscriber(self.NAMESPACE + "/monitor/state" + self.INPUTS['topic'], self.INPUTS['mon_dets'], self.state_callback, queue_size=1)
         self.svm_field_sub          = rospy.Subscriber(self.NAMESPACE + "/monitor/field" + self.INPUTS['topic'], self.INPUTS['img_dets'], self.field_callback, queue_size=1)
-        self.srv_GetSVMField        = rospy.ServiceProxy(self.NAMESPACE + '/GetSVMField', GetSVMField)
+        self.srv_GetSVMField        = rospy.ServiceProxy(self.NAMESPACE + '/GetSVMField', GenerateObj)
         self.srv_GetSVMField_once   = False
         
         # Process reference data (only needs to be done once)
@@ -119,7 +119,7 @@ class mrc: # main ROS class
         try:
             if not self.main_ready:
                 return
-            requ = GetSVMFieldRequest()
+            requ = GenerateObjRequest()
             requ.generate = generate
             resp = self.srv_GetSVMField(requ)
             if resp.success == False:
