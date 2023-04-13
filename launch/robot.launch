@@ -64,6 +64,12 @@
         <node pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)"
                 args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level)"/>
     <group>
+    
+    <!-- Param Watcher Node: -->
+    <group if="$(arg launch_paramwatcher)">
+        <arg name="pw_node_name"   value="param_watcher"/>
+        <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="$(arg pw_node_name)"/>
+    </group>
 
     </group>
 </launch>
