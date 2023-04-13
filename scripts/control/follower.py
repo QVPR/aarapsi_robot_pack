@@ -95,7 +95,7 @@ class mrc:
             return
         
         self.delta_yaw      = yaw_from_q(msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_cmd.pose.pose.orientation)
-        self.current_yaw    = np.mean([self.current_yaw, self.vpr_ego[0]]) + self.delta_yaw
+        self.current_yaw    = np.mean([self.current_yaw, self.vpr_ego[2]]) + self.delta_yaw
         self.old_sensor_cmd = msg
         self.yaw_pub.publish(Float64(data=self.current_yaw))
 
