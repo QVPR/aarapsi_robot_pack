@@ -73,7 +73,7 @@ class mrc:
 
     def path_process(self):
     # Abstracted to separate function as the for loop execution time may be long
-        self.path_array     = np.array([self.post2xyw(pose, stamped=True) for pose in self.path_msg.poses])
+        self.path_array     = np.array([self.pose2xyw(pose, stamped=True) for pose in self.path_msg.poses])
         self.path_processed = True
 
     def path_cb(self, msg):
