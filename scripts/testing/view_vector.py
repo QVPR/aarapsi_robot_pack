@@ -3,6 +3,7 @@
 import rospy
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
+from geometry_msgs.msg import Vector3Stamped
 from tf.transformations import euler_from_quaternion
 
 import matplotlib
@@ -11,8 +12,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import argparse as ap
 import warnings
+import math
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool
+from pyaarapsi.core.ros_tools import yaw_from_q
 
 class Viewer:
     def __init__(self, node_name, anon, log_level, rate, mode, topic=None):
@@ -29,12 +32,19 @@ class Viewer:
         self.mode       = mode
         self.topic      = topic
 
+        self.msg        = None
+        self.gtmsg      = None
+
+        self.new_msg    = False
+        self.gtnew_msg  = False
+
     def topic_cb(self, msg):
         self.msg        = msg
         self.new_msg    = True
 
-    def yaw_from_q(self, orientation):
-        return euler_from_quaternion([float(orientation.x), float(orientation.y), float(orientation.z), float(orientation.w)])[2]
+    def gt_topic_cb(self, msg):
+        self.gtmsg      = msg
+        self.gtnew_msg  = True
 
     def main(self):
         if self.mode == "odom":
@@ -43,6 +53,8 @@ class Viewer:
             self.main_imu()
         elif self.mode == 'dOdom':
             self.main_odometry_derivative()
+        elif self.mode == 'vec3s':
+            self.main_vector3stamped()
 
     def main_imu(self):
 
@@ -149,10 +161,10 @@ class Viewer:
             # get new data:
             new____x = round(self.msg.pose.pose.position.x,3)
             new____y = round(self.msg.pose.pose.position.y,3)
-            new__yaw = round(self.yaw_from_q(self.msg.pose.pose.orientation), 3)
+            new__yaw = round(yaw_from_q(self.msg.pose.pose.orientation), 3)
             new___vx = round(self.msg.pose.pose.position.x-self.omsg.pose.pose.position.x,3)
             new___vy = round(self.msg.pose.pose.position.y-self.omsg.pose.pose.position.y,3)
-            new_vyaw = round(self.yaw_from_q(self.msg.pose.pose.orientation) - self.yaw_from_q(self.omsg.pose.pose.orientation),3)
+            new_vyaw = round(yaw_from_q(self.msg.pose.pose.orientation) - yaw_from_q(self.omsg.pose.pose.orientation),3)
             self.omsg = self.msg
 
             # store new data:
@@ -329,12 +341,79 @@ class Viewer:
             self.fig.canvas.draw_idle()
             self.fig.canvas.start_event_loop(0.001)
 
+    def main_vector3stamped(self):
+        
+        if self.topic is None:
+            self.topic_to_view = "/imu_um7/mag"
+        else:
+            self.topic_to_view = self.topic
+        
+        self.sub = rospy.Subscriber(self.topic_to_view, Vector3Stamped, self.topic_cb, queue_size=1)
+        self.subgt = rospy.Subscriber('/odom/filtered', Odometry, self.gt_topic_cb, queue_size=1)
+
+        self.fig, self.axes = plt.subplots(2,1)
+        self.fig.show()
+
+        data_dict   = {'x': [], 'y': [], 'z': [], 'w': [], 'gtw': []}
+        _MIN = 10000
+        _MAX = -10000
+        mins_dict = {'x': _MIN, 'y': _MIN, 'z': _MIN, 'w': _MIN, 'gtw': _MIN}
+        maxs_dict = {'x': _MAX, 'y': _MAX, 'z': _MAX, 'w': _MAX, 'gtw': _MAX}
+        hist_len  = 1000
+        while not rospy.is_shutdown():
+            self.rate_obj.sleep() # reduce cpu load
+            if not (self.new_msg and self.gtnew_msg):
+                continue #denest
+            self.new_msg = False
+            self.gtnew_msg = False
+
+            ## todo each loop:
+            # get new data:
+            new____x = round(self.msg.vector.x,3)
+            new____y = round(self.msg.vector.y,3)
+            new____z = round(self.msg.vector.z,3)
+            new____w = round(math.atan2(self.msg.vector.y, self.msg.vector.x),3)
+            new__gtw = round(yaw_from_q(self.gtmsg.pose.pose.orientation), 3)
+
+            # store new data:
+            data_dict['x'].append(new____x)
+            data_dict['y'].append(new____y)
+            data_dict['z'].append(new____z)
+            data_dict['w'].append(new____w)
+            data_dict['gtw'].append(new__gtw)
+
+            # crunch plot limits:
+            mins_dict = {key: data_dict[key][-1] if data_dict[key][-1] < mins_dict[key] else mins_dict[key] for key in list(mins_dict.keys())}
+            maxs_dict = {key: data_dict[key][-1] if data_dict[key][-1] > maxs_dict[key] else maxs_dict[key] for key in list(maxs_dict.keys())}
+
+            # clean axes:
+            length_arr = len(data_dict['x'])
+            while length_arr > hist_len:
+                [data_dict[key].pop(0) for key in list(data_dict.keys())]
+                length_arr -= 1
+            spacing = np.arange(length_arr)
+            [i.clear() for i in self.axes] # clear old data from axes
+
+            if length_arr < 10:
+                continue
+
+            # plot data:
+            self.axes[0].plot(spacing, data_dict['x'], 'r')
+            self.axes[0].plot(spacing, data_dict['y'], 'g')
+            self.axes[0].plot(spacing, data_dict['z'], 'b')
+            self.axes[1].plot(spacing, data_dict['w'], 'r')
+            self.axes[1].plot(spacing, data_dict['gtw'], 'b')
+
+            # draw:
+            self.fig.canvas.draw_idle()
+            self.fig.canvas.start_event_loop(0.001)
+
 if __name__ == '__main__':
     try:
         parser = ap.ArgumentParser(prog="vector viewer", 
                                 description="ROS Vector Viewer Tool",
                                 epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-        parser.add_argument('--mode', '-m', type=check_string, choices=["imu","odom", "dOdom"], default="odom", help="Specify ROS log level (default: %(default)s).")
+        parser.add_argument('--mode', '-m', type=check_string, choices=["imu","odom", "dOdom", "vec3s"], default="odom", help="Specify ROS log level (default: %(default)s).")
         parser.add_argument('--topic', '-t', type=check_string, default=None, help='Set node rate (default: %(default)s).')
         parser.add_argument('--rate', '-r', type=check_positive_float, default=10.0, help='Set node rate (default: %(default)s).')
         parser.add_argument('--node-name', '-N', default="view_vector", help="Specify node name (default: %(default)s).")

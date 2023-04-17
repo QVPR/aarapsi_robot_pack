@@ -36,7 +36,7 @@ class Throttle_Topic:
         self.transform  = transform
         if transform is None:
             self.transform = self.empty
-        self.subs       = [rospy.Subscriber(self.namespace + self.topic_in + self.exts[i], self.types[i], self.cb, queue_size=1) \
+        self.subs       = [rospy.Subscriber(self.topic_in + self.exts[i], self.types[i], self.cb, queue_size=1) \
                            for i in range(len(self.exts))]
         self.pubs       = [rospy.Publisher(self.namespace + self.topic_out + self.exts[i], self.types[i], queue_size=1) \
                            for i in range(len(self.exts))]

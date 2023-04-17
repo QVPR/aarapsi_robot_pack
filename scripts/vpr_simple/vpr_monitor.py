@@ -37,17 +37,17 @@ class mrc: # main ROS class
 
         rospy.init_node(self.NODENAME, anonymous=anon, log_level=log_level)
         rospy.loginfo('Starting %s node.' % (node_name))
-        self.heartbeat  = Heartbeat(self.NODENAME, self.NAMESPACE, NodeState.INIT, self.RATE_NUM.get())
+        self.heartbeat              = Heartbeat(self.NODENAME, self.NAMESPACE, NodeState.INIT, self.RATE_NUM.get())
         
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
         self.PRINT_PREDICTION       = ROS_Param(self.NODESPACE + "/print_prediction", print_prediction, check_bool, force=reset)
 
-        self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), namespace=self.NAMESPACE, force=reset)
-        self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, namespace=self.NAMESPACE, force=reset)
-        self.FRAME_ID               = ROS_Param(self.NAMESPACE + "/frame_id", frame_id, check_string, namespace=self.NAMESPACE, force=reset)
+        self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
+        self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, force=reset)
+        self.FRAME_ID               = ROS_Param(self.NAMESPACE + "/frame_id", frame_id, check_string, force=reset)
 
-        self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, namespace=self.NAMESPACE, force=reset)
+        self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, force=reset)
         self.CAL_QRY_DATA_NAME      = ROS_Param(self.NODESPACE + "/cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
         self.CAL_REF_DATA_NAME      = ROS_Param(self.NODESPACE + "/cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
         self.CAL_FOLDER             = ROS_Param(self.NODESPACE + "/cal/folder", cal_folder, check_string, force=reset)

@@ -44,29 +44,29 @@ class mrc: # main ROS class
 
         rospy.init_node(self.NODENAME, anonymous=anon, log_level=log_level)
         rospy.loginfo('Starting %s node.' % (node_name))
-        self.heartbeat  = Heartbeat(self.NODENAME, self.NAMESPACE, NodeState.INIT, self.RATE_NUM.get())
+        self.heartbeat              = Heartbeat(self.NODENAME, self.NAMESPACE, NodeState.INIT, self.RATE_NUM.get())
 
         ## Parse all the inputs:
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
-        self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), namespace=self.NAMESPACE, force=reset)
-        self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, namespace=self.NAMESPACE, force=reset)
+        self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
+        self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, force=reset)
 
-        self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, namespace=self.NAMESPACE, force=reset)
+        self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, force=reset)
         self.REF_DATA_NAME          = ROS_Param(self.NODESPACE + "/ref/data_name", dataset_name, check_string, force=reset)
         self.REF_IMG_PATH           = ROS_Param(self.NODESPACE + "/ref/images_path", ref_images_path, check_string, force=reset)
         self.REF_ODOM_PATH          = ROS_Param(self.NODESPACE + "/ref/odometry_path", ref_odometry_path, check_string, force=reset)
 
-        self.TOL_MODE               = ROS_Param(self.NAMESPACE + "/tolerance/mode", enum_name(tolerance_mode), lambda x: check_enum(x, Tolerance_Mode), namespace=self.NAMESPACE, force=reset)
-        self.TOL_THRES              = ROS_Param(self.NAMESPACE + "/tolerance/threshold", tolerance_threshold, check_positive_float, namespace=self.NAMESPACE, force=reset)
+        self.TOL_MODE               = ROS_Param(self.NAMESPACE + "/tolerance/mode", enum_name(tolerance_mode), lambda x: check_enum(x, Tolerance_Mode), force=reset)
+        self.TOL_THRES              = ROS_Param(self.NAMESPACE + "/tolerance/threshold", tolerance_threshold, check_positive_float, force=reset)
 
         self.ICON_SIZE              = icon_settings[0]
         self.ICON_DIST              = icon_settings[1]
         self.ICON_PATH              = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/media"
 
-        self.MATCH_METRIC           = ROS_Param(self.NAMESPACE + "/match_metric", match_metric, check_string, namespace=self.NAMESPACE)
+        self.MATCH_METRIC           = ROS_Param(self.NAMESPACE + "/match_metric", match_metric, check_string, force=reset)
         self.TIME_HIST_LEN          = ROS_Param(self.NODESPACE + "/time_history_length", time_history_length, check_positive_int, force=reset)
-        self.FRAME_ID               = ROS_Param(self.NAMESPACE + "/frame_id", frame_id, check_string, namespace=self.NAMESPACE, force=reset)
+        self.FRAME_ID               = ROS_Param(self.NAMESPACE + "/frame_id", frame_id, check_string, force=reset)
 
         #!# Enable/Disable Features (Label topic will always be generated):
         self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
@@ -151,9 +151,9 @@ class mrc: # main ROS class
         if self.DO_PLOTTING.get():
             # Prepare figures:
             self.fig.suptitle("Odometry Visualised")
-            self.fig_mtrx_handles = doMtrxFig(self.axes[0], self.ref_dict['odom']) # Make simularity matrix figure
-            self.fig_dvec_handles = doDVecFig(self.axes[1], self.ref_dict['odom']) # Make distance vector figure
-            self.fig_odom_handles = doOdomFig(self.axes[2], self.ref_dict['odom']) # Make odometry figure
+            self.fig_mtrx_handles   = doMtrxFig(self.axes[0], self.ref_dict['odom']) # Make simularity matrix figure
+            self.fig_dvec_handles   = doDVecFig(self.axes[1], self.ref_dict['odom']) # Make distance vector figure
+            self.fig_odom_handles   = doOdomFig(self.axes[2], self.ref_dict['odom']) # Make odometry figure
             self.fig.show()
 
         self.ICON_DICT = {'size': self.ICON_SIZE, 'dist': self.ICON_DIST, 'icon': [], 'good': [], 'poor': []}
@@ -161,8 +161,8 @@ class mrc: # main ROS class
         if self.MAKE_IMAGE.get():
             good_icon = cv2.imread(self.ICON_PATH + "/tick.png", cv2.IMREAD_UNCHANGED)
             poor_icon = cv2.imread(self.ICON_PATH + "/cross.png", cv2.IMREAD_UNCHANGED)
-            self.ICON_DICT['good'] = cv2.resize(good_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
-            self.ICON_DICT['poor'] = cv2.resize(poor_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
+            self.ICON_DICT['good']  = cv2.resize(good_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
+            self.ICON_DICT['poor']  = cv2.resize(poor_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
 
         # Last item as it sets a flag that enables main loop execution.
         self.main_timer             = rospy.Timer(rospy.Duration(1/self.RATE_NUM.get()), self.main_cb) # Main loop rate limiter
