@@ -1,44 +1,80 @@
 #!/usr/bin/env python3
 
 import rospy
+import argparse as ap
+import sys
 from std_msgs.msg import String
+from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
+from pyaarapsi.core.ros_tools import Heartbeat, NodeState, roslogger, LogType
 
-params = rospy.get_param_names()
+'''
+ROS Parameter Server Watcher
 
-print(params)
+Our replacement for the mainstream dynamic parameter updates node/s.
+This node observes changes to parameters in the /namespace, and then 
+reports changes to each parameter on the /namespace/params_update 
+topic. 
 
-params_vpr_cruncher = [i for i in params if i.startswith('/vpr_cruncher')]
-params_vpr_monitor  = [i for i in params if i.startswith('/vpr_monitor')]
-params_vpr_plotter  = [i for i in params if i.startswith('/vpr_plotter')]
-params_vpr_nodes    = [i for i in params if i.startswith('/vpr_nodes')]
+'''
 
-rospy.init_node("param_watcher", log_level=rospy.DEBUG, anonymous=True)
+class mrc():
+    def __init__(self, node_name, rate, namespace, anon, log_level):
 
-pub = rospy.Publisher("/vpr_nodes/params_update", String, queue_size=100)
+        self.node_name      = node_name
+        self.namespace      = namespace
+        self.anon           = anon
+        self.log_level      = log_level
+        self.rate_num       = rate
+    
+        rospy.init_node(self.node_name, anonymous=self.anon, log_level=self.log_level)
+        roslogger('Starting %s node.' % (self.node_name), LogType.INFO, ros=True)
+        self.rate_obj   = rospy.Rate(self.rate_num)
+        self.heartbeat  = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
 
-rospy.logdebug("Cruncher params:")
-rospy.logdebug(params_vpr_cruncher)
-rospy.logdebug("Monitor params:")
-rospy.logdebug(params_vpr_monitor)
-rospy.logdebug("Plotter params:")
-rospy.logdebug(params_vpr_plotter)
-rospy.logdebug("Namespace params:")
-rospy.logdebug(params_vpr_nodes)
+        self.watch_params   = [i for i in rospy.get_param_names() if i.startswith('/' + namespace)]
+        self.params_dict    = dict.fromkeys(self.watch_params)
 
-watch_params = params_vpr_cruncher + params_vpr_monitor + params_vpr_plotter + params_vpr_nodes
-params_dict = dict.fromkeys(watch_params)
+        self.watch_pub      = rospy.Publisher(self.namespace + "/params_update", String, queue_size=100)
 
-rate_obj = rospy.Rate(1)
+    def watch(self):
+        for i in list(self.params_dict.keys()):
+            check_param = rospy.get_param(i)
+            if not self.params_dict[i] == check_param:
+                rospy.loginfo("Update detected for: %s (%s->%s)" % (i, self.params_dict[i], check_param))
+                self.params_dict[i] = check_param
+                self.watch_pub.publish(String(i))
 
-def watch(params_dict):
-    for i in list(params_dict.keys()):
-        check_param = rospy.get_param(i)
-        if not params_dict[i] == check_param:
-            rospy.loginfo("Update detected for: %s (%s->%s)" % (i, params_dict[i], check_param))
-            params_dict[i] = check_param
-            pub.publish(String(i))
-    return params_dict
+    def main(self):
+        self.heartbeat.set_state(NodeState.MAIN)
 
-while not rospy.is_shutdown():
-    params_dict.update(watch(params_dict))
-    rate_obj.sleep()
+        while not rospy.is_shutdown():
+            self.watch()
+            self.rate_obj.sleep()
+
+
+if __name__ == '__main__':
+    parser = ap.ArgumentParser(prog="param_watcher.py", 
+                            description="ROS Parameter Server Watcher",
+                            epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
+    parser.add_argument('--node-name', '-N', type=check_string,              default="param_watcher",  help="Specify node name (default: %(default)s).")
+    parser.add_argument('--rate', '-r',      type=check_positive_float,      default=2.0,              help='Set node rate (default: %(default)s).')
+    parser.add_argument('--anon', '-a',      type=check_bool,                default=False,            help="Specify whether node should be anonymous (default: %(default)s).")
+    parser.add_argument('--namespace', '-n', type=check_string,              default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
+    parser.add_argument('--log-level', '-V', type=int, choices=[1,2,4,8,16], default=2,                help="Specify ROS log level (default: %(default)s).")
+    
+    raw_args = parser.parse_known_args()
+    args = vars(raw_args[0])
+
+    node_name   = args['node_name']
+    rate        = args['rate']
+    namespace   = args['namespace']
+    anon        = args['anon']
+    log_level   = args['log_level']
+
+    try:
+        nmrc = mrc(node_name, rate, namespace, anon, log_level)
+        nmrc.main()
+        roslogger("Operation complete.", LogType.INFO, ros=True)
+        sys.exit()
+    except:
+        roslogger("Error state reached, system exit triggered.", LogType.INFO, ros=True)

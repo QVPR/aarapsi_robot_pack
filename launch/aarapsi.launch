@@ -1,4 +1,8 @@
 <?xml version="1.0"?>
-<launch>\
+<!-- 
+    This file goes into /etc/ros/noetic/ros.d to be integrated into ROS bringup
+    Its sole purpose is to provide a hook into our package launch file
+-->
+<launch>
     <include file="$(find aarapsi_robot_pack)/launch/robot.launch"/>\
 </launch>

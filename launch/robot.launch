@@ -1,4 +1,7 @@
 <?xml version="1.0"?>
+<!-- 
+    Bringup launch file for on-robot nodes
+ -->
 <launch>
     <!-- Global Arguments: -->
     <arg name="log_level"           default="2"/>

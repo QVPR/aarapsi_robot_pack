@@ -1,4 +1,7 @@
 <?xml version="1.0"?>
+<!-- 
+    Single pipeline launch file
+ -->
 <launch>
     <arg name="launch_cruncher"         default="true"/>
     <arg name="launch_monitor"          default="true"/>
