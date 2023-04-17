@@ -20,7 +20,7 @@ from pyaarapsi.vpred import *
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_bool, check_enum, check_string
 from pyaarapsi.core.helper_tools import formatException
-from pyaarapsi.core.ros_tools import ROS_Param
+from pyaarapsi.core.ros_tools import ROS_Param, roslogger, NodeState, Heartbeat
 
 class mrc: # main ROS class
     def __init__(self, cal_qry_dataset_name, cal_ref_dataset_name, database_path, \
@@ -30,30 +30,31 @@ class mrc: # main ROS class
                     cal_folder='forward', print_prediction=True, log_level=2, reset=False\
                 ):
 
-        self.NAMESPACE          = namespace
-        self.NODENAME           = node_name
-        self.NODESPACE          = "/" + self.NODENAME + "/"
+        self.NAMESPACE              = namespace
+        self.NODENAME               = node_name
+        self.NODESPACE              = self.NAMESPACE + "/" + self.NODENAME
+        self.RATE_NUM               = ROS_Param(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
 
         rospy.init_node(self.NODENAME, anonymous=anon, log_level=log_level)
         rospy.loginfo('Starting %s node.' % (node_name))
+        self.heartbeat  = Heartbeat(self.NODENAME, self.NAMESPACE, NodeState.INIT, self.RATE_NUM.get())
         
-        self.RATE_NUM               = ROS_Param(self.NODESPACE + "rate", rate_num, check_positive_float, force=reset) # Hz
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
-        self.PRINT_PREDICTION       = ROS_Param(self.NODESPACE + "print_prediction", print_prediction, check_bool, force=reset)
+        self.PRINT_PREDICTION       = ROS_Param(self.NODESPACE + "/print_prediction", print_prediction, check_bool, force=reset)
 
-        self.FEAT_TYPE              = ROS_Param("feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), namespace=self.NAMESPACE, force=reset)
-        self.IMG_DIMS               = ROS_Param("img_dims", img_dims, check_positive_two_int_tuple, namespace=self.NAMESPACE, force=reset)
-        self.FRAME_ID               = ROS_Param("frame_id", frame_id, check_string, namespace=self.NAMESPACE, force=reset)
+        self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), namespace=self.NAMESPACE, force=reset)
+        self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, namespace=self.NAMESPACE, force=reset)
+        self.FRAME_ID               = ROS_Param(self.NAMESPACE + "/frame_id", frame_id, check_string, namespace=self.NAMESPACE, force=reset)
 
-        self.DATABASE_PATH          = ROS_Param("database_path", database_path, check_string, namespace=self.NAMESPACE, force=reset)
-        self.CAL_QRY_DATA_NAME      = ROS_Param(self.NODESPACE + "cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
-        self.CAL_REF_DATA_NAME      = ROS_Param(self.NODESPACE + "cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
-        self.CAL_FOLDER             = ROS_Param(self.NODESPACE + "cal/folder", cal_folder, check_string, force=reset)
+        self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, namespace=self.NAMESPACE, force=reset)
+        self.CAL_QRY_DATA_NAME      = ROS_Param(self.NODESPACE + "/cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
+        self.CAL_REF_DATA_NAME      = ROS_Param(self.NODESPACE + "/cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
+        self.CAL_FOLDER             = ROS_Param(self.NODESPACE + "/cal/folder", cal_folder, check_string, force=reset)
 
         #!# Enable/Disable Features (Label topic will always be generated):
-        self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "compress/in", compress_in, check_bool, force=reset)
-        self.COMPRESS_OUT           = ROS_Param(self.NODESPACE + "compress/out", compress_out, check_bool, force=reset)
+        self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
+        self.COMPRESS_OUT           = ROS_Param(self.NODESPACE + "/compress/out", compress_out, check_bool, force=reset)
 
         self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
 
@@ -232,7 +233,8 @@ if __name__ == '__main__':
                     print_prediction=args['print_prediction'], log_level=args['log_level'], reset=args['reset']\
                 )
 
-        rospy.loginfo("Initialisation complete. Listening for queries...")    
+        rospy.loginfo("Initialisation complete. Listening for queries...")   
+        nmrc.heartbeat.set_state(NodeState.MAIN) 
         
         while not rospy.is_shutdown():
             nmrc.rate_obj.sleep()

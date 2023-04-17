@@ -21,7 +21,7 @@ from pyaarapsi.vpr_simple import VPRImageProcessor, FeatureType, \
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
 from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_positive_two_int_tuple, check_positive_int, check_valid_ip, check_enum, check_string
 from pyaarapsi.core.helper_tools import formatException, getArrayDetails
-from pyaarapsi.core.ros_tools import ROS_Param
+from pyaarapsi.core.ros_tools import ROS_Param, roslogger, Heartbeat, NodeState
 
 from functools import partial
 from bokeh.layouts import column, row
@@ -39,10 +39,12 @@ class mrc: # main ROS class
         
         self.NAMESPACE              = namespace
         self.NODENAME               = node_name
-        self.NODESPACE              = "/" + self.NODENAME + "/"
+        self.NODESPACE              = self.NAMESPACE + "/" + self.NODENAME
+        self.RATE_NUM               = ROS_Param(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
 
         rospy.init_node(self.NODENAME, anonymous=anon, log_level=log_level)
         rospy.loginfo('Starting %s node.' % (node_name))
+        self.heartbeat  = Heartbeat(self.NODENAME, self.NAMESPACE, NodeState.INIT, self.RATE_NUM.get())
 
         # flags to denest main loop:
         self.new_state              = False # new SVM state message received
@@ -51,17 +53,17 @@ class mrc: # main ROS class
         self.main_ready             = False
 
         ## Parse all the inputs:
-        self.RATE_NUM               = ROS_Param(self.NODESPACE + "rate", rate_num, check_positive_float, force=reset) # Hz
+        self.RATE_NUM               = ROS_Param(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
-        self.FEAT_TYPE              = ROS_Param("feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), namespace=self.NAMESPACE, force=reset)
-        self.IMG_DIMS               = ROS_Param("img_dims", img_dims, check_positive_two_int_tuple, namespace=self.NAMESPACE, force=reset)
+        self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), namespace=self.NAMESPACE, force=reset)
+        self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, namespace=self.NAMESPACE, force=reset)
 
-        self.DATABASE_PATH          = ROS_Param("database_path", database_path, check_string, namespace=self.NAMESPACE, force=reset)
-        self.REF_DATA_NAME          = ROS_Param(self.NODESPACE + "ref/data_name", dataset_name, check_string, force=reset)
+        self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, namespace=self.NAMESPACE, force=reset)
+        self.REF_DATA_NAME          = ROS_Param(self.NODESPACE + "/ref/data_name", dataset_name, check_string, force=reset)
 
         #!# Enable/Disable Features:
-        self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "compress/in", compress_in, check_bool, force=reset)
+        self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
 
         self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
 
@@ -76,7 +78,7 @@ class mrc: # main ROS class
         else:
             self.INPUTS             = self._compress_off
 
-        self.param_checker_sub      = rospy.Subscriber("/vpr_nodes/params_update", String, self.param_callback, queue_size=100)
+        self.param_checker_sub      = rospy.Subscriber(self.NAMESPACE + "/params_update", String, self.param_callback, queue_size=100)
         self.svm_state_sub          = rospy.Subscriber(self.NAMESPACE + "/monitor/state" + self.INPUTS['topic'], self.INPUTS['mon_dets'], self.state_callback, queue_size=1)
         self.svm_field_sub          = rospy.Subscriber(self.NAMESPACE + "/monitor/field" + self.INPUTS['topic'], self.INPUTS['img_dets'], self.field_callback, queue_size=1)
         self.srv_GetSVMField        = rospy.ServiceProxy(self.NAMESPACE + '/GetSVMField', GenerateObj)
@@ -146,6 +148,7 @@ class mrc: # main ROS class
 
 def main_loop(nmrc):
 # Main loop process
+
     if not nmrc.srv_GetSVMField_once:
         nmrc._timer_srv_GetSVMField(generate=True)
 
@@ -236,6 +239,7 @@ def main(doc):
 
         doc.add_periodic_callback(partial(ros_spin, nmrc=nmrc), int(1000 * (1/nmrc.RATE_NUM.get())))
         #doc.add_periodic_callback(nmrc.timer_srv_GetSVMField, 1000)
+        nmrc.heartbeat.set_state(NodeState.MAIN)
     except Exception:
         rospy.logerr(formatException())
         exit()

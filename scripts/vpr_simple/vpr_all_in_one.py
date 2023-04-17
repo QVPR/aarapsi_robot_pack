@@ -25,7 +25,7 @@ from pyaarapsi.vpr_simple import VPRImageProcessor, Tolerance_Mode, FeatureType,
 
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
 from pyaarapsi.core.argparse_tools import check_bounded_float, check_positive_float, check_positive_two_int_tuple, check_positive_int, check_bool, check_str_list, check_enum, check_string
-from pyaarapsi.core.ros_tools import ROS_Param, q_from_yaw
+from pyaarapsi.core.ros_tools import ROS_Param, q_from_yaw, Heartbeat, NodeState
 
 class mrc: # main ROS class
     def __init__(self, database_path, ref_images_path, ref_odometry_path, data_topic, dataset_name, odom_topic=None,\
@@ -39,46 +39,47 @@ class mrc: # main ROS class
         
         self.NAMESPACE              = namespace
         self.NODENAME               = node_name
-        self.NODESPACE              = "/" + self.NODENAME + "/"
+        self.NODESPACE              = self.NAMESPACE + "/" + self.NODENAME
+        self.RATE_NUM               = ROS_Param(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
 
         rospy.init_node(self.NODENAME, anonymous=anon, log_level=log_level)
         rospy.loginfo('Starting %s node.' % (node_name))
+        self.heartbeat  = Heartbeat(self.NODENAME, self.NAMESPACE, NodeState.INIT, self.RATE_NUM.get())
 
         ## Parse all the inputs:
-        self.RATE_NUM               = ROS_Param(self.NODESPACE + "rate", rate_num, check_positive_float, force=reset) # Hz
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
-        self.FEAT_TYPE              = ROS_Param("feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), namespace=self.NAMESPACE, force=reset)
-        self.IMG_DIMS               = ROS_Param("img_dims", img_dims, check_positive_two_int_tuple, namespace=self.NAMESPACE, force=reset)
+        self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), namespace=self.NAMESPACE, force=reset)
+        self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, namespace=self.NAMESPACE, force=reset)
 
-        self.DATABASE_PATH          = ROS_Param("database_path", database_path, check_string, namespace=self.NAMESPACE, force=reset)
-        self.REF_DATA_NAME          = ROS_Param(self.NODESPACE + "ref/data_name", dataset_name, check_string, force=reset)
-        self.REF_IMG_PATH           = ROS_Param(self.NODESPACE + "ref/images_path", ref_images_path, check_string, force=reset)
-        self.REF_ODOM_PATH          = ROS_Param(self.NODESPACE + "ref/odometry_path", ref_odometry_path, check_string, force=reset)
+        self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, namespace=self.NAMESPACE, force=reset)
+        self.REF_DATA_NAME          = ROS_Param(self.NODESPACE + "/ref/data_name", dataset_name, check_string, force=reset)
+        self.REF_IMG_PATH           = ROS_Param(self.NODESPACE + "/ref/images_path", ref_images_path, check_string, force=reset)
+        self.REF_ODOM_PATH          = ROS_Param(self.NODESPACE + "/ref/odometry_path", ref_odometry_path, check_string, force=reset)
 
-        self.TOL_MODE               = ROS_Param("tolerance/mode", enum_name(tolerance_mode), lambda x: check_enum(x, Tolerance_Mode), namespace=self.NAMESPACE, force=reset)
-        self.TOL_THRES              = ROS_Param("tolerance/threshold", tolerance_threshold, check_positive_float, namespace=self.NAMESPACE, force=reset)
+        self.TOL_MODE               = ROS_Param(self.NAMESPACE + "/tolerance/mode", enum_name(tolerance_mode), lambda x: check_enum(x, Tolerance_Mode), namespace=self.NAMESPACE, force=reset)
+        self.TOL_THRES              = ROS_Param(self.NAMESPACE + "/tolerance/threshold", tolerance_threshold, check_positive_float, namespace=self.NAMESPACE, force=reset)
 
         self.ICON_SIZE              = icon_settings[0]
         self.ICON_DIST              = icon_settings[1]
         self.ICON_PATH              = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/media"
 
-        self.MATCH_METRIC           = ROS_Param("match_metric", match_metric, check_string, namespace=self.NAMESPACE)
-        self.TIME_HIST_LEN          = ROS_Param(self.NODESPACE + "time_history_length", time_history_length, check_positive_int, force=reset)
-        self.FRAME_ID               = ROS_Param("frame_id", frame_id, check_string, namespace=self.NAMESPACE, force=reset)
+        self.MATCH_METRIC           = ROS_Param(self.NAMESPACE + "/match_metric", match_metric, check_string, namespace=self.NAMESPACE)
+        self.TIME_HIST_LEN          = ROS_Param(self.NODESPACE + "/time_history_length", time_history_length, check_positive_int, force=reset)
+        self.FRAME_ID               = ROS_Param(self.NAMESPACE + "/frame_id", frame_id, check_string, namespace=self.NAMESPACE, force=reset)
 
         #!# Enable/Disable Features (Label topic will always be generated):
-        self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "compress/in", compress_in, check_bool, force=reset)
-        self.COMPRESS_OUT           = ROS_Param(self.NODESPACE + "compress/out", compress_out, check_bool, force=reset)
-        self.DO_PLOTTING            = ROS_Param(self.NODESPACE + "method/plotting", do_plotting, check_bool, force=reset)
-        self.MAKE_IMAGE             = ROS_Param(self.NODESPACE + "method/images", do_image, check_bool)
-        self.GROUND_TRUTH           = ROS_Param(self.NODESPACE + "method/groundtruth", do_groundtruth, check_bool, force=reset)
-        self.MAKE_LABEL             = ROS_Param(self.NODESPACE + "method/label", do_label, check_bool, force=reset)
+        self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
+        self.COMPRESS_OUT           = ROS_Param(self.NODESPACE + "/compress/out", compress_out, check_bool, force=reset)
+        self.DO_PLOTTING            = ROS_Param(self.NODESPACE + "/method/plotting", do_plotting, check_bool, force=reset)
+        self.MAKE_IMAGE             = ROS_Param(self.NODESPACE + "/method/images", do_image, check_bool)
+        self.GROUND_TRUTH           = ROS_Param(self.NODESPACE + "/method/groundtruth", do_groundtruth, check_bool, force=reset)
+        self.MAKE_LABEL             = ROS_Param(self.NODESPACE + "/method/label", do_label, check_bool, force=reset)
 
         self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
         self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
     
-        self.DVC_WEIGHT             = ROS_Param(self.NODESPACE + "dvc_weight", 1, lambda x: check_bounded_float(x, 0, 1, 'both'), force=reset) # Hz
+        self.DVC_WEIGHT             = ROS_Param(self.NODESPACE + "/dvc_weight", 1, lambda x: check_bounded_float(x, 0, 1, 'both'), force=reset) # Hz
 
         self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
 
@@ -111,8 +112,8 @@ class mrc: # main ROS class
         self.param_checker_sub      = rospy.Subscriber(self.NAMESPACE + "/params_update", String, self.param_callback, queue_size=100)
         self.odom_estimate_pub      = rospy.Publisher(self.NAMESPACE + "/vpr_odom", Odometry, queue_size=1)
 
-        self.send_path_plan         = rospy.Service('/vpr_nodes/path', GenerateObj, self.handle_GetPathPlan)
-        self.path_pub               = rospy.Publisher('/vpr_nodes/path', Path, queue_size=1)
+        self.send_path_plan         = rospy.Service(self.NAMESPACE + '/path', GenerateObj, self.handle_GetPathPlan)
+        self.path_pub               = rospy.Publisher(self.NAMESPACE + '/path', Path, queue_size=1)
 
         if self.MAKE_IMAGE.get():
             self.vpr_feed_pub       = rospy.Publisher(self.NAMESPACE + "/image" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
@@ -333,6 +334,7 @@ class mrc: # main ROS class
 
 def main_loop(nmrc):
 # Main loop process
+    nmrc.heartbeat.set_state(NodeState.MAIN)
 
     if nmrc.do_show and nmrc.DO_PLOTTING.get(): # set by timer callback and node input
         nmrc.fig.canvas.draw() # update all fig subplots
@@ -461,7 +463,7 @@ def do_args():
     parser.add_argument('--icon-info',      '-p',   type=check_positive_two_int_tuple,  default=(50,20),            help='Set icon (size, distance) (default: %(default)s).')
     parser.add_argument('--node-name',      '-N',   type=check_string,                  default="vpr_all_in_one",   help="Specify node name (default: %(default)s).")
     parser.add_argument('--anon',           '-a',   type=check_bool,                    default=True,               help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',      '-n',   type=check_string,                  default="/vpr_nodes",       help="Specify namespace for topics (default: %(default)s).")
+    parser.add_argument('--namespace',      '-n',   type=check_string,                  default="/vpr_nodes",       help="Specify ROS namespace (default: %(default)s).")
     parser.add_argument('--frame-id',       '-f',   type=check_string,                  default="odom",             help="Specify frame_id for messages (default: %(default)s).")
     parser.add_argument('--log-level',      '-V',   type=int, choices=[1,2,4,8,16],     default=2,                  help="Specify ROS log level (default: %(default)s).")
     parser.add_argument('--reset',          '-R',   type=check_bool,                    default=False,              help='Force reset of parameters to specified ones (default: %(default)s).')
