@@ -20,7 +20,7 @@ from pyaarapsi.vpred import *
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_bool, check_enum, check_string
 from pyaarapsi.core.helper_tools import formatException
-from pyaarapsi.core.ros_tools import ROS_Param, roslogger, NodeState, Heartbeat
+from pyaarapsi.core.ros_tools import ROS_Param_Server, roslogger, LogType, NodeState, Heartbeat
 
 class mrc: # main ROS class
     def __init__(self, cal_qry_dataset_name, cal_ref_dataset_name, database_path, \
@@ -33,7 +33,8 @@ class mrc: # main ROS class
         self.NAMESPACE              = namespace
         self.NODENAME               = node_name
         self.NODESPACE              = self.NAMESPACE + "/" + self.NODENAME
-        self.RATE_NUM               = ROS_Param(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
+        self.PARAM_SERVER           = ROS_Param_Server()
+        self.RATE_NUM               = self.PARAM_SERVER.add(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
 
         rospy.init_node(self.NODENAME, anonymous=anon, log_level=log_level)
         rospy.loginfo('Starting %s node.' % (node_name))
@@ -41,20 +42,20 @@ class mrc: # main ROS class
         
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
-        self.PRINT_PREDICTION       = ROS_Param(self.NODESPACE + "/print_prediction", print_prediction, check_bool, force=reset)
+        self.PRINT_PREDICTION       = self.PARAM_SERVER.add(self.NODESPACE + "/print_prediction", print_prediction, check_bool, force=reset)
 
-        self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
-        self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, force=reset)
-        self.FRAME_ID               = ROS_Param(self.NAMESPACE + "/frame_id", frame_id, check_string, force=reset)
+        self.FEAT_TYPE              = self.PARAM_SERVER.add(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
+        self.IMG_DIMS               = self.PARAM_SERVER.add(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, force=reset)
+        self.FRAME_ID               = self.PARAM_SERVER.add(self.NAMESPACE + "/frame_id", frame_id, check_string, force=reset)
 
-        self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, force=reset)
-        self.CAL_QRY_DATA_NAME      = ROS_Param(self.NODESPACE + "/cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
-        self.CAL_REF_DATA_NAME      = ROS_Param(self.NODESPACE + "/cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
-        self.CAL_FOLDER             = ROS_Param(self.NODESPACE + "/cal/folder", cal_folder, check_string, force=reset)
+        self.DATABASE_PATH          = self.PARAM_SERVER.add(self.NAMESPACE + "/database_path", database_path, check_string, force=reset)
+        self.CAL_QRY_DATA_NAME      = self.PARAM_SERVER.add(self.NODESPACE + "/cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
+        self.CAL_REF_DATA_NAME      = self.PARAM_SERVER.add(self.NODESPACE + "/cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
+        self.CAL_FOLDER             = self.PARAM_SERVER.add(self.NODESPACE + "/cal/folder", cal_folder, check_string, force=reset)
 
         #!# Enable/Disable Features (Label topic will always be generated):
-        self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
-        self.COMPRESS_OUT           = ROS_Param(self.NODESPACE + "/compress/out", compress_out, check_bool, force=reset)
+        self.COMPRESS_IN            = self.PARAM_SERVER.add(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
+        self.COMPRESS_OUT           = self.PARAM_SERVER.add(self.NODESPACE + "/compress/out", compress_out, check_bool, force=reset)
 
         self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
 
@@ -95,10 +96,27 @@ class mrc: # main ROS class
         self.svm                    = SVMModelProcessor(self.svm_model_dir, model=self.svm_model_params, ros=True)
         self.main_ready             = True
 
-    def param_callback(self, msg):
-        if (msg.data in self.RATE_NUM.updates_possible) and not (msg.data in self.RATE_NUM.updates_queued):
-            self.RATE_NUM.updates_queued.append(msg.data)
+    def update_SVM(self):
+        # Trigger parameter updates:
+        self.svm_model_params       = dict(ref=self.CAL_REF_DATA_NAME.get(), qry=self.CAL_QRY_DATA_NAME.get(), img_dims=self.IMG_DIMS.get(), \
+                                           folder=self.CAL_FOLDER.get(), ft_type=self.FEAT_TYPE.get(), database_path=self.DATABASE_PATH.get())
+        if not self.svm.swap(self.svm_model_params):
+            roslogger("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR, ros=True)
+        else:
+            roslogger("SVM model swapped.", LogType.INFO, ros=True)
 
+    def param_callback(self, msg):
+        if self.PARAM_SERVER.exists(msg.data):
+            roslogger("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG, ros=True)
+            self.PARAM_SERVER.update(msg.data)
+
+            if msg.data in [self.NODESPACE + "/cal/ref/data_name", self.NODESPACE + "/cal/qry/data_name",
+                            self.NAMESPACE + "/img_dims", self.NODESPACE + "/cal/folder",
+                            self.NAMESPACE + "/feature_type", self.NAMESPACE + "/database_path"]:
+                roslogger("Change to SVM parameters detected.", LogType.WARN, ros=True)
+                self.update_SVM()
+        else:
+            roslogger("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG, ros=True)
     def handle_GetSVMField(self, req):
     # /vpr_nodes/GetSVMField service
         ans = GenerateObjResponse()
@@ -164,7 +182,7 @@ def main_loop(nmrc):
         return
 
     nmrc.new_label = False
-    (y_pred_rt, y_zvalues_rt, [factor1_qry, factor2_qry]) = nmrc.svm.predict(nmrc.label.data.dvc)
+    (y_pred_rt, y_zvalues_rt, [factor1_qry, factor2_qry], prob) = nmrc.svm.predict(nmrc.label.data.dvc)
 
     if nmrc.PRINT_PREDICTION.get():
         if nmrc.label.data.state == 0:
@@ -185,7 +203,7 @@ def main_loop(nmrc):
     ros_msg.header.frame_id	= str(nmrc.FRAME_ID.get())
     ros_msg.data            = nmrc.label.data
     ros_msg.mState	        = y_zvalues_rt # Continuous monitor state estimate 
-    ros_msg.prob	        = 0.0 # Monitor probability estimate
+    ros_msg.prob	        = prob # Monitor probability estimate
     ros_msg.mStateBin       = y_pred_rt# Binary monitor state estimate
     ros_msg.factors         = [factor1_qry, factor2_qry]
 

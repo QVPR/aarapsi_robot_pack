@@ -169,7 +169,7 @@ def main_loop(nmrc):
     updateXYWVFigBokeh(nmrc, matchInd, trueInd, dvc, nmrc.ref_dict['odom'])
     if nmrc.field_exists:
         updateCntrFigBokeh(nmrc, matchInd, trueInd, dvc, nmrc.ref_dict['odom'])
-        updateSVMMFigBokeh(nmrc, matchInd, trueInd, dvc, nmrc.ref_dict['odom'])
+        updateSVMMFigBokeh(nmrc, nmrc.state, nmrc.ref_dict['odom'])
 
 def exit():
     global server
