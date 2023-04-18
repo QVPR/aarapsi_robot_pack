@@ -31,7 +31,8 @@ class mrc():
         self.rate_obj   = rospy.Rate(self.rate_num)
         self.heartbeat  = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
 
-        self.watch_params   = [i for i in rospy.get_param_names() if i.startswith('/' + namespace)]
+        self.watch_params   = [i for i in rospy.get_param_names() if i.startswith(namespace)]
+        print(self.watch_params)
         self.params_dict    = dict.fromkeys(self.watch_params)
 
         self.watch_pub      = rospy.Publisher(self.namespace + "/params_update", String, queue_size=100)
