@@ -46,7 +46,7 @@ class mrc:
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
             self.img            = np.roll(self.img, 1, 1)
-            msg                 = img2msg(self.img, 'CompressedImage', bridge=self.bridge)
+            msg                 = img2msg(self.img[:,0:self.img.shape[0],:], 'CompressedImage', bridge=self.bridge)
             msg.header.stamp    = rospy.Time.now()
             msg.header.seq      = self.seq
             msg.header.frame_id = "image"
