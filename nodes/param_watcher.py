@@ -28,11 +28,10 @@ class mrc():
     
         rospy.init_node(self.node_name, anonymous=self.anon, log_level=self.log_level)
         roslogger('Starting %s node.' % (self.node_name), LogType.INFO, ros=True)
-        self.rate_obj   = rospy.Rate(self.rate_num)
-        self.heartbeat  = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
+        self.rate_obj       = rospy.Rate(self.rate_num)
+        self.heartbeat      = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
 
         self.watch_params   = [i for i in rospy.get_param_names() if i.startswith(namespace)]
-        print(self.watch_params)
         self.params_dict    = dict.fromkeys(self.watch_params)
 
         self.watch_pub      = rospy.Publisher(self.namespace + "/params_update", String, queue_size=100)

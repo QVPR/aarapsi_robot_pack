@@ -19,9 +19,11 @@ from pyaarapsi.core.ros_tools import roslogger, LogType, yaw_from_q
 from pyaarapsi.core.helper_tools import vis_dict, formatException
 
 '''
+
 ROS Bag Ripper
 
 Open up a bag, grab out odom_topic and img_topics, and save to a compressed npz library
+
 '''
 
 class mrc:

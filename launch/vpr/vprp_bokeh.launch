@@ -30,12 +30,13 @@
     <arg name="cal_ref_dataset_name"    default="s2_cw_o0_e1_a0"/>
     <!-- s1_cw_o0_e0_a0        s2_cw_o0_e1_a0 -->
 
-    <arg name="data_topic"              default="/data/img_odom"/>
+    <arg name="data_topic"              default="/vpr_nodes/img_odom"/>
     <arg name="odom_topic"              default="None"/>
     
     <arg name="rate"                    default="12.0"/>
     <arg name="cruncher_node_name"      default="vpr_cruncher"/>
     <arg name="monitor_node_name"       default="vpr_monitor"/>
+    <arg name="svm_trainer_node_name"   default="svm_trainer"/>
     <arg name="plotter_node_name"       default="vpr_plotter"/>
     <arg name="anon"                    default="True"/>
     <arg name="reset"                   default="True"/>
@@ -72,18 +73,27 @@
     <group ns="$(arg namespace)">
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_all_in_one.py" name="$(arg cruncher_node_name)" output="screen" 
             args="$(arg dataset_name) $(arg database_path) $(arg ref_imgs_path) $(arg ref_odom_path) $(arg data_topic)
-                -o $(arg odom_topic) -Ci $(arg cruncher_compress_in) -Co $(arg cruncher_compress_out) -P $(arg cruncher_do_plotting) -I $(arg cruncher_make_images) -G $(arg cruncher_groundtruth) -L $(arg cruncher_make_labels)
+                -o $(arg odom_topic) -Ci $(arg cruncher_compress_in) -Co $(arg cruncher_compress_out) -P $(arg cruncher_do_plotting) 
+                -I $(arg cruncher_make_images) -G $(arg cruncher_groundtruth) -L $(arg cruncher_make_labels)
                 -r $(arg rate) -l $(arg time_history_length) -i $(arg img_dims) -F $(arg ft_type) 
                 -t $(arg tol_mode) -T $(arg tol_thresh) -p $(arg icon_info) 
                 -N $(arg cruncher_node_name) -a $(arg anon) -n $(arg namespace) -f $(arg frame_id) -V $(arg log_level) -R $(arg reset)">
         </node>
         
-        <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="$(arg monitor_node_name)" output="screen" 
-            args="$(arg cal_qry_dataset_name) $(arg cal_ref_dataset_name) $(arg database_path)
-                -Ci $(arg monitor_compress_in) -Co $(arg monitor_compress_out)
-                -r $(arg rate) -i $(arg img_dims) -F $(arg ft_type) -p $(arg print_prediction)
-                -N $(arg monitor_node_name) -a $(arg anon) -n $(arg namespace) -V $(arg log_level) -R $(arg reset)">
-        </node>
+        <group if="$(arg launch_monitor)" >
+            <node pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="$(arg monitor_node_name)" output="screen" 
+                args="$(arg cal_qry_dataset_name) $(arg cal_ref_dataset_name) $(arg database_path)
+                    -Ci $(arg monitor_compress_in) -Co $(arg monitor_compress_out)
+                    -r $(arg rate) -i $(arg img_dims) -F $(arg ft_type) -p $(arg print_prediction)
+                    -N $(arg monitor_node_name) -a $(arg anon) -n $(arg namespace) -V $(arg log_level) -R $(arg reset)">
+            </node>
+            
+            <node pkg="aarapsi_robot_pack" type="svm_trainer.py" name="$(arg svm_trainer_node_name)" output="screen" 
+                args="$(arg cal_qry_dataset_name) $(arg cal_ref_dataset_name) $(arg database_path)
+                    -r $(arg rate) -i $(arg img_dims) -F $(arg ft_type)
+                    -N $(arg svm_trainer_node_name) -a $(arg anon) -n $(arg namespace) -V $(arg log_level) -R $(arg reset)">
+            </node>
+        </group>
         
         <node if="$(arg launch_plotter)" pkg="aarapsi_robot_pack" type="vpr_bokeh_server.py" name="$(arg plotter_node_name)" output="screen" 
             args="$(arg dataset_name) $(arg database_path) -F $(arg ft_type) 
@@ -117,9 +127,9 @@
             <arg name="ioa_node_name"   default="img_odom_agg"/>
             <arg name="ioa_rate"        default="10.0"/>
             <arg name="ioa_compress"    default="True"/>
-            <arg name="ioa_img_topic"   default="/occam/image0"/>
+            <arg name="ioa_img_topic"   default="/vpr_nodes/occam/image0"/>
             <arg name="ioa_odom_topic"  default="/odom/filtered"/>
-            <arg name="ioa_pub_topic"   default="/data/img_odom"/>
+            <arg name="ioa_pub_topic"   default="/img_odom"/>
 
             <node pkg="aarapsi_robot_pack" type="image_odom_aggregator.py" name="$(arg ioa_node_name)" 
                     args="-N $(arg ioa_node_name) -r $(arg ioa_rate) -a False -C $(arg ioa_compress) -V $(arg log_level)
