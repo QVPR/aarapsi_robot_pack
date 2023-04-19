@@ -15,7 +15,7 @@ import cv2
 from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, MonitorDetails, \
                                     ImageDetails, CompressedImageDetails, CompressedMonitorDetails# Our custom structures
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse
-from pyaarapsi.vpr_simple import SVMModelProcessor, Tolerance_Mode, FeatureType
+from pyaarapsi.vpr_simple import SVMModelProcessor, FeatureType
 from pyaarapsi.vpred import *
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_bool, check_enum, check_string
@@ -83,6 +83,7 @@ class mrc: # main ROS class
         # flags to denest main loop:
         self.new_label              = False # new label received
         self.main_ready             = False # ensure pubs and subs don't go off early
+        self.svm_swap_pending       = False
 
         self.last_time              = rospy.Time.now()
         self.time_history           = []
@@ -97,35 +98,40 @@ class mrc: # main ROS class
         self.main_ready             = True
 
     def update_SVM(self):
-        # Trigger parameter updates:
         self.svm_model_params       = dict(ref=self.CAL_REF_DATA_NAME.get(), qry=self.CAL_QRY_DATA_NAME.get(), img_dims=self.IMG_DIMS.get(), \
                                            folder=self.CAL_FOLDER.get(), ft_type=self.FEAT_TYPE.get(), database_path=self.DATABASE_PATH.get())
         if not self.svm.swap(self.svm_model_params):
             roslogger("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR, ros=True)
+            self.svm_swap_pending = True
         else:
             roslogger("SVM model swapped.", LogType.INFO, ros=True)
+            self.publish_svm_mat(True)
+            self.svm_swap_pending = False
 
     def param_callback(self, msg):
         if self.PARAM_SERVER.exists(msg.data):
             roslogger("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG, ros=True)
             self.PARAM_SERVER.update(msg.data)
 
-            if msg.data in [self.NODESPACE + "/cal/ref/data_name", self.NODESPACE + "/cal/qry/data_name",
-                            self.NAMESPACE + "/img_dims", self.NODESPACE + "/cal/folder",
-                            self.NAMESPACE + "/feature_type", self.NAMESPACE + "/database_path"]:
+            if msg.data in [self.CAL_REF_DATA_NAME.name, self.CAL_QRY_DATA_NAME.name, self.IMG_DIMS.name, \
+                            self.CAL_FOLDER.name, self.FEAT_TYPE.name, self.DATABASE_PATH.name]:
                 roslogger("Change to SVM parameters detected.", LogType.WARN, ros=True)
                 self.update_SVM()
         else:
             roslogger("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG, ros=True)
+
+    def publish_svm_mat(self, generate):
+        if generate:
+            self.generate_svm_mat()
+        self.svm_field_pub.publish(self.SVM_FIELD_MSG)      
+
     def handle_GetSVMField(self, req):
     # /vpr_nodes/GetSVMField service
         ans = GenerateObjResponse()
         success = True
 
         try:
-            if req.generate == True:
-                self.generate_svm_mat()
-            self.svm_field_pub.publish(self.SVM_FIELD_MSG)
+            self.publish_svm_mat(req.generate)
         except:
             success = False
 
@@ -176,6 +182,9 @@ class mrc: # main ROS class
         sys.exit()
 
 def main_loop(nmrc):
+
+    if nmrc.svm_swap_pending:
+        nmrc.update_SVM()
 
     if not (nmrc.new_label and nmrc.main_ready): # denest
         rospy.loginfo_throttle(60, "[%s] Waiting for a new label." % (nmrc.NODENAME)) # print every 60 seconds
