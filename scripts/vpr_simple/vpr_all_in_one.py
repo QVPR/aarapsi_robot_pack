@@ -24,64 +24,27 @@ from pyaarapsi.vpr_simple import VPRImageProcessor, Tolerance_Mode, FeatureType,
                                             doMtrxFig, updateMtrxFig, doDVecFig, updateDVecFig, doOdomFig, updateOdomFig
 
 from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
-from pyaarapsi.core.argparse_tools import check_bounded_float, check_positive_float, check_positive_two_int_tuple, check_positive_int, check_bool, check_str_list, check_enum, check_string
-from pyaarapsi.core.ros_tools import ROS_Param, q_from_yaw, Heartbeat, NodeState
+from pyaarapsi.core.argparse_tools import check_bounded_float, check_positive_float, check_positive_two_int_tuple, check_positive_int, \
+                                            check_bool, check_str_list, check_enum, check_string
+from pyaarapsi.core.ros_tools import ROS_Param_Server, q_from_yaw, Heartbeat, NodeState, roslogger, LogType
 
 class mrc: # main ROS class
-    def __init__(self, database_path, ref_images_path, ref_odometry_path, data_topic, dataset_name, odom_topic=None,\
-                    compress_in=True, compress_out=False, do_plotting=False, do_image=False, do_groundtruth=False, do_label=True, \
-                    rate_num=20.0, ft_type=FeatureType.RAW, img_dims=(64,64), icon_settings=(50,20), \
-                    tolerance_threshold=5.0, tolerance_mode=Tolerance_Mode.METRE_LINE, \
-                    match_metric='euclidean', namespace="/vpr_nodes", \
-                    time_history_length=20, frame_id="base_link", \
-                    node_name='vpr_all_in_one', anon=True, log_level=2, reset=False\
-                ):
+    def __init__(self, database_path, ref_images_path, ref_odometry_path, data_topic, dataset_name, odom_topic,\
+                    compress_in, compress_out, do_plotting, do_image, do_groundtruth, do_label, rate_num, ft_type, \
+                    img_dims, icon_settings, tolerance_threshold, tolerance_mode, match_metric, namespace, \
+                    time_history_length, frame_id, node_name, anon, log_level, reset):
         
         self.NAMESPACE              = namespace
         self.NODENAME               = node_name
         self.NODESPACE              = self.NAMESPACE + "/" + self.NODENAME
-        self.RATE_NUM               = ROS_Param(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
-
         rospy.init_node(self.NODENAME, anonymous=anon, log_level=log_level)
-        rospy.loginfo('Starting %s node.' % (node_name))
+        self.init_params(rate_num, ft_type, img_dims, database_path, dataset_name, ref_images_path, \
+                         ref_odometry_path, tolerance_mode, tolerance_threshold, match_metric, time_history_length, \
+                         frame_id, compress_in, compress_out, do_plotting, do_image, do_groundtruth, do_label, reset)
+        self.init_vars(icon_settings)
+        roslogger('Starting %s node.' % (node_name), LogType.INFO, ros=True)
         self.heartbeat              = Heartbeat(self.NODENAME, self.NAMESPACE, NodeState.INIT, self.RATE_NUM.get())
-
-        ## Parse all the inputs:
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
-
-        self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
-        self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, force=reset)
-
-        self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, force=reset)
-        self.REF_DATA_NAME          = ROS_Param(self.NODESPACE + "/ref/data_name", dataset_name, check_string, force=reset)
-        self.REF_IMG_PATH           = ROS_Param(self.NODESPACE + "/ref/images_path", ref_images_path, check_string, force=reset)
-        self.REF_ODOM_PATH          = ROS_Param(self.NODESPACE + "/ref/odometry_path", ref_odometry_path, check_string, force=reset)
-
-        self.TOL_MODE               = ROS_Param(self.NAMESPACE + "/tolerance/mode", enum_name(tolerance_mode), lambda x: check_enum(x, Tolerance_Mode), force=reset)
-        self.TOL_THRES              = ROS_Param(self.NAMESPACE + "/tolerance/threshold", tolerance_threshold, check_positive_float, force=reset)
-
-        self.ICON_SIZE              = icon_settings[0]
-        self.ICON_DIST              = icon_settings[1]
-        self.ICON_PATH              = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/media"
-
-        self.MATCH_METRIC           = ROS_Param(self.NAMESPACE + "/match_metric", match_metric, check_string, force=reset)
-        self.TIME_HIST_LEN          = ROS_Param(self.NODESPACE + "/time_history_length", time_history_length, check_positive_int, force=reset)
-        self.FRAME_ID               = ROS_Param(self.NAMESPACE + "/frame_id", frame_id, check_string, force=reset)
-
-        #!# Enable/Disable Features (Label topic will always be generated):
-        self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
-        self.COMPRESS_OUT           = ROS_Param(self.NODESPACE + "/compress/out", compress_out, check_bool, force=reset)
-        self.DO_PLOTTING            = ROS_Param(self.NODESPACE + "/method/plotting", do_plotting, check_bool, force=reset)
-        self.MAKE_IMAGE             = ROS_Param(self.NODESPACE + "/method/images", do_image, check_bool)
-        self.GROUND_TRUTH           = ROS_Param(self.NODESPACE + "/method/groundtruth", do_groundtruth, check_bool, force=reset)
-        self.MAKE_LABEL             = ROS_Param(self.NODESPACE + "/method/label", do_label, check_bool, force=reset)
-
-        self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
-        self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
-    
-        self.DVC_WEIGHT             = ROS_Param(self.NODESPACE + "/dvc_weight", 1, lambda x: check_bounded_float(x, 0, 1, 'both'), force=reset) # Hz
-
-        self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
 
         # Process reference data (only needs to be done once)
         self.image_processor        = VPRImageProcessor(ros=True, init_hybridnet=True, init_netvlad=True, cuda=True, dims=self.IMG_DIMS.get())
@@ -93,22 +56,9 @@ class mrc: # main ROS class
             self.exit()
 
         self.generate_path(self.ref_dict['odom']['position'], self.ref_dict['times'])
+        self.init_rospy(data_topic, odom_topic)
 
-        self.img_folder             = 'forward'
-
-        self._compress_on           = {'topic': "/compressed", 'image': CompressedImage, 'label': CompressedImageLabelStamped, 'data': CompressedImageOdom}
-        self._compress_off          = {'topic': "", 'image': Image, 'label': ImageLabelStamped, 'data': ImageOdom}
-        # Handle ROS details for input topics:
-        if self.COMPRESS_IN.get():
-            self.INPUTS             = self._compress_on
-        else:
-            self.INPUTS             = self._compress_off
-        # Handle ROS details for output topics:
-        if self.COMPRESS_OUT.get():
-            self.OUTPUTS            = self._compress_on
-        else:
-            self.OUTPUTS            = self._compress_off
-        
+    def init_rospy(self, data_topic, odom_topic):
         self.param_checker_sub      = rospy.Subscriber(self.NAMESPACE + "/params_update", String, self.param_callback, queue_size=100)
         self.odom_estimate_pub      = rospy.Publisher(self.NAMESPACE + "/vpr_odom", Odometry, queue_size=1)
 
@@ -117,9 +67,12 @@ class mrc: # main ROS class
 
         if self.MAKE_IMAGE.get():
             self.vpr_feed_pub       = rospy.Publisher(self.NAMESPACE + "/image" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
+            good_icon = cv2.imread(self.ICON_PATH + "/tick.png", cv2.IMREAD_UNCHANGED)
+            poor_icon = cv2.imread(self.ICON_PATH + "/cross.png", cv2.IMREAD_UNCHANGED)
+            self.ICON_DICT['good']  = cv2.resize(good_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
+            self.ICON_DICT['poor']  = cv2.resize(poor_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
 
         if self.MAKE_LABEL.get():
-
             self.FEED_TOPIC         = data_topic
             self.ODOM_TOPIC         = odom_topic
             if (self.ODOM_TOPIC is None) or (self.ODOM_TOPIC == ''):
@@ -137,18 +90,6 @@ class mrc: # main ROS class
         if self.DO_PLOTTING.get():
             self.fig, self.axes     = plt.subplots(1, 3, figsize=(15,4))
             self.timer_plot         = rospy.Timer(rospy.Duration(0.1), self.timer_plot_callback) # 10 Hz; Plot rate limiter
-
-        # flags to denest main loop:
-        self.new_query              = False # new query image (MAKE_LABEL.get()==True) or new label received (MAKE_LABEL.get()==False)
-        self.new_odom               = False # new odometry set
-        self.main_ready             = False # rate limiter via timer
-        self.do_show                = False # plot rate limiter  via timer
-        self.ego_known              = False # whether or not an initial position has been found
-
-        self.last_time              = rospy.Time.now()
-        self.time_history           = []
-
-        if self.DO_PLOTTING.get():
             # Prepare figures:
             self.fig.suptitle("Odometry Visualised")
             self.fig_mtrx_handles   = doMtrxFig(self.axes[0], self.ref_dict['odom']) # Make simularity matrix figure
@@ -156,16 +97,75 @@ class mrc: # main ROS class
             self.fig_odom_handles   = doOdomFig(self.axes[2], self.ref_dict['odom']) # Make odometry figure
             self.fig.show()
 
-        self.ICON_DICT = {'size': self.ICON_SIZE, 'dist': self.ICON_DIST, 'icon': [], 'good': [], 'poor': []}
-        # Load icons:
-        if self.MAKE_IMAGE.get():
-            good_icon = cv2.imread(self.ICON_PATH + "/tick.png", cv2.IMREAD_UNCHANGED)
-            poor_icon = cv2.imread(self.ICON_PATH + "/cross.png", cv2.IMREAD_UNCHANGED)
-            self.ICON_DICT['good']  = cv2.resize(good_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
-            self.ICON_DICT['poor']  = cv2.resize(poor_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
-
         # Last item as it sets a flag that enables main loop execution.
         self.main_timer             = rospy.Timer(rospy.Duration(1/self.RATE_NUM.get()), self.main_cb) # Main loop rate limiter
+
+    def init_vars(self, icon_settings):
+        self.ICON_SIZE              = icon_settings[0]
+        self.ICON_DIST              = icon_settings[1]
+        self.ICON_PATH              = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/media"
+        self.ICON_DICT              = {'size': self.ICON_SIZE, 'dist': self.ICON_DIST, 'icon': [], 'good': [], 'poor': []}
+
+        self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
+        self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
+
+        self.IMG_FOLDER             = 'forward'
+
+        self._compress_on           = {'topic': "/compressed", 'image': CompressedImage, 'label': CompressedImageLabelStamped, 'data': CompressedImageOdom}
+        self._compress_off          = {'topic': "", 'image': Image, 'label': ImageLabelStamped, 'data': ImageOdom}
+
+        # Handle ROS details for input topics:
+        if self.COMPRESS_IN.get():
+            self.INPUTS             = self._compress_on
+        else:
+            self.INPUTS             = self._compress_off
+        # Handle ROS details for output topics:
+        if self.COMPRESS_OUT.get():
+            self.OUTPUTS            = self._compress_on
+        else:
+            self.OUTPUTS            = self._compress_off
+
+        self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
+
+        # flags to denest main loop:
+        self.new_query              = False # new query image (MAKE_LABEL.get()==True) or new label received (MAKE_LABEL.get()==False)
+        self.new_odom               = False # new odometry set
+        self.main_ready             = False # rate limiter via timer
+        self.do_show                = False # plot rate limiter  via timer
+        self.ego_known              = False # whether or not an initial position has been found
+        self.vpr_swap_pending       = False # whether we are waiting on a vpr dataset to be built
+
+        self.last_time              = rospy.Time.now()
+        self.time_history           = []
+
+    def init_params(self, rate_num, ft_type, img_dims, database_path, dataset_name, ref_images_path, \
+                    ref_odometry_path, tolerance_mode, tolerance_threshold, match_metric, time_history_length, \
+                    frame_id, compress_in, compress_out, do_plotting, do_image, do_groundtruth, do_label, reset):
+        self.PARAM_SERVER           = ROS_Param_Server()
+        self.RATE_NUM               = self.PARAM_SERVER.add(self.NODESPACE + "/rate",                rate_num,                  check_positive_float,                                           force=reset) # Hz
+
+        self.FEAT_TYPE              = self.PARAM_SERVER.add(self.NAMESPACE + "/feature_type",        enum_name(ft_type),        lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]),  force=reset)
+        self.IMG_DIMS               = self.PARAM_SERVER.add(self.NAMESPACE + "/img_dims",            img_dims,                  check_positive_two_int_tuple,                                   force=reset)
+
+        self.DATABASE_PATH          = self.PARAM_SERVER.add(self.NAMESPACE + "/database_path",       database_path,             check_string,                                                   force=reset)
+        self.REF_DATA_NAME          = self.PARAM_SERVER.add(self.NODESPACE + "/ref/data_name",       dataset_name,              check_string,                                                   force=reset)
+        self.REF_IMG_PATH           = self.PARAM_SERVER.add(self.NODESPACE + "/ref/images_path",     ref_images_path,           check_string,                                                   force=reset)
+        self.REF_ODOM_PATH          = self.PARAM_SERVER.add(self.NODESPACE + "/ref/odometry_path",   ref_odometry_path,         check_string,                                                   force=reset)
+
+        self.TOL_MODE               = self.PARAM_SERVER.add(self.NAMESPACE + "/tolerance/mode",      enum_name(tolerance_mode), lambda x: check_enum(x, Tolerance_Mode),                        force=reset)
+        self.TOL_THRES              = self.PARAM_SERVER.add(self.NAMESPACE + "/tolerance/threshold", tolerance_threshold,       check_positive_float,                                           force=reset)
+        self.MATCH_METRIC           = self.PARAM_SERVER.add(self.NAMESPACE + "/match_metric",        match_metric,              check_string,                                                   force=reset)
+        self.TIME_HIST_LEN          = self.PARAM_SERVER.add(self.NODESPACE + "/time_history_length", time_history_length,       check_positive_int,                                             force=reset)
+        self.FRAME_ID               = self.PARAM_SERVER.add(self.NAMESPACE + "/frame_id",            frame_id,                  check_string,                                                   force=reset)
+        #!# Enable/Disable Features (Label topic will always be generated):
+        self.COMPRESS_IN            = self.PARAM_SERVER.add(self.NODESPACE + "/compress/in",         compress_in,               check_bool,                                                     force=reset)
+        self.COMPRESS_OUT           = self.PARAM_SERVER.add(self.NODESPACE + "/compress/out",        compress_out,              check_bool,                                                     force=reset)
+        self.DO_PLOTTING            = self.PARAM_SERVER.add(self.NODESPACE + "/method/plotting",     do_plotting,               check_bool,                                                     force=reset)
+        self.MAKE_IMAGE             = self.PARAM_SERVER.add(self.NODESPACE + "/method/images",       do_image,                  check_bool,                                                     force=reset)
+        self.GROUND_TRUTH           = self.PARAM_SERVER.add(self.NODESPACE + "/method/groundtruth",  do_groundtruth,            check_bool,                                                     force=reset)
+        self.MAKE_LABEL             = self.PARAM_SERVER.add(self.NODESPACE + "/method/label",        do_label,                  check_bool,                                                     force=reset)
+
+        self.DVC_WEIGHT             = self.PARAM_SERVER.add(self.NODESPACE + "/dvc_weight",          1,                         lambda x: check_bounded_float(x, 0, 1, 'both'),                 force=reset) # Hz
 
     def handle_GetPathPlan(self, req):
     # /vpr_nodes/path service
@@ -195,10 +195,27 @@ class mrc: # main ROS class
             self.path_msg.poses.append(new_pose)
             del new_pose
 
+    def update_VPR(self):
+        self.vpr_data_params       = dict(database_path=self.DATABASE_PATH.get(), name=self.REF_DATA_NAME.get(), img_path=self.REF_IMG_PATH.get(), \
+                                           odom_path=self.REF_ODOM_PATH.get(), ft_type=self.FEAT_TYPE.get(), img_dims=self.IMG_DIMS.get())
+        if not self.image_processor.swap(self.vpr_data_params):
+            roslogger("VPR reference data swap failed. Previous set will be retained (ROS parameters won't be updated!)", LogType.ERROR, ros=True)
+            self.vpr_swap_pending = True
+        else:
+            roslogger("VPR reference data swapped.", LogType.INFO, ros=True)
+            self.vpr_swap_pending = False
+
     def param_callback(self, msg):
-        rospy.logdebug("Param update: %s" % msg.data)
-        if (msg.data in self.RATE_NUM.updates_possible) and not (msg.data in self.RATE_NUM.updates_queued):
-            self.RATE_NUM.updates_queued.append(msg.data)
+        if self.PARAM_SERVER.exists(msg.data):
+            roslogger("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG, ros=True)
+            self.PARAM_SERVER.update(msg.data)
+
+            if msg.data in [self.DATABASE_PATH.name, self.REF_DATA_NAME.name, self.REF_IMG_PATH.name, \
+                            self.REF_ODOM_PATH.name, self.FEAT_TYPE.name, self.IMG_DIMS.name]:
+                roslogger("Change to VPR reference data parameters detected.", LogType.WARN, ros=True)
+                self.update_VPR()
+        else:
+            roslogger("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG, ros=True)
 
     def main_cb(self, event):
     # Toggle flag to let main loop continue execution
@@ -256,7 +273,7 @@ class mrc: # main ROS class
     def getMatchInd(self, ft_qry, metric='euclidean'):
     # top matching reference index for query
 
-        dvc = cdist(self.ref_dict['img_feats'][enum_name(self.FEAT_TYPE.get())][self.img_folder], np.matrix(ft_qry), metric) # metric: 'euclidean' or 'cosine'
+        dvc = cdist(self.ref_dict['img_feats'][enum_name(self.FEAT_TYPE.get())][self.IMG_FOLDER], np.matrix(ft_qry), metric) # metric: 'euclidean' or 'cosine'
         if self.ego_known and self.DVC_WEIGHT.get() < 1: # then perform biasing via distance:
             spd = cdist(np.transpose(np.matrix([self.ref_dict['odom']['position']['x'], self.ref_dict['odom']['position']['y']])), \
                 np.matrix([self.vpr_ego[0], self.vpr_ego[1]]))
@@ -298,18 +315,18 @@ class mrc: # main ROS class
         ros_image_to_pub.header.stamp = rospy.Time.now()
         ros_image_to_pub.header.frame_id = fid
 
-        struct_to_pub.queryImage = ros_image_to_pub
-        struct_to_pub.data.odom.x = self.ego[0]
-        struct_to_pub.data.odom.y = self.ego[1]
-        struct_to_pub.data.odom.z = self.ego[2]
-        struct_to_pub.data.dvc = dvc
-        struct_to_pub.data.matchId = mInd
-        struct_to_pub.data.trueId = tInd
-        struct_to_pub.data.state = state
-        struct_to_pub.data.compressed = self.COMPRESS_OUT.get()
-        struct_to_pub.data.matchPath = mPath
-        struct_to_pub.header.frame_id = fid
-        struct_to_pub.header.stamp = rospy.Time.now()
+        struct_to_pub.queryImage        = ros_image_to_pub
+        struct_to_pub.data.odom.x       = self.ego[0]
+        struct_to_pub.data.odom.y       = self.ego[1]
+        struct_to_pub.data.odom.z       = self.ego[2]
+        struct_to_pub.data.dvc          = dvc
+        struct_to_pub.data.matchId      = mInd
+        struct_to_pub.data.trueId       = tInd
+        struct_to_pub.data.state        = state
+        struct_to_pub.data.compressed   = self.COMPRESS_OUT.get()
+        struct_to_pub.data.matchPath    = mPath
+        struct_to_pub.header.frame_id   = fid
+        struct_to_pub.header.stamp      = rospy.Time.now()
 
         odom_to_pub = Odometry()
         odom_to_pub.pose.pose.position.x = self.ref_dict['odom']['position']['x'][mInd]
@@ -397,7 +414,7 @@ def main_loop(nmrc):
 
     if nmrc.MAKE_IMAGE.get(): # set by node input
         # make labelled match+query (processed) images and add icon for groundtruthing (if enabled):
-        ft_ref = nmrc.ref_dict['img_feats'][enum_name(nmrc.FEAT_TYPE.get())][nmrc.img_folder][matchInd]
+        ft_ref = nmrc.ref_dict['img_feats'][enum_name(nmrc.FEAT_TYPE.get())][nmrc.IMG_FOLDER][matchInd]
         if nmrc.FEAT_TYPE.get() in [FeatureType.NETVLAD, FeatureType.HYBRIDNET]:
             reshape_dims = (64, 64)
         else:
