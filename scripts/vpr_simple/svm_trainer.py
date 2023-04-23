@@ -47,22 +47,22 @@ class mrc():
 
     def prep_svm(self, ft_type, img_dims, database_path, cal_qry_dataset_name, cal_ref_dataset_name):
         # Set parameters:
-        self.feat_type      = self.params.add(self.namespace + "/feature_type",                  enum_name(ft_type),   lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
-        self.img_dims       = self.params.add(self.namespace + "/img_dims",                      img_dims,             check_positive_two_int_tuple,                                  force=reset)
-        self.database_path  = self.params.add(self.namespace + "/database_path",                 database_path,        check_string,                                                  force=reset)
-        self.cal_qry_data   = self.params.add(self.namespace + "/vpr_monitor/cal/qry/data_name", cal_qry_dataset_name, check_string,                                                  force=reset)
-        self.cal_ref_data   = self.params.add(self.namespace + "/vpr_monitor/cal/ref/data_name", cal_ref_dataset_name, check_string,                                                  force=reset)
-        self.cal_folder     = self.params.add(self.namespace + "/vpr_monitor/cal/folder",        "forward",            check_string,                                                  force=reset)
+        self.feat_type      = self.params.add(self.namespace + "/feature_type",      enum_name(ft_type),   lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
+        self.img_dims       = self.params.add(self.namespace + "/img_dims",          img_dims,             check_positive_two_int_tuple,                                  force=reset)
+        self.database_path  = self.params.add(self.namespace + "/database_path",     database_path,        check_string,                                                  force=reset)
+        self.cal_qry_data   = self.params.add(self.namespace + "/cal/qry/data_name", cal_qry_dataset_name, check_string,                                                  force=reset)
+        self.cal_ref_data   = self.params.add(self.namespace + "/cal/ref/data_name", cal_ref_dataset_name, check_string,                                                  force=reset)
+        self.img_folder     = self.params.add(self.namespace + "/img_folder",        "forward",            check_string,                                                  force=reset)
         # Set up SVM
         self.svm_params     = dict(ref=self.cal_ref_data.get(), qry=self.cal_qry_data.get(), img_dims=self.img_dims.get(), \
-                                           folder=self.cal_folder.get(), ft_type=self.feat_type.get(), database_path=self.database_path.get())
+                                           folder=self.img_folder.get(), ft_type=self.feat_type.get(), database_path=self.database_path.get())
         self.svm_dir        = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/cfg/svm_models"
         self.svm            = SVMModelProcessor(self.svm_dir, model=self.svm_params, ros=True)
     
     def update_SVM(self):
         # Trigger parameter updates:
         self.svm_params     = dict(ref=self.cal_ref_data.get(), qry=self.cal_qry_data.get(), img_dims=self.img_dims.get(), \
-                                           folder=self.cal_folder.get(), ft_type=self.feat_type.get(), database_path=self.database_path.get())
+                                           folder=self.img_folder.get(), ft_type=self.feat_type.get(), database_path=self.database_path.get())
         if not self.svm.swap(self.svm_params, generate=True):
             roslogger("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR, ros=True)
         else:
@@ -78,7 +78,7 @@ class mrc():
             elif msg.data == self.rate_num.name:
                 self.rate_obj = rospy.Rate(self.rate_num.get())
             elif msg.data in [self.cal_ref_data.name, self.cal_qry_data.name, self.img_dims.name, \
-                            self.cal_folder.name, self.feat_type.name, self.database_path.name]:
+                            self.img_folder.name, self.feat_type.name, self.database_path.name]:
                 roslogger("Change to SVM parameters detected.", LogType.WARN, ros=True)
                 self.update_SVM()
         else:

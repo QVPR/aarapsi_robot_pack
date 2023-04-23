@@ -52,15 +52,13 @@ class mrc: # main ROS class
         self.field_exists           = False # first SVM field message hasn't been received
         self.main_ready             = False
 
-        ## Parse all the inputs:
-        self.RATE_NUM               = ROS_Param(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
         self.FEAT_TYPE              = ROS_Param(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
         self.IMG_DIMS               = ROS_Param(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, force=reset)
 
         self.DATABASE_PATH          = ROS_Param(self.NAMESPACE + "/database_path", database_path, check_string, force=reset)
-        self.REF_DATA_NAME          = ROS_Param(self.NODESPACE + "/ref/data_name", dataset_name, check_string, force=reset)
+        self.REF_DATA_NAME          = ROS_Param(self.NAMESPACE + "/ref/data_name", dataset_name, check_string, force=reset)
 
         #!# Enable/Disable Features:
         self.COMPRESS_IN            = ROS_Param(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)

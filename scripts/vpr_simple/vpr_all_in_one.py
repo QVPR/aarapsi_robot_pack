@@ -109,8 +109,6 @@ class mrc: # main ROS class
         self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
         self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
 
-        self.IMG_FOLDER             = 'forward'
-
         self._compress_on           = {'topic': "/compressed", 'image': CompressedImage, 'label': CompressedImageLabelStamped, 'data': CompressedImageOdom}
         self._compress_off          = {'topic': "", 'image': Image, 'label': ImageLabelStamped, 'data': ImageOdom}
 
@@ -142,29 +140,29 @@ class mrc: # main ROS class
                     ref_odometry_path, tolerance_mode, tolerance_threshold, match_metric, time_history_length, \
                     frame_id, compress_in, compress_out, do_plotting, do_image, do_groundtruth, do_label, reset):
         self.PARAM_SERVER           = ROS_Param_Server()
-        self.RATE_NUM               = self.PARAM_SERVER.add(self.NODESPACE + "/rate",                rate_num,                  check_positive_float,                                           force=reset) # Hz
-
+        
         self.FEAT_TYPE              = self.PARAM_SERVER.add(self.NAMESPACE + "/feature_type",        enum_name(ft_type),        lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]),  force=reset)
         self.IMG_DIMS               = self.PARAM_SERVER.add(self.NAMESPACE + "/img_dims",            img_dims,                  check_positive_two_int_tuple,                                   force=reset)
 
         self.DATABASE_PATH          = self.PARAM_SERVER.add(self.NAMESPACE + "/database_path",       database_path,             check_string,                                                   force=reset)
-        self.REF_DATA_NAME          = self.PARAM_SERVER.add(self.NODESPACE + "/ref/data_name",       dataset_name,              check_string,                                                   force=reset)
-        self.REF_IMG_PATH           = self.PARAM_SERVER.add(self.NODESPACE + "/ref/images_path",     ref_images_path,           check_string,                                                   force=reset)
-        self.REF_ODOM_PATH          = self.PARAM_SERVER.add(self.NODESPACE + "/ref/odometry_path",   ref_odometry_path,         check_string,                                                   force=reset)
+        self.REF_DATA_NAME          = self.PARAM_SERVER.add(self.NAMESPACE + "/ref/data_name",       dataset_name,              check_string,                                                   force=reset)
+        self.REF_IMG_PATH           = self.PARAM_SERVER.add(self.NAMESPACE + "/ref/images_path",     ref_images_path,           check_string,                                                   force=reset)
+        self.REF_ODOM_PATH          = self.PARAM_SERVER.add(self.NAMESPACE + "/ref/odometry_path",   ref_odometry_path,         check_string,                                                   force=reset)
+        self.IMG_FOLDER             = self.PARAM_SERVER.add(self.NAMESPACE + "/img_folder",         'forward',                  check_string,                                                   force=reset)
 
         self.TOL_MODE               = self.PARAM_SERVER.add(self.NAMESPACE + "/tolerance/mode",      enum_name(tolerance_mode), lambda x: check_enum(x, Tolerance_Mode),                        force=reset)
         self.TOL_THRES              = self.PARAM_SERVER.add(self.NAMESPACE + "/tolerance/threshold", tolerance_threshold,       check_positive_float,                                           force=reset)
         self.MATCH_METRIC           = self.PARAM_SERVER.add(self.NAMESPACE + "/match_metric",        match_metric,              check_string,                                                   force=reset)
-        self.TIME_HIST_LEN          = self.PARAM_SERVER.add(self.NODESPACE + "/time_history_length", time_history_length,       check_positive_int,                                             force=reset)
         self.FRAME_ID               = self.PARAM_SERVER.add(self.NAMESPACE + "/frame_id",            frame_id,                  check_string,                                                   force=reset)
-        #!# Enable/Disable Features (Label topic will always be generated):
+
+        self.RATE_NUM               = self.PARAM_SERVER.add(self.NODESPACE + "/rate",                rate_num,                  check_positive_float,                                           force=reset) # Hz
+        self.TIME_HIST_LEN          = self.PARAM_SERVER.add(self.NODESPACE + "/time_history_length", time_history_length,       check_positive_int,                                             force=reset)
         self.COMPRESS_IN            = self.PARAM_SERVER.add(self.NODESPACE + "/compress/in",         compress_in,               check_bool,                                                     force=reset)
         self.COMPRESS_OUT           = self.PARAM_SERVER.add(self.NODESPACE + "/compress/out",        compress_out,              check_bool,                                                     force=reset)
         self.DO_PLOTTING            = self.PARAM_SERVER.add(self.NODESPACE + "/method/plotting",     do_plotting,               check_bool,                                                     force=reset)
         self.MAKE_IMAGE             = self.PARAM_SERVER.add(self.NODESPACE + "/method/images",       do_image,                  check_bool,                                                     force=reset)
         self.GROUND_TRUTH           = self.PARAM_SERVER.add(self.NODESPACE + "/method/groundtruth",  do_groundtruth,            check_bool,                                                     force=reset)
         self.MAKE_LABEL             = self.PARAM_SERVER.add(self.NODESPACE + "/method/label",        do_label,                  check_bool,                                                     force=reset)
-
         self.DVC_WEIGHT             = self.PARAM_SERVER.add(self.NODESPACE + "/dvc_weight",          1,                         lambda x: check_bounded_float(x, 0, 1, 'both'),                 force=reset) # Hz
 
     def handle_GetPathPlan(self, req):
@@ -273,7 +271,7 @@ class mrc: # main ROS class
     def getMatchInd(self, ft_qry, metric='euclidean'):
     # top matching reference index for query
 
-        dvc = cdist(self.ref_dict['img_feats'][enum_name(self.FEAT_TYPE.get())][self.IMG_FOLDER], np.matrix(ft_qry), metric) # metric: 'euclidean' or 'cosine'
+        dvc = cdist(self.ref_dict['img_feats'][enum_name(self.FEAT_TYPE.get())][self.IMG_FOLDER.get()], np.matrix(ft_qry), metric) # metric: 'euclidean' or 'cosine'
         if self.ego_known and self.DVC_WEIGHT.get() < 1: # then perform biasing via distance:
             spd = cdist(np.transpose(np.matrix([self.ref_dict['odom']['position']['x'], self.ref_dict['odom']['position']['y']])), \
                 np.matrix([self.vpr_ego[0], self.vpr_ego[1]]))
@@ -414,7 +412,7 @@ def main_loop(nmrc):
 
     if nmrc.MAKE_IMAGE.get(): # set by node input
         # make labelled match+query (processed) images and add icon for groundtruthing (if enabled):
-        ft_ref = nmrc.ref_dict['img_feats'][enum_name(nmrc.FEAT_TYPE.get())][nmrc.IMG_FOLDER][matchInd]
+        ft_ref = nmrc.ref_dict['img_feats'][enum_name(nmrc.FEAT_TYPE.get())][nmrc.IMG_FOLDER.get()][matchInd]
         if nmrc.FEAT_TYPE.get() in [FeatureType.NETVLAD, FeatureType.HYBRIDNET]:
             reshape_dims = (64, 64)
         else:

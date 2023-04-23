@@ -42,16 +42,16 @@ class mrc: # main ROS class
         
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
-        self.PRINT_PREDICTION       = self.PARAM_SERVER.add(self.NODESPACE + "/print_prediction", print_prediction, check_bool, force=reset)
+        self.PRINT_PREDICTION       = self.PARAM_SERVER.add(self.NAMESPACE + "/print_prediction", print_prediction, check_bool, force=reset)
 
         self.FEAT_TYPE              = self.PARAM_SERVER.add(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
         self.IMG_DIMS               = self.PARAM_SERVER.add(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, force=reset)
         self.FRAME_ID               = self.PARAM_SERVER.add(self.NAMESPACE + "/frame_id", frame_id, check_string, force=reset)
 
         self.DATABASE_PATH          = self.PARAM_SERVER.add(self.NAMESPACE + "/database_path", database_path, check_string, force=reset)
-        self.CAL_QRY_DATA_NAME      = self.PARAM_SERVER.add(self.NODESPACE + "/cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
-        self.CAL_REF_DATA_NAME      = self.PARAM_SERVER.add(self.NODESPACE + "/cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
-        self.CAL_FOLDER             = self.PARAM_SERVER.add(self.NODESPACE + "/cal/folder", cal_folder, check_string, force=reset)
+        self.CAL_QRY_DATA_NAME      = self.PARAM_SERVER.add(self.NAMESPACE + "/cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
+        self.CAL_REF_DATA_NAME      = self.PARAM_SERVER.add(self.NAMESPACE + "/cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
+        self.CAL_FOLDER             = self.PARAM_SERVER.add(self.NAMESPACE + "/img_folder", cal_folder, check_string, force=reset)
 
         #!# Enable/Disable Features (Label topic will always be generated):
         self.COMPRESS_IN            = self.PARAM_SERVER.add(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
