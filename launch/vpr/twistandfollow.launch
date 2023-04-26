@@ -4,6 +4,7 @@
  -->
 <launch>
     <!-- Global Arguments: -->
+    <arg name="log_level"           default="2"/>
     <arg name="launch_twist2joy"    default="true"/>
     <arg name="launch_follower"     default="true"/>
     
