@@ -42,9 +42,9 @@
         <arg name="ioa_anon"        default="True"/>
         <arg name="ioa_rate"        default="10.0"/>
         <arg name="ioa_compress"    default="True"/>
-        <arg name="ioa_img_topic"   default="/occam/image0"/>
+        <arg name="ioa_img_topic"   default="/vpr_nodes/occam/image0"/>
         <arg name="ioa_odom_topic"  default="/odom/filtered"/>
-        <arg name="ioa_pub_topic"   default="/data/img_odom"/>
+        <arg name="ioa_pub_topic"   default="/img_odom"/>
 
         <node pkg="aarapsi_robot_pack" type="image_odom_aggregator.py" name="$(arg ioa_node_name)" 
                 args="-N $(arg ioa_node_name) -r $(arg ioa_rate) -a $(arg ioa_anon) -C $(arg ioa_compress) -V $(arg log_level)
