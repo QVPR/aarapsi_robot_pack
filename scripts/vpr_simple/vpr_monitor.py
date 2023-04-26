@@ -15,12 +15,16 @@ import cv2
 from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, MonitorDetails, \
                                     ImageDetails, CompressedImageDetails, CompressedMonitorDetails# Our custom structures
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse
-from pyaarapsi.vpr_simple import SVMModelProcessor, FeatureType
-from pyaarapsi.vpred import *
-from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
-from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_bool, check_enum, check_string
-from pyaarapsi.core.helper_tools import formatException
-from pyaarapsi.core.ros_tools import ROS_Param_Server, roslogger, LogType, NodeState, Heartbeat
+
+from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
+from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
+
+from pyaarapsi.vpred                import *
+
+from pyaarapsi.core.enum_tools      import enum_value_options, enum_get, enum_name
+from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_tuple, check_bool, check_enum, check_string
+from pyaarapsi.core.helper_tools    import formatException
+from pyaarapsi.core.ros_tools       import ROS_Param_Server, roslogger, LogType, NodeState, Heartbeat
 
 class mrc: # main ROS class
     def __init__(self, cal_qry_dataset_name, cal_ref_dataset_name, database_path, \

@@ -20,13 +20,16 @@ from scipy.spatial.distance import cdist
 
 from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, ImageOdom, CompressedImageOdom # Our custom msg structures
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse
-from pyaarapsi.vpr_simple import VPRImageProcessor, Tolerance_Mode, FeatureType, labelImage, makeImage, grey2dToColourMap, \
-                                            doMtrxFig, updateMtrxFig, doDVecFig, updateDVecFig, doOdomFig, updateOdomFig
 
-from pyaarapsi.core.enum_tools import enum_value_options, enum_get, enum_name
-from pyaarapsi.core.argparse_tools import check_bounded_float, check_positive_float, check_positive_two_int_tuple, check_positive_int, \
-                                            check_bool, check_str_list, check_enum, check_string
-from pyaarapsi.core.ros_tools import ROS_Param_Server, q_from_yaw, Heartbeat, NodeState, roslogger, LogType
+from pyaarapsi.vpr_simple.imageprocessor_helpers import Tolerance_Mode, FeatureType
+from pyaarapsi.vpr_simple.vpr_feature_tool       import VPRImageProcessor
+from pyaarapsi.vpr_simple.vpr_image_methods      import labelImage, makeImage, grey2dToColourMap
+from pyaarapsi.vpr_simple.vpr_plots              import doMtrxFig, updateMtrxFig, doDVecFig, updateDVecFig, doOdomFig, updateOdomFig
+
+from pyaarapsi.core.enum_tools      import enum_value_options, enum_get, enum_name
+from pyaarapsi.core.argparse_tools  import check_bounded_float, check_positive_float, check_positive_two_int_tuple, check_positive_int, \
+                                           check_bool, check_str_list, check_enum, check_string
+from pyaarapsi.core.ros_tools       import ROS_Param_Server, q_from_yaw, Heartbeat, NodeState, roslogger, LogType
 
 class mrc: # main ROS class
     def __init__(self, database_path, ref_images_path, ref_odometry_path, data_topic, dataset_name, odom_topic,\

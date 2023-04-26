@@ -10,7 +10,9 @@ from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_i
 from pyaarapsi.core.ros_tools import Heartbeat, NodeState, roslogger, LogType, ROS_Param_Server, set_rospy_log_lvl
 from pyaarapsi.core.helper_tools import formatException
 from pyaarapsi.core.enum_tools import enum_name, enum_value_options, enum_get
-from pyaarapsi.vpr_simple import SVMModelProcessor, FeatureType
+
+from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
+from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
 
 '''
 
