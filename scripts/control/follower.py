@@ -114,6 +114,8 @@ class mrc:
             
             self.path_process()
             break
+        roslogger("Path processed. Entering main loop.", LogType.INFO, ros=True)
+
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
 
