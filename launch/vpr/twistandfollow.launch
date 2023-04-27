@@ -12,14 +12,14 @@
     <group if="$(arg launch_twist2joy)">
         <arg name="tj_node_name"    default="twist2joy"/>
         <arg name="tj_anon"         default="True"/>
-        <arg name="tj_rate"         default="10.0"/>
+        <arg name="tj_rate"         default="50.0"/>
 
-        <arg name="tj_twist_topic"  default="/twist2joy/in"/>
-        <arg name="tj_joy_sub_tpc"  default="/bluetooth_teleop/joy"/>
-        <arg name="tj_joy_pub_tpc"  default="/bluetooth_teleop/joy"/>
+        <arg name="tj_twist_sub"  default="/twist2joy/in"/>
+        <arg name="tj_twist_pub"  default="/jackal_velocity_controller/cmd_vel"/>
+        <arg name="tj_joy_sub"    default="/bluetooth_teleop/joy"/>
 
-        <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)"
-                args="$(arg tj_twist_topic) $(arg tj_joy_sub_tpc) $(arg tj_joy_pub_tpc) 
+        <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)" output="screen"
+                args="$(arg tj_twist_sub) $(arg tj_twist_pub) $(arg tj_joy_sub) 
                 -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level)"/>
     </group>
 
@@ -29,7 +29,7 @@
         <arg name="fw_anon"         default="True"/>
         <arg name="fw_rate"         default="10.0"/>
 
-        <node pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)"
+        <node pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)" output="screen"
                 args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level)"/>
     </group>
 

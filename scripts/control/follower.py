@@ -38,19 +38,20 @@ class mrc:
         self.vpr_ego_hist   = []
 
         self.time           = rospy.Time.now().to_sec()
+        
+        self.ready          = True
+        self.path_received  = False
+        self.path_processed = False
 
         self.vpr_odom_sub   = rospy.Subscriber('/vpr_nodes/vpr_odom',               Odometry,  self.vpr_odom_cb,  queue_size=1)
         self.vpr_path_sub   = rospy.Subscriber('/vpr_nodes/path',                   Path,      self.path_cb,      queue_size=1)
         self.sensors_sub    = rospy.Subscriber('/jackal_velocity_controller/odom',  Odometry,  self.sensors_cb,   queue_size=1)
+        self.gt_sub         = rospy.Subscriber('/odom/filtered',                    Odometry,  self.gt_cb,        queue_size=1)
         self.twist_pub      = rospy.Publisher('/twist2joy/in',                      Twist,                        queue_size=1)
         self.yaw_pub        = rospy.Publisher('/vpr_nodes/' + node_name + '/yaw',   Float64,                      queue_size=1)
         self.dyaw_pub       = rospy.Publisher('/vpr_nodes/' + node_name + '/dyaw',  Float64,                      queue_size=1)
 
         self.srv_path       = rospy.ServiceProxy('/vpr_nodes/path',                 GenerateObj)
-        
-        self.ready          = True
-        self.path_received  = False
-        self.path_processed = False
 
         self.main()
 
@@ -75,6 +76,9 @@ class mrc:
     # Abstracted to separate function as the for loop execution time may be long
         self.path_array     = np.array([self.pose2xyw(pose, stamped=True) for pose in self.path_msg.poses])
         self.path_processed = True
+
+    def gt_cb(self, msg):
+        self.true_current_yaw = yaw_from_q(msg.pose.pose.orientation)
 
     def path_cb(self, msg):
         self.path_msg       = msg
@@ -102,7 +106,7 @@ class mrc:
     def update_target(self):
         spd                 = cdist(self.path_array[:,0:2], np.matrix([self.vpr_ego[0], self.vpr_ego[1]]))
         target_index        = (np.argmin(spd[:]) + self.lookahead_inds) % self.path_array.shape[0]
-        return self.path_array[target_index, 2]
+        self.target_yaw     = self.path_array[target_index, 2]
 
     def main(self):
         while not rospy.is_shutdown():
@@ -125,6 +129,9 @@ class mrc:
             new_twist           = Twist()
             new_twist.linear.x  = 0.5
             new_twist.angular.z = yaw_cmd
+
+            roslogger("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw), LogType.INFO, ros=True)
+            roslogger("True Current: %0.2f, Error: %0.2f" % (self.true_current_yaw, self.true_current_yaw - self.current_yaw), LogType.INFO, ros=True)
 
             self.twist_pub.publish(new_twist)
             self.dyaw_pub.publish(Float64(data=yaw_cmd))

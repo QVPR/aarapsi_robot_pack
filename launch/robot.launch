@@ -31,7 +31,7 @@
         <arg name="tt_mode"         default="1"/>
         <arg name="tt_img_dims"     default="(64,64)"/>
 
-        <node pkg="aarapsi_robot_pack" type="throttle.py" name="$(arg tt_node_name)"
+        <node pkg="aarapsi_robot_pack" type="throttle.py" name="$(arg tt_node_name)" output="screen"
                 args="-N $(arg tt_node_name) -r $(arg tt_rate) -a $(arg tt_anon) -m $(arg tt_mode) -V $(arg log_level)
                         -i $(arg tt_img_dims)" />
     </group>
@@ -46,7 +46,7 @@
         <arg name="ioa_odom_topic"  default="/odom/filtered"/>
         <arg name="ioa_pub_topic"   default="/img_odom"/>
 
-        <node pkg="aarapsi_robot_pack" type="image_odom_aggregator.py" name="$(arg ioa_node_name)" 
+        <node pkg="aarapsi_robot_pack" type="image_odom_aggregator.py" name="$(arg ioa_node_name)"  output="screen"
                 args="-N $(arg ioa_node_name) -r $(arg ioa_rate) -a $(arg ioa_anon) -C $(arg ioa_compress) -V $(arg log_level)
                         --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic)" />
     </group>
@@ -61,7 +61,7 @@
         <arg name="tj_joy_sub_tpc"  default="/bluetooth_teleop/joy"/>
         <arg name="tj_joy_pub_tpc"  default="/bluetooth_teleop/joy"/>
 
-        <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)"
+        <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)" output="screen"
                 args="$(arg tj_twist_topic) $(arg tj_joy_sub_tpc) $(arg tj_joy_pub_tpc) 
                 -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level)"/>
     </group>
@@ -72,13 +72,13 @@
         <arg name="fw_anon"         default="True"/>
         <arg name="fw_rate"         default="10.0"/>
 
-        <node pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)"
+        <node pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)" output="screen"
                 args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level)"/>
     </group>
 
     <!-- Param Watcher Node: -->
     <group if="$(arg launch_paramwatcher)">
         <arg name="pw_node_name"   default="param_watcher"/>
-        <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="$(arg pw_node_name)"/>
+        <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="$(arg pw_node_name)" output="screen"/>
     </group>
 </launch>
