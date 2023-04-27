@@ -125,7 +125,7 @@ class mrc:
 
             self.update_target()
 
-            yaw_cmd             = (self.target_yaw - self.current_yaw)
+            yaw_cmd             = -1 * (self.target_yaw - self.current_yaw)
             new_twist           = Twist()
             new_twist.linear.x  = 0.5
             new_twist.angular.z = yaw_cmd
