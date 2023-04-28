@@ -1,0 +1,10 @@
+int64 request_id
+string bag_name
+string npz_dbp
+string bag_dbp
+string odom_topic
+string[] img_topics
+float64 sample_rate
+string filters
+uint8[] ft_types
+int64[] img_dims

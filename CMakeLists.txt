@@ -67,6 +67,9 @@ add_message_files(
   CompressedImageDetails.msg
   ImageOdom.msg
   CompressedImageOdom.msg
+  RequestDataset.msg
+  RequestSVM.msg
+  RequestResponse.msg
 )
 
 ## Generate services in the 'srv' folder
