@@ -8,7 +8,8 @@ from cv_bridge import CvBridge
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CompressedImage
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_bool, check_string
-from pyaarapsi.core.ros_tools import imgmsgtrans, Heartbeat, NodeState, roslogger, LogType
+from pyaarapsi.core.ros_tools import imgmsgtrans, NodeState, roslogger, LogType, ROS_Home
+from pyaarapsi.core.helper_tools import formatException
 
 '''
 ROS Throttle Tool
@@ -25,7 +26,7 @@ class Throttle_Topic:
     - Wrap subscribers, publishers, and timer into single class 
     - Ease of implementation
     '''
-    def __init__(self, topic_in, topic_out, namespace, exts, types, rate, hist_len=3, transform=None):
+    def __init__(self, topic_in, topic_out, namespace, exts, types, rate, hist_len=3, transform=None, printer=rospy.loginfo):
 
         self.topic_in   = topic_in
         self.topic_out  = topic_out
@@ -44,7 +45,7 @@ class Throttle_Topic:
         self.msgs       = [[] for i in types]
 
         exts_string     = ''.join(self.exts)
-        rospy.loginfo("Throttling %s[%s] to %s[%s] at %0.2f Hz" % (topic_in, exts_string, topic_out, exts_string, rate))
+        printer("Throttling %s[%s] to %s[%s] at %0.2f Hz" % (topic_in, exts_string, topic_out, exts_string, rate))
 
     def cb(self, msg):
         index = self.types.index(type(msg))
@@ -63,20 +64,32 @@ class Throttle_Topic:
                 self.pubs[i].publish(self.transform(msg_to_pub))
 
 class mrc:
-    def __init__(self, node_name, rate, namespace, anon, mode, resize_dims, log_level):
+    def __init__(self, node_name, rate, namespace, anon, mode, resize_dims, log_level, reset=True):
         
         self.node_name      = node_name
         self.namespace      = namespace
-        self.anon           = anon
+        self.nodespace      = self.namespace + "/" + self.node_name
+
         self.mode           = mode
         self.resize_dims    = resize_dims
         self.log_level      = log_level
-        self.rate_num       = rate
 
-        rospy.init_node(self.node_name, anonymous=self.anon, log_level=self.log_level)
-        roslogger('Starting %s node.' % (self.node_name), LogType.INFO, ros=True)
-        self.rate_obj       = rospy.Rate(self.rate_num)
-        self.heartbeat      = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
+        rospy.init_node(self.node_name, anonymous=anon, log_level=log_level)
+        self.ROS_HOME       = ROS_Home(self.node_name, self.namespace, rate)
+        self.print('Starting %s node.' % (node_name))
+
+        self.init_params(rate, reset)
+        self.init_vars()
+        self.init_rospy()
+
+    def init_params(self, rate, reset):
+        self.rate_num       = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate,      check_positive_float,   force=reset)
+
+    def init_vars(self):
+        pass
+
+    def init_rospy(self):
+        self.rate_obj       = rospy.Rate(self.rate_num.get())
 
         # set up topics
         c_in, c_out = self.get_cam_topics()
@@ -96,10 +109,10 @@ class mrc:
 
         # Set up throttles:
         self.throttles      = [Throttle_Topic(c_in[i], c_out[i], namespace, exts, types, rate, \
-                                    transform=lambda x: self.img_resize(x, mode="rectangle")) \
+                                    transform=lambda x: self.img_resize(x, mode="rectangle"), printer=self.print) \
                                 if 'stitched' in c_in[i] else \
                                Throttle_Topic(c_in[i], c_out[i], namespace, exts, types, rate, \
-                                    transform=lambda x: self.img_resize(x, mode="square")) \
+                                    transform=lambda x: self.img_resize(x, mode="square"), printer=self.print) \
                                 for i in range(len(c_in))]
         
     def get_cam_topics(self):
@@ -130,11 +143,20 @@ class mrc:
         return rmsg
     
     def main(self):
-        self.heartbeat.set_state(NodeState.MAIN)
+        self.ROS_HOME.set_state(NodeState.MAIN)
 
         # loop forever until signal shutdown
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
+
+    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
+        if ros is None:
+            ros = self.ROS_HOME.logros
+        if name is None:
+            name = self.ROS_HOME.node_name
+        if no_stamp is None:
+            no_stamp = self.ROS_HOME.logstamp
+        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
 
 if __name__ == '__main__':
     
@@ -163,9 +185,14 @@ if __name__ == '__main__':
     try:
         nmrc = mrc(node_name, rate, namespace, anon, mode, resize_dims, log_level)
         nmrc.main()
-        roslogger("Operation complete.", LogType.INFO, ros=True)
+        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
+    except SystemExit as e:
+        pass
+    except ConnectionRefusedError as e:
+        roslogger("Error: Is the roscore running and accessible?", LogType.ERROR, ros=False) # False as rosnode likely terminated
     except:
-        roslogger("Error state reached, system exit triggered.", LogType.INFO, ros=True)
+        roslogger("Error state reached, system exit triggered.", LogType.WARN, ros=False) # False as rosnode likely terminated
+        roslogger(formatException(), LogType.ERROR, ros=False)
 
     

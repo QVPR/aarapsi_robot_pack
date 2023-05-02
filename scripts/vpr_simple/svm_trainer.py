@@ -7,11 +7,11 @@ import sys
 import os
 from std_msgs.msg import String
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_tuple, check_enum
-from pyaarapsi.core.ros_tools import Heartbeat, NodeState, roslogger, LogType, ROS_Param_Server, set_rospy_log_lvl
+from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, ROS_Home, set_rospy_log_lvl
 from pyaarapsi.core.helper_tools import formatException
 from pyaarapsi.core.enum_tools import enum_name, enum_value_options, enum_get
 
-from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
+from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType, ViewMode
 from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
 
 '''
@@ -33,64 +33,76 @@ class mrc():
         self.node_name      = node_name
         self.namespace      = namespace
         self.nodespace      = self.namespace + "/" + self.node_name
-        self.anon           = anon
 
-        self.params         = ROS_Param_Server()
-        self.log_level      = self.params.add(self.nodespace + "/log_level", log_level, check_positive_int,     force=reset)
-        self.rate_num       = self.params.add(self.nodespace + "/rate",      rate,      check_positive_float,   force=reset)
-    
-        rospy.init_node(self.node_name, anonymous=self.anon, log_level=self.log_level.get())
-        roslogger('Starting [%s] %s node.' % (self.namespace, self.node_name), LogType.INFO, ros=True)
+        rospy.init_node(self.node_name, anonymous=anon, log_level=log_level)
+        self.ROS_HOME       = ROS_Home(self.node_name, self.namespace, rate)
+        self.print('Starting %s node.' % (node_name))
+
+        self.init_params(log_level, rate, ft_type, img_dims, db_path, cq_data, cr_data, reset)
+        self.init_vars()
+        self.init_rospy()
+
+    def init_rospy(self):
         self.rate_obj       = rospy.Rate(self.rate_num.get())
-        self.heartbeat      = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
         self.param_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_cb, queue_size=100)
 
-        self.prep_svm(ft_type, img_dims, db_path, cq_data, cr_data)
-
-    def prep_svm(self, ft_type, img_dims, database_path, cal_qry_dataset_name, cal_ref_dataset_name):
+    def init_params(self, log_level, rate, ft_type, img_dims, database_path, cal_qry_dataset_name, cal_ref_dataset_name, reset):
         # Set parameters:
-        self.feat_type      = self.params.add(self.namespace + "/feature_type",      enum_name(ft_type),   lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
-        self.img_dims       = self.params.add(self.namespace + "/img_dims",          img_dims,             check_positive_two_int_tuple,                                  force=reset)
-        self.database_path  = self.params.add(self.namespace + "/database_path",     database_path,        check_string,                                                  force=reset)
-        self.cal_qry_data   = self.params.add(self.namespace + "/cal/qry/data_name", cal_qry_dataset_name, check_string,                                                  force=reset)
-        self.cal_ref_data   = self.params.add(self.namespace + "/cal/ref/data_name", cal_ref_dataset_name, check_string,                                                  force=reset)
-        self.img_folder     = self.params.add(self.namespace + "/img_folder",        "forward",            check_string,                                                  force=reset)
+        self.log_level      = self.ROS_HOME.params.add(self.nodespace + "/log_level", log_level, check_positive_int,     force=reset)
+        self.rate_num       = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate,      check_positive_float,   force=reset)
+        self.feat_type      = self.ROS_HOME.params.add(self.namespace + "/feature_type",      enum_name(ft_type),   lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
+        self.img_dims       = self.ROS_HOME.params.add(self.namespace + "/img_dims",          img_dims,             check_positive_two_int_tuple,                                  force=reset)
+        self.database_path  = self.ROS_HOME.params.add(self.namespace + "/database_path",     database_path,        check_string,                                                  force=reset)
+        self.cal_qry_data   = self.ROS_HOME.params.add(self.namespace + "/cal/qry/data_name", cal_qry_dataset_name, check_string,                                                  force=reset)
+        self.cal_ref_data   = self.ROS_HOME.params.add(self.namespace + "/cal/ref/data_name", cal_ref_dataset_name, check_string,                                                  force=reset)
+        self.img_view       = self.ROS_HOME.params.add(self.namespace + "/img_view",          enum_name(ViewMode.forward),      lambda x: check_enum(x, ViewMode),                 force=reset)
+
+    def init_vars(self):
         # Set up SVM
         self.svm_params     = dict(ref=self.cal_ref_data.get(), qry=self.cal_qry_data.get(), img_dims=self.img_dims.get(), \
-                                           folder=self.img_folder.get(), ft_type=self.feat_type.get(), database_path=self.database_path.get())
+                                           view=self.img_view.get(), ft_type=self.feat_type.get(), database_path=self.database_path.get())
         self.svm_dir        = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/cfg/svm_models"
         self.svm            = SVMModelProcessor(self.svm_dir, model=self.svm_params, ros=True)
     
     def update_SVM(self):
         # Trigger parameter updates:
         self.svm_params     = dict(ref=self.cal_ref_data.get(), qry=self.cal_qry_data.get(), img_dims=self.img_dims.get(), \
-                                           folder=self.img_folder.get(), ft_type=self.feat_type.get(), database_path=self.database_path.get())
+                                           view=self.img_view.get(), ft_type=self.feat_type.get(), database_path=self.database_path.get())
         if not self.svm.swap(self.svm_params, generate=True):
-            roslogger("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR, ros=True)
+            self.print("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR)
         else:
-            roslogger("SVM model swapped.", LogType.INFO, ros=True)
+            self.print("SVM model swapped.", LogType.INFO)
 
     def param_cb(self, msg):
-        if self.params.exists(msg.data):
-            roslogger("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG, ros=True)
-            self.params.update(msg.data)
+        if self.ROS_HOME.params.exists(msg.data):
+            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
+            self.ROS_HOME.params.update(msg.data)
 
             if msg.data == self.log_level.name:
                 set_rospy_log_lvl(self.log_level.get())
             elif msg.data == self.rate_num.name:
                 self.rate_obj = rospy.Rate(self.rate_num.get())
             elif msg.data in [self.cal_ref_data.name, self.cal_qry_data.name, self.img_dims.name, \
-                            self.img_folder.name, self.feat_type.name, self.database_path.name]:
-                roslogger("Change to SVM parameters detected.", LogType.WARN, ros=True)
+                            self.img_view.name, self.feat_type.name, self.database_path.name]:
+                self.print("Change to SVM parameters detected.", LogType.WARN)
                 self.update_SVM()
         else:
-            roslogger("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG, ros=True)
+            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
     def main(self):
-        self.heartbeat.set_state(NodeState.MAIN)
+        self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
+
+    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
+        if ros is None:
+            ros = self.ROS_HOME.logros
+        if name is None:
+            name = self.ROS_HOME.node_name
+        if no_stamp is None:
+            no_stamp = self.ROS_HOME.logstamp
+        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
 
 def do_args():
     parser = ap.ArgumentParser(prog="svm_trainer.py", 

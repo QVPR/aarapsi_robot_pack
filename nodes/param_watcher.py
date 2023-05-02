@@ -5,7 +5,8 @@ import argparse as ap
 import sys
 from std_msgs.msg import String
 from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools import Heartbeat, NodeState, roslogger, LogType
+from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, ROS_Home
+from pyaarapsi.core.helper_tools import formatException
 
 '''
 ROS Parameter Server Watcher
@@ -18,38 +19,67 @@ topic.
 '''
 
 class mrc():
-    def __init__(self, node_name, rate, namespace, anon, log_level):
+    def __init__(self, node_name, rate, namespace, anon, log_level, reset=True):
 
         self.node_name      = node_name
         self.namespace      = namespace
-        self.anon           = anon
-        self.log_level      = log_level
-        self.rate_num       = rate
-    
-        rospy.init_node(self.node_name, anonymous=self.anon, log_level=self.log_level)
-        roslogger('Starting %s node.' % (self.node_name), LogType.INFO, ros=True)
-        self.rate_obj       = rospy.Rate(self.rate_num)
-        self.heartbeat      = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
+        self.nodespace      = self.namespace + "/" + self.node_name
 
-        self.watch_params   = [i for i in rospy.get_param_names() if i.startswith(namespace)]
+        rospy.init_node(self.node_name, anonymous=anon, log_level=log_level)
+        self.ROS_HOME       = ROS_Home(self.node_name, self.namespace, rate)
+        self.print('Starting %s node.' % (self.node_name))
+        
+        self.init_params(rate, reset)
+        self.init_vars()
+        self.init_rospy()
+
+    def init_params(self, rate, reset):
+        self.rate_num       = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate,      check_positive_float,   force=reset)
+
+    def init_vars(self):
+        self.watch_params   = [i for i in rospy.get_param_names() if i.startswith(self.namespace)]
         self.params_dict    = dict.fromkeys(self.watch_params)
+        self.print("Watching params: %s" % str(self.watch_params), LogType.DEBUG)
 
+    def init_rospy(self):
+        self.rate_obj       = rospy.Rate(self.rate_num.get())
         self.watch_pub      = rospy.Publisher(self.namespace + "/params_update", String, queue_size=100)
+        self.watch_timer    = rospy.Timer(rospy.Duration(secs=5), self.watch_cb)
+
+    def watch_cb(self, event):
+        new_keys = []
+        new_params_list = [i for i in rospy.get_param_names() if i.startswith(namespace)]
+        for key in new_params_list:
+            if not key in self.watch_params:
+                new_keys.append(key)
+                self.watch_params.append(key)
+                self.params_dict[key] = rospy.get_param(key)
+        if len(new_keys):
+            self.print('New params: %s' % str(new_keys))
 
     def watch(self):
         for i in list(self.params_dict.keys()):
             check_param = rospy.get_param(i)
             if not self.params_dict[i] == check_param:
-                rospy.loginfo("Update detected for: %s (%s->%s)" % (i, self.params_dict[i], check_param))
+                self.print("Update detected for: %s (%s->%s)" % (i, str(self.params_dict[i]), str(check_param)))
                 self.params_dict[i] = check_param
                 self.watch_pub.publish(String(i))
 
     def main(self):
-        self.heartbeat.set_state(NodeState.MAIN)
+        self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
             self.watch()
             self.rate_obj.sleep()
+
+    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
+        if ros is None:
+            ros = self.ROS_HOME.logros
+        if name is None:
+            name = self.ROS_HOME.node_name
+        if no_stamp is None:
+            no_stamp = self.ROS_HOME.logstamp
+        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
 
 
 if __name__ == '__main__':
@@ -74,7 +104,12 @@ if __name__ == '__main__':
     try:
         nmrc = mrc(node_name, rate, namespace, anon, log_level)
         nmrc.main()
-        roslogger("Operation complete.", LogType.INFO, ros=True)
+        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
+    except SystemExit as e:
+        pass
+    except ConnectionRefusedError as e:
+        roslogger("Error: Is the roscore running and accessible?", LogType.ERROR, ros=False) # False as rosnode likely terminated
     except:
-        roslogger("Error state reached, system exit triggered.", LogType.INFO, ros=True)
+        roslogger("Error state reached, system exit triggered.", LogType.WARN, ros=False) # False as rosnode likely terminated
+        roslogger(formatException(), LogType.ERROR, ros=False)

@@ -13,53 +13,64 @@ import sys
 import cv2
 
 from aarapsi_robot_pack.msg import ImageLabelStamped, CompressedImageLabelStamped, MonitorDetails, \
-                                    ImageDetails, CompressedImageDetails, CompressedMonitorDetails# Our custom structures
+                                    ImageDetails, CompressedImageDetails, CompressedMonitorDetails, \
+                                     RequestSVM, RequestResponse # Our custom structures
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse
 
 from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
-from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
+from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType, ViewMode
 
 from pyaarapsi.vpred                import *
 
 from pyaarapsi.core.enum_tools      import enum_value_options, enum_get, enum_name
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_tuple, check_bool, check_enum, check_string
 from pyaarapsi.core.helper_tools    import formatException
-from pyaarapsi.core.ros_tools       import ROS_Param_Server, roslogger, LogType, NodeState, Heartbeat
+from pyaarapsi.core.ros_tools       import roslogger, LogType, NodeState, ROS_Home
 
 class mrc: # main ROS class
     def __init__(self, cal_qry_dataset_name, cal_ref_dataset_name, database_path, \
                     compress_in=True, compress_out=False, \
                     rate_num=20.0, ft_type=FeatureType.RAW, img_dims=(64,64), \
                     namespace="/vpr_nodes", node_name='vpr_monitor', anon=True, frame_id='base_link', \
-                    cal_folder='forward', print_prediction=True, log_level=2, reset=False\
+                    cal_view=ViewMode.forward, print_prediction=True, log_level=2, reset=False\
                 ):
 
         self.NAMESPACE              = namespace
         self.NODENAME               = node_name
         self.NODESPACE              = self.NAMESPACE + "/" + self.NODENAME
-        self.PARAM_SERVER           = ROS_Param_Server()
-        self.RATE_NUM               = self.PARAM_SERVER.add(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
 
         rospy.init_node(self.NODENAME, anonymous=anon, log_level=log_level)
-        rospy.loginfo('Starting %s node.' % (node_name))
-        self.heartbeat              = Heartbeat(self.NODENAME, self.NAMESPACE, NodeState.INIT, self.RATE_NUM.get())
+        self.ROS_HOME               = ROS_Home(self.NODENAME, self.NAMESPACE, rate_num)
+        self.print('Starting %s node.' % (node_name), LogType.INFO)
+
+        self.init_params(rate_num, print_prediction, ft_type, img_dims, frame_id, database_path, cal_qry_dataset_name, \
+                         cal_ref_dataset_name, cal_view, compress_in, compress_out, reset)
+        self.init_vars()
+        self.init_rospy()
+
+        self.main_ready             = True
         
-        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
+    def init_params(self, rate_num, print_prediction, ft_type, img_dims, frame_id, database_path, cal_qry_dataset_name, cal_ref_dataset_name, cal_view, compress_in, compress_out, reset):
+        self.RATE_NUM               = self.ROS_HOME.params.add(self.NODESPACE + "/rate", rate_num, check_positive_float, force=reset) # Hz
+        self.PRINT_PREDICTION       = self.ROS_HOME.params.add(self.NAMESPACE + "/print_prediction", print_prediction, check_bool, force=reset)
 
-        self.PRINT_PREDICTION       = self.PARAM_SERVER.add(self.NAMESPACE + "/print_prediction", print_prediction, check_bool, force=reset)
+        self.FEAT_TYPE              = self.ROS_HOME.params.add(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
+        self.IMG_DIMS               = self.ROS_HOME.params.add(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, force=reset)
+        self.FRAME_ID               = self.ROS_HOME.params.add(self.NAMESPACE + "/frame_id", frame_id, check_string, force=reset)
 
-        self.FEAT_TYPE              = self.PARAM_SERVER.add(self.NAMESPACE + "/feature_type", enum_name(ft_type), lambda x: check_enum(x, FeatureType, skip=[FeatureType.NONE]), force=reset)
-        self.IMG_DIMS               = self.PARAM_SERVER.add(self.NAMESPACE + "/img_dims", img_dims, check_positive_two_int_tuple, force=reset)
-        self.FRAME_ID               = self.PARAM_SERVER.add(self.NAMESPACE + "/frame_id", frame_id, check_string, force=reset)
-
-        self.DATABASE_PATH          = self.PARAM_SERVER.add(self.NAMESPACE + "/database_path", database_path, check_string, force=reset)
-        self.CAL_QRY_DATA_NAME      = self.PARAM_SERVER.add(self.NAMESPACE + "/cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
-        self.CAL_REF_DATA_NAME      = self.PARAM_SERVER.add(self.NAMESPACE + "/cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
-        self.CAL_FOLDER             = self.PARAM_SERVER.add(self.NAMESPACE + "/img_folder", cal_folder, check_string, force=reset)
+        self.DATABASE_PATH          = self.ROS_HOME.params.add(self.NAMESPACE + "/database_path", database_path, check_string, force=reset)
+        self.CAL_QRY_DATA_NAME      = self.ROS_HOME.params.add(self.NAMESPACE + "/cal/qry/data_name", cal_qry_dataset_name, check_string, force=reset)
+        self.CAL_REF_DATA_NAME      = self.ROS_HOME.params.add(self.NAMESPACE + "/cal/ref/data_name", cal_ref_dataset_name, check_string, force=reset)
+        self.CAL_VIEW               = self.ROS_HOME.params.add(self.NAMESPACE + "/img_view", enum_name(cal_view), lambda x: check_enum(x, ViewMode), force=reset)
 
         #!# Enable/Disable Features (Label topic will always be generated):
-        self.COMPRESS_IN            = self.PARAM_SERVER.add(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
-        self.COMPRESS_OUT           = self.PARAM_SERVER.add(self.NODESPACE + "/compress/out", compress_out, check_bool, force=reset)
+        self.COMPRESS_IN            = self.ROS_HOME.params.add(self.NODESPACE + "/compress/in", compress_in, check_bool, force=reset)
+        self.COMPRESS_OUT           = self.ROS_HOME.params.add(self.NODESPACE + "/compress/out", compress_out, check_bool, force=reset)
+        
+        self.SVM_DATA_PARAMS        = [self.CAL_REF_DATA_NAME, self.CAL_QRY_DATA_NAME, self.IMG_DIMS, self.CAL_VIEW, self.FEAT_TYPE, self.DATABASE_PATH]
+        self.SVM_DATA_NAMES         = [i.name for i in self.SVM_DATA_PARAMS]
+
+    def init_vars(self):
 
         self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
 
@@ -77,52 +88,67 @@ class mrc: # main ROS class
             self.OUTPUTS            = self._compress_on
         else:
             self.OUTPUTS            = self._compress_off
-
-        self.param_checker_sub      = rospy.Subscriber("/vpr_nodes/params_update", String, self.param_callback, queue_size=100)
-        self.vpr_label_sub          = rospy.Subscriber(self.NAMESPACE + "/label" + self.INPUTS['topic'], self.INPUTS['label'], self.label_callback, queue_size=1)
-        self.svm_state_pub          = rospy.Publisher(self.NAMESPACE + "/monitor/state" + self.INPUTS['topic'], self.OUTPUTS['mon_dets'], queue_size=1)
-        self.svm_field_pub          = rospy.Publisher(self.NAMESPACE + "/monitor/field" + self.INPUTS['topic'], self.OUTPUTS['img_dets'], queue_size=1)
-        self.svm_field_srv          = rospy.Service(self.NAMESPACE + '/GetSVMField', GenerateObj, self.handle_GetSVMField)
-
-        # flags to denest main loop:
-        self.new_label              = False # new label received
-        self.main_ready             = False # ensure pubs and subs don't go off early
-        self.svm_swap_pending       = False
-
-        self.last_time              = rospy.Time.now()
+        
         self.time_history           = []
 
         self.states                 = [0,0,0]
 
         # Set up SVM
         self.svm_model_params       = dict(ref=self.CAL_REF_DATA_NAME.get(), qry=self.CAL_QRY_DATA_NAME.get(), img_dims=self.IMG_DIMS.get(), \
-                                           folder=self.CAL_FOLDER.get(), ft_type=self.FEAT_TYPE.get(), database_path=self.DATABASE_PATH.get())
+                                           view=self.CAL_VIEW.get(), ft_type=self.FEAT_TYPE.get(), database_path=self.DATABASE_PATH.get())
         self.svm_model_dir          = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/cfg/svm_models"
         self.svm                    = SVMModelProcessor(self.svm_model_dir, model=self.svm_model_params, ros=True)
-        self.main_ready             = True
 
-    def update_SVM(self):
+        # flags to denest main loop:
+        self.new_label              = False # new label received
+        self.main_ready             = False # ensure pubs and subs don't go off early
+        self.svm_swap_pending       = False
+
+    def init_rospy(self):
+
+        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
+        self.last_time              = rospy.Time.now()
+
+        self.param_checker_sub      = rospy.Subscriber(self.NAMESPACE + "/params_update", String, self.param_callback, queue_size=100)
+        self.vpr_label_sub          = rospy.Subscriber(self.NAMESPACE + "/label" + self.INPUTS['topic'], self.INPUTS['label'], self.label_callback, queue_size=1)
+        self.svm_state_pub          = rospy.Publisher(self.NAMESPACE + "/monitor/state" + self.INPUTS['topic'], self.OUTPUTS['mon_dets'], queue_size=1)
+        self.svm_field_pub          = rospy.Publisher(self.NAMESPACE + "/monitor/field" + self.INPUTS['topic'], self.OUTPUTS['img_dets'], queue_size=1)
+        self.svm_request_pub        = rospy.Publisher(self.NAMESPACE + '/requests/svm/request', RequestSVM, queue_size=1)
+        self.svm_request_sub        = rospy.Subscriber(self.NAMESPACE + '/requests/svm/ready', RequestResponse, self.svm_request_callback, queue_size=1)
+        self.svm_field_srv          = rospy.Service(self.NAMESPACE + '/GetSVMField', GenerateObj, self.handle_GetSVMField)
+
+    def update_SVM(self, param_to_change=None):
         self.svm_model_params       = dict(ref=self.CAL_REF_DATA_NAME.get(), qry=self.CAL_QRY_DATA_NAME.get(), img_dims=self.IMG_DIMS.get(), \
-                                           folder=self.CAL_FOLDER.get(), ft_type=self.FEAT_TYPE.get(), database_path=self.DATABASE_PATH.get())
-        if not self.svm.swap(self.svm_model_params):
-            roslogger("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR, ros=True)
+                                           view=self.CAL_VIEW.get(), ft_type=self.FEAT_TYPE.get(), database_path=self.DATABASE_PATH.get())
+        if not self.svm.swap(self.svm_model_params) and not self.svm_swap_pending:
+            self.print("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR, throttle=5)
+            param_to_change.revert()
             self.svm_swap_pending = True
+        elif not self.svm.swap(self.svm_model_params) and self.svm_swap_pending:
+            self.print("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR, throttle=5)
         else:
-            roslogger("SVM model swapped.", LogType.INFO, ros=True)
+            self.print("SVM model swapped.", LogType.INFO)
+            self.print(str(self.svm_model_params), LogType.DEBUG)
             self.publish_svm_mat(True)
             self.svm_swap_pending = False
 
-    def param_callback(self, msg):
-        if self.PARAM_SERVER.exists(msg.data):
-            roslogger("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG, ros=True)
-            self.PARAM_SERVER.update(msg.data)
+    def svm_request_callback(self, msg):
+        pass # TODO
 
-            if msg.data in [self.CAL_REF_DATA_NAME.name, self.CAL_QRY_DATA_NAME.name, self.IMG_DIMS.name, \
-                            self.CAL_FOLDER.name, self.FEAT_TYPE.name, self.DATABASE_PATH.name]:
-                roslogger("Change to SVM parameters detected.", LogType.WARN, ros=True)
-                self.update_SVM()
+    def param_callback(self, msg):
+        if self.ROS_HOME.params.exists(msg.data):
+            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
+            self.ROS_HOME.params.update(msg.data)
+
+            svm_data_comp   = [i == msg.data for i in self.SVM_DATA_NAMES]
+            try:
+                param = np.array(self.SVM_DATA_PARAMS)[svm_data_comp][0]
+                self.print("Change to SVM parameters detected.", LogType.WARN)
+                self.update_SVM(param)
+            except:
+                self.print(formatException(), LogType.DEBUG)
         else:
-            roslogger("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG, ros=True)
+            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
     def publish_svm_mat(self, generate):
         if generate:
@@ -141,7 +167,7 @@ class mrc: # main ROS class
 
         ans.success = success
         ans.topic = self.NAMESPACE + "/monitor/field" + self.INPUTS['topic']
-        rospy.logdebug("Service requested [Gen=%s], Success=%s" % (str(req.generate), str(success)))
+        self.print("Service requested [Gen=%s], Success=%s" % (str(req.generate), str(success)), LogType.DEBUG)
         return ans
 
     def label_callback(self, msg):
@@ -181,46 +207,60 @@ class mrc: # main ROS class
         self.SVM_FIELD_MSG.header.frame_id          = self.FRAME_ID.get()
         self.SVM_FIELD_MSG.header.stamp             = rospy.Time.now()
 
+    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
+        if ros is None:
+            ros = self.ROS_HOME.logros
+        if name is None:
+            name = self.ROS_HOME.node_name
+        if no_stamp is None:
+            no_stamp = self.ROS_HOME.logstamp
+        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
+
+    def main(self):
+        self.ROS_HOME.set_state(NodeState.MAIN)
+
+        while not rospy.is_shutdown():
+            nmrc.rate_obj.sleep()
+
+            if self.svm_swap_pending:
+                self.update_SVM()
+
+            if not (self.new_label and self.main_ready): # denest
+                self.print("Waiting for a new label.", LogType.INFO, throttle=60) # print every 60 seconds
+                continue
+
+            self.new_label = False
+            (y_pred_rt, y_zvalues_rt, [factor1_qry, factor2_qry], prob) = self.svm.predict(self.label.data.dvc)
+
+            if self.PRINT_PREDICTION.get():
+                if self.label.data.state == 0:
+                    self.print('integrity prediction: %s', y_pred_rt, LogType.INFO)
+                else:
+                    gt_state_bool = bool(self.label.data.state - 1)
+                    if y_pred_rt == gt_state_bool:
+                        self.print('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool), LogType.INFO)
+                    elif y_pred_rt == False and gt_state_bool == True:
+                        self.print('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool), LogType.WARN)
+                    else:
+                        self.print('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool), LogType.ERROR)
+
+            # Populate and publish SVM State details
+            ros_msg                 = self.OUTPUTS['mon_dets']()
+            ros_msg.queryImage      = self.label.queryImage
+            ros_msg.header.stamp    = rospy.Time.now()
+            ros_msg.header.frame_id	= str(self.FRAME_ID.get())
+            ros_msg.data            = self.label.data
+            ros_msg.mState	        = y_zvalues_rt # Continuous monitor state estimate 
+            ros_msg.prob	        = prob # Monitor probability estimate
+            ros_msg.mStateBin       = y_pred_rt# Binary monitor state estimate
+            ros_msg.factors         = [factor1_qry, factor2_qry]
+
+            self.svm_state_pub.publish(ros_msg)
+            del ros_msg
+
     def exit(self):
-        rospy.loginfo("Quit received.")
+        self.print("Quit received.", LogType.INFO)
         sys.exit()
-
-def main_loop(nmrc):
-
-    if nmrc.svm_swap_pending:
-        nmrc.update_SVM()
-
-    if not (nmrc.new_label and nmrc.main_ready): # denest
-        rospy.loginfo_throttle(60, "[%s] Waiting for a new label." % (nmrc.NODENAME)) # print every 60 seconds
-        return
-
-    nmrc.new_label = False
-    (y_pred_rt, y_zvalues_rt, [factor1_qry, factor2_qry], prob) = nmrc.svm.predict(nmrc.label.data.dvc)
-
-    if nmrc.PRINT_PREDICTION.get():
-        if nmrc.label.data.state == 0:
-            rospy.loginfo('integrity prediction: %s', y_pred_rt)
-        else:
-            gt_state_bool = bool(nmrc.label.data.state - 1)
-            if y_pred_rt == gt_state_bool:
-                rospy.loginfo('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool))
-            elif y_pred_rt == False and gt_state_bool == True:
-                rospy.logwarn('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool))
-            else:
-                rospy.logerr('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool))
-
-    # Populate and publish SVM State details
-    ros_msg                 = nmrc.OUTPUTS['mon_dets']()
-    ros_msg.queryImage      = nmrc.label.queryImage
-    ros_msg.header.stamp    = rospy.Time.now()
-    ros_msg.header.frame_id	= str(nmrc.FRAME_ID.get())
-    ros_msg.data            = nmrc.label.data
-    ros_msg.mState	        = y_zvalues_rt # Continuous monitor state estimate 
-    ros_msg.prob	        = prob # Monitor probability estimate
-    ros_msg.mStateBin       = y_pred_rt# Binary monitor state estimate
-    ros_msg.factors         = [factor1_qry, factor2_qry]
-
-    nmrc.svm_state_pub.publish(ros_msg)
 
 def do_args():
     parser = ap.ArgumentParser(prog="vpr_monitor.py", 
@@ -264,15 +304,16 @@ if __name__ == '__main__':
                     print_prediction=args['print_prediction'], log_level=args['log_level'], reset=args['reset']\
                 )
 
-        rospy.loginfo("Initialisation complete. Listening for queries...")   
-        nmrc.heartbeat.set_state(NodeState.MAIN) 
-        
-        while not rospy.is_shutdown():
-            nmrc.rate_obj.sleep()
-            main_loop(nmrc)
+        nmrc.print("Initialisation complete. Listening for queries...", LogType.INFO)
+        nmrc.main()
             
-        print("Exit state reached.")
-
-    except rospy.ROSInterruptException:
+        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
+        sys.exit()
+    except SystemExit as e:
         pass
+    except ConnectionRefusedError as e:
+        roslogger("Error: Is the roscore running and accessible?", LogType.ERROR, ros=False) # False as rosnode likely terminated
+    except:
+        roslogger("Error state reached, system exit triggered.", LogType.WARN, ros=False) # False as rosnode likely terminated
+        roslogger(formatException(), LogType.ERROR, ros=False)
 
