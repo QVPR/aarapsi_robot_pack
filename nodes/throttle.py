@@ -26,7 +26,7 @@ class Throttle_Topic:
     - Wrap subscribers, publishers, and timer into single class 
     - Ease of implementation
     '''
-    def __init__(self, topic_in, topic_out, namespace, exts, types, rate, hist_len=3, transform=None, printer=rospy.loginfo):
+    def __init__(self, topic_in, topic_out, namespace, exts, types, rate, ROS_HOME, hist_len=3, transform=None, printer=rospy.loginfo):
 
         self.topic_in   = topic_in
         self.topic_out  = topic_out
@@ -35,11 +35,12 @@ class Throttle_Topic:
         self.types      = types
         self.hist_len   = hist_len
         self.transform  = transform
+        self.ROS_HOME   = ROS_HOME
         if transform is None:
             self.transform = self.empty
         self.subs       = [rospy.Subscriber(self.topic_in + self.exts[i], self.types[i], self.cb, queue_size=1) \
                            for i in range(len(self.exts))]
-        self.pubs       = [rospy.Publisher(self.namespace + self.topic_out + self.exts[i], self.types[i], queue_size=1) \
+        self.pubs       = [self.ROS_HOME.add_pub(self.namespace + self.topic_out + self.exts[i], self.types[i], queue_size=1) \
                            for i in range(len(self.exts))]
         self.timer      = rospy.Timer(rospy.Duration(1/rate), self.timer)
         self.msgs       = [[] for i in types]
@@ -108,10 +109,10 @@ class mrc:
         self.bridge         = CvBridge()
 
         # Set up throttles:
-        self.throttles      = [Throttle_Topic(c_in[i], c_out[i], namespace, exts, types, rate, \
+        self.throttles      = [Throttle_Topic(c_in[i], c_out[i], namespace, exts, types, rate, self.ROS_HOME, \
                                     transform=lambda x: self.img_resize(x, mode="rectangle"), printer=self.print) \
                                 if 'stitched' in c_in[i] else \
-                               Throttle_Topic(c_in[i], c_out[i], namespace, exts, types, rate, \
+                               Throttle_Topic(c_in[i], c_out[i], namespace, exts, types, rate, self.ROS_HOME, \
                                     transform=lambda x: self.img_resize(x, mode="square"), printer=self.print) \
                                 for i in range(len(c_in))]
         

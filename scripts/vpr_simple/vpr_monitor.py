@@ -111,9 +111,9 @@ class mrc: # main ROS class
 
         self.param_checker_sub      = rospy.Subscriber(self.NAMESPACE + "/params_update", String, self.param_callback, queue_size=100)
         self.vpr_label_sub          = rospy.Subscriber(self.NAMESPACE + "/label" + self.INPUTS['topic'], self.INPUTS['label'], self.label_callback, queue_size=1)
-        self.svm_state_pub          = rospy.Publisher(self.NAMESPACE + "/monitor/state" + self.INPUTS['topic'], self.OUTPUTS['mon_dets'], queue_size=1)
-        self.svm_field_pub          = rospy.Publisher(self.NAMESPACE + "/monitor/field" + self.INPUTS['topic'], self.OUTPUTS['img_dets'], queue_size=1)
-        self.svm_request_pub        = rospy.Publisher(self.NAMESPACE + '/requests/svm/request', RequestSVM, queue_size=1)
+        self.svm_state_pub          = self.ROS_HOME.add_pub(self.NAMESPACE + "/monitor/state" + self.INPUTS['topic'], self.OUTPUTS['mon_dets'], queue_size=1)
+        self.svm_field_pub          = self.ROS_HOME.add_pub(self.NAMESPACE + "/monitor/field" + self.INPUTS['topic'], self.OUTPUTS['img_dets'], queue_size=1)
+        self.svm_request_pub        = self.ROS_HOME.add_pub(self.NAMESPACE + '/requests/svm/request', RequestSVM, queue_size=1)
         self.svm_request_sub        = rospy.Subscriber(self.NAMESPACE + '/requests/svm/ready', RequestResponse, self.svm_request_callback, queue_size=1)
         self.svm_field_srv          = rospy.Service(self.NAMESPACE + '/GetSVMField', GenerateObj, self.handle_GetSVMField)
 
@@ -220,14 +220,16 @@ class mrc: # main ROS class
         self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            nmrc.rate_obj.sleep()
 
             if self.svm_swap_pending:
                 self.update_SVM()
 
             if not (self.new_label and self.main_ready): # denest
                 self.print("Waiting for a new label.", LogType.INFO, throttle=60) # print every 60 seconds
+                rospy.sleep(0.005)
                 continue
+            
+            nmrc.rate_obj.sleep()
 
             self.new_label = False
             (y_pred_rt, y_zvalues_rt, [factor1_qry, factor2_qry], prob) = self.svm.predict(self.label.data.dvc)

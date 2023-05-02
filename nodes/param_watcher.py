@@ -43,7 +43,7 @@ class mrc():
 
     def init_rospy(self):
         self.rate_obj       = rospy.Rate(self.rate_num.get())
-        self.watch_pub      = rospy.Publisher(self.namespace + "/params_update", String, queue_size=100)
+        self.watch_pub      = self.ROS_HOME.add_pub(self.namespace + "/params_update", String, queue_size=100)
         self.watch_timer    = rospy.Timer(rospy.Duration(secs=5), self.watch_cb)
 
     def watch_cb(self, event):

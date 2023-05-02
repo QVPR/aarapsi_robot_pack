@@ -68,7 +68,7 @@ class mrc:
         self.rate_obj   = rospy.Rate(self.rate_num.get())
         self.img_sub    = rospy.Subscriber(self.img_topic, self.img_type, self.img_cb, queue_size=1)
         self.odom_sub   = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb, queue_size=1)
-        self.pub        = rospy.Publisher(self.namespace + self.pub_topic, self.pub_type, queue_size=1)
+        self.pub        = self.ROS_HOME.add_pub(self.namespace + self.pub_topic, self.pub_type, queue_size=1)
 
     def odom_cb(self, msg):
         self.odom       = msg

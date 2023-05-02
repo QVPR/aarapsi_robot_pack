@@ -297,14 +297,14 @@ class mrc: # main ROS class
             mInd = np.argmin(spd_x_dvc[:])
             timer.add()
             timer.addb()
-            timer.show()
+            #timer.show()
             return mInd, spd_x_dvc
         else:
             timer.add()
             mInd = np.argmin(dvc[:])
             timer.add()
             timer.addb()
-            timer.show()
+            #timer.show()
             return mInd, dvc
     
     def getTrueInd(self):
