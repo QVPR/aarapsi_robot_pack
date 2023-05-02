@@ -12,6 +12,8 @@ from geometry_msgs.msg import Twist
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool
 from pyaarapsi.core.ros_tools import roslogger, LogType, Heartbeat, NodeState
+from pyaarapsi.core.enum_tools import enum_name
+from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
 
 '''
 ROS Twist->Joy Node
@@ -55,6 +57,11 @@ class mrc:
         self.slow_safety_i  = 4
         self.fast_safety_i  = 5
 
+        self.netvlad_ind    = 11
+        self.hybridnet_ind  = 12
+        self.raw_ind        = 13
+        self.patchnorm_ind  = 14
+
         # Axes assignment:
         self.linI           = 1
         self.angI           = 3
@@ -66,6 +73,7 @@ class mrc:
         self.fast_max_ang   = 0.6
 
         self.enabled        = False
+        self.feature_mode   = FeatureType.RAW
 
     def main(self):
         while not rospy.is_shutdown():
@@ -77,6 +85,23 @@ class mrc:
             self.enabled = True
         elif msg.buttons[self.disable] > 0:
             self.enabled = False
+
+        # Toggle mode:
+        try:
+            if msg.buttons[self.raw_ind]:
+                self.feature_mode = FeatureType.RAW
+                rospy.set_param(namespace + '/feature_type', enum_name(self.feature_mode))
+            elif msg.buttons[self.patchnorm_ind]:
+                self.feature_mode = FeatureType.PATCHNORM
+                rospy.set_param(namespace + '/feature_type', enum_name(self.feature_mode))
+            elif msg.buttons[self.netvlad_ind]:
+                self.feature_mode = FeatureType.NETVLAD
+                rospy.set_param(namespace + '/feature_type', enum_name(self.feature_mode))
+            elif msg.buttons[self.hybridnet_ind]:
+                self.feature_mode = FeatureType.HYBRIDNET
+                rospy.set_param(namespace + '/feature_type', enum_name(self.feature_mode))
+        except:
+            rospy.logdebug_throttle(60, "Param switching is disabled for rosbags :-(")
 
         # Toggle safety:
         if msg.buttons[self.fast_safety_i] > 0:
