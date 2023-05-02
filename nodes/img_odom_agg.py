@@ -9,7 +9,8 @@ from nav_msgs.msg import Odometry
 from aarapsi_robot_pack.msg import ImageOdom, CompressedImageOdom
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools import Heartbeat, NodeState, roslogger, LogType
+from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, ROS_Home
+from pyaarapsi.core.helper_tools import formatException
 
 '''
 Image+Odometry Aggregator
@@ -25,19 +26,25 @@ progress if both odometry and images arrive across the network.
 '''
 
 class mrc:
-    def __init__(self, node_name, rate, namespace, anon, img_topic, odom_topic, pub_topic, compressed, log_level):
+    def __init__(self, node_name, rate, namespace, anon, img_topic, odom_topic, pub_topic, compressed, log_level, reset=True):
 
         self.node_name      = node_name
         self.namespace      = namespace
-        self.anon           = anon
+        self.nodespace      = self.namespace + "/" + self.node_name
         self.log_level      = log_level
-        self.rate_num       = rate
-    
-        rospy.init_node(self.node_name, anonymous=self.anon, log_level=self.log_level)
-        roslogger('Starting %s node.' % (self.node_name), LogType.INFO, ros=True)
-        self.rate_obj   = rospy.Rate(self.rate_num)
-        self.heartbeat  = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
 
+        rospy.init_node(self.node_name, anonymous=anon, log_level=log_level)
+        self.ROS_HOME       = ROS_Home(self.node_name, self.namespace, rate)
+        self.print('Starting %s node.' % (self.node_name))
+
+        self.init_params(rate, reset)
+        self.init_vars(img_topic, odom_topic, pub_topic, compressed)
+        self.init_rospy()
+
+    def init_params(self, rate, reset):
+        self.rate_num       = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate,      check_positive_float,   force=reset)
+
+    def init_vars(self, img_topic, odom_topic, pub_topic, compressed):
         self.img        = None
         self.odom       = None
         self.new_img    = False
@@ -57,6 +64,8 @@ class mrc:
             self.img_type  = Image
             self.pub_type  = ImageOdom
 
+    def init_rospy(self):
+        self.rate_obj   = rospy.Rate(self.rate_num.get())
         self.img_sub    = rospy.Subscriber(self.img_topic, self.img_type, self.img_cb, queue_size=1)
         self.odom_sub   = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb, queue_size=1)
         self.pub        = rospy.Publisher(self.namespace + self.pub_topic, self.pub_type, queue_size=1)
@@ -70,7 +79,7 @@ class mrc:
         self.new_img    = True
 
     def main(self):
-        self.heartbeat.set_state(NodeState.MAIN)
+        self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
@@ -87,6 +96,15 @@ class mrc:
 
             self.pub.publish(msg_to_pub)
             del msg_to_pub
+
+    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
+        if ros is None:
+            ros = self.ROS_HOME.logros
+        if name is None:
+            name = self.ROS_HOME.node_name
+        if no_stamp is None:
+            no_stamp = self.ROS_HOME.logstamp
+        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
 
 if __name__ == '__main__':
     parser = ap.ArgumentParser(prog="image_odom_aggregator.py", 
@@ -118,7 +136,12 @@ if __name__ == '__main__':
     try:
         nmrc = mrc(node_name, rate, namespace, anon, img_topic, odom_topic, pub_topic, compressed, log_level)
         nmrc.main()
-        roslogger("Operation complete.", LogType.INFO, ros=True)
+        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
+    except SystemExit as e:
+        pass
+    except ConnectionRefusedError as e:
+        roslogger("Error: Is the roscore running and accessible?", LogType.ERROR, ros=False) # False as rosnode likely terminated
     except:
-        roslogger("Error state reached, system exit triggered.", LogType.INFO, ros=True)
+        roslogger("Error state reached, system exit triggered.", LogType.WARN, ros=False) # False as rosnode likely terminated
+        roslogger(formatException(), LogType.ERROR, ros=False)

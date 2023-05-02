@@ -8,7 +8,7 @@
     <arg name="launch_plotter"          default="true"/>
     <arg name="launch_webserver"        default="true"/>
     <arg name="launch_throttle"         default="true"/>
-    <arg name="launch_aggregator"       default="true"/>
+    <arg name="launch_img_odom_agg"     default="true"/>
     <arg name="launch_paramwatcher"     default="true"/>
     <arg name="launch_ekf"              default="false"/> <!-- use at own risk --> 
 
@@ -115,7 +115,7 @@
             <arg name="tt_node_name"    default="throttle"/>
             <arg name="tt_rate"         default="10.0"/>
             <arg name="tt_mode"         default="1"/>
-            <arg name="tt_img_dims"     default="(64,64)"/>
+            <arg name="tt_img_dims"     default="(640,480)"/>
 
             <node pkg="aarapsi_robot_pack" type="throttle.py" name="$(arg tt_node_name)" output="screen"
                     args="-N $(arg tt_node_name) -r $(arg tt_rate) -a False -m $(arg tt_mode) -V $(arg log_level)
@@ -123,7 +123,7 @@
         </group>
 
         <!-- Image+Odom Aggregation Node: -->
-        <group if="$(arg launch_aggregator)">
+        <group if="$(arg launch_img_odom_agg)">
             <arg name="ioa_node_name"   default="img_odom_agg"/>
             <arg name="ioa_rate"        default="10.0"/>
             <arg name="ioa_compress"    default="True"/>
@@ -131,7 +131,7 @@
             <arg name="ioa_odom_topic"  default="/odom/filtered"/>
             <arg name="ioa_pub_topic"   default="/img_odom"/>
 
-            <node pkg="aarapsi_robot_pack" type="image_odom_aggregator.py" name="$(arg ioa_node_name)"  output="screen"
+            <node pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="$(arg ioa_node_name)"  output="screen"
                     args="-N $(arg ioa_node_name) -r $(arg ioa_rate) -a False -C $(arg ioa_compress) -V $(arg log_level)
                             --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic)" />
         </group>
