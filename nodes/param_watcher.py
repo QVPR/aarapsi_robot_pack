@@ -4,8 +4,8 @@ import rospy
 import argparse as ap
 import sys
 from std_msgs.msg import String
-from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, ROS_Home
+from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string, check_positive_int
+from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, ROS_Home, set_rospy_log_lvl
 from pyaarapsi.core.helper_tools import formatException
 
 '''
@@ -29,12 +29,13 @@ class mrc():
         self.ROS_HOME       = ROS_Home(self.node_name, self.namespace, rate)
         self.print('Starting %s node.' % (self.node_name))
         
-        self.init_params(rate, reset)
+        self.init_params(rate, log_level, reset)
         self.init_vars()
         self.init_rospy()
 
-    def init_params(self, rate, reset):
+    def init_params(self, rate, log_level, reset):
         self.rate_num       = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate,      check_positive_float,   force=reset)
+        self.log_level      = self.ROS_HOME.params.add(self.nodespace + "/log_level", log_level, check_positive_int,     force=reset)
 
     def init_vars(self):
         self.watch_params   = [i for i in rospy.get_param_names() if i.startswith(self.namespace)]
@@ -43,6 +44,7 @@ class mrc():
 
     def init_rospy(self):
         self.rate_obj       = rospy.Rate(self.rate_num.get())
+        self.param_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_cb, queue_size=100)
         self.watch_pub      = self.ROS_HOME.add_pub(self.namespace + "/params_update", String, queue_size=100)
         self.watch_timer    = rospy.Timer(rospy.Duration(secs=5), self.watch_cb)
 
@@ -61,9 +63,21 @@ class mrc():
         for i in list(self.params_dict.keys()):
             check_param = rospy.get_param(i)
             if not self.params_dict[i] == check_param:
-                self.print("Update detected for: %s (%s->%s)" % (i, str(self.params_dict[i]), str(check_param)))
+                self.print("Update detected for: %s (%s->%s)" % (i, str(self.params_dict[i]), str(check_param)), LogType.DEBUG)
                 self.params_dict[i] = check_param
                 self.watch_pub.publish(String(i))
+
+    def param_cb(self, msg):
+        if self.ROS_HOME.params.exists(msg.data):
+            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
+            self.ROS_HOME.params.update(msg.data)
+
+            if msg.data == self.log_level.name:
+                set_rospy_log_lvl(self.log_level.get())
+            elif msg.data == self.rate_num.name:
+                self.rate_obj = rospy.Rate(self.rate_num.get())
+        else:
+            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
     def main(self):
         self.ROS_HOME.set_state(NodeState.MAIN)

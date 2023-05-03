@@ -4,12 +4,13 @@ import rospy
 import sys
 import argparse as ap
 
+from std_msgs.msg import String
 from sensor_msgs.msg import CompressedImage, Image
 from nav_msgs.msg import Odometry
 from aarapsi_robot_pack.msg import ImageOdom, CompressedImageOdom
 
-from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, ROS_Home
+from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string, check_positive_int
+from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, ROS_Home, set_rospy_log_lvl
 from pyaarapsi.core.helper_tools import formatException
 
 '''
@@ -31,18 +32,18 @@ class mrc:
         self.node_name      = node_name
         self.namespace      = namespace
         self.nodespace      = self.namespace + "/" + self.node_name
-        self.log_level      = log_level
 
         rospy.init_node(self.node_name, anonymous=anon, log_level=log_level)
         self.ROS_HOME       = ROS_Home(self.node_name, self.namespace, rate)
         self.print('Starting %s node.' % (self.node_name))
 
-        self.init_params(rate, reset)
+        self.init_params(rate, log_level, reset)
         self.init_vars(img_topic, odom_topic, pub_topic, compressed)
         self.init_rospy()
 
-    def init_params(self, rate, reset):
+    def init_params(self, rate, log_level, reset):
         self.rate_num       = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate,      check_positive_float,   force=reset)
+        self.log_level      = self.ROS_HOME.params.add(self.nodespace + "/log_level", log_level, check_positive_int,     force=reset)
 
     def init_vars(self, img_topic, odom_topic, pub_topic, compressed):
         self.img        = None
@@ -66,9 +67,10 @@ class mrc:
 
     def init_rospy(self):
         self.rate_obj   = rospy.Rate(self.rate_num.get())
+        self.param_sub  = rospy.Subscriber(self.namespace + "/params_update", String, self.param_cb, queue_size=100)
         self.img_sub    = rospy.Subscriber(self.img_topic, self.img_type, self.img_cb, queue_size=1)
         self.odom_sub   = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb, queue_size=1)
-        self.pub        = self.ROS_HOME.add_pub(self.namespace + self.pub_topic, self.pub_type, queue_size=1)
+        self.pub        = self.ROS_HOME.add_pub(self.pub_topic, self.pub_type, queue_size=1)
 
     def odom_cb(self, msg):
         self.odom       = msg
@@ -82,9 +84,10 @@ class mrc:
         self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            self.rate_obj.sleep()
             if not (self.new_img and self.new_odom):
+                rospy.sleep(0.005)
                 continue # denest
+            self.rate_obj.sleep()
             self.new_img                = False
             self.new_odom               = False
 
@@ -96,6 +99,18 @@ class mrc:
 
             self.pub.publish(msg_to_pub)
             del msg_to_pub
+
+    def param_cb(self, msg):
+        if self.ROS_HOME.params.exists(msg.data):
+            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
+            self.ROS_HOME.params.update(msg.data)
+
+            if msg.data == self.log_level.name:
+                set_rospy_log_lvl(self.log_level.get())
+            elif msg.data == self.rate_num.name:
+                self.rate_obj = rospy.Rate(self.rate_num.get())
+        else:
+            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:

@@ -1,0 +1,69 @@
+vpr_nodes:
+  database_path: /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/compressed_sets
+  feature_type: RAW
+  frame_id: map
+  img_dims:
+  - 64
+  - 64
+  match_metric: euclidean
+
+  cal:
+    qry:
+      data_name: s1_cw_o0_e0_a0
+    ref:
+      data_name: s2_cw_o0_e1_a0
+    view: forward
+
+  ref:
+    data_name: s2_ccw_o0_e0_a0
+    images_path:
+    - /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/forward
+    - /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/left
+    - /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/right
+    - /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/panorama
+    odometry_path: /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/odometry.csv
+    view: forward
+
+  tolerance:
+    mode: METRE_LINE
+    threshold: 1.0
+
+  svm_trainer:
+    log_level: 2
+    rate: 12.0
+
+  throttle:
+    rate: 10.0
+
+  param_watcher:
+    rate: 2.0
+
+  img_odom_agg:
+    rate: 10.0
+
+  vpr_cruncher:
+    log_level: 2
+    compress:
+      in: true
+      out: true
+    dvc_weight: 1
+    method:
+      groundtruth: true
+      images: true
+      label: true
+      plotting: false
+    rate: 12.0
+    time_history_length: 20
+
+  vpr_monitor:
+    log_level: 2
+    print_prediction: false
+    compress:
+      in: true
+      out: true
+    rate: 12.0
+
+  vpr_plotter:
+    compress:
+      in: true
+    rate: 12.0

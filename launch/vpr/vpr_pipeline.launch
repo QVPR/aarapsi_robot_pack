@@ -1,0 +1,91 @@
+<?xml version="1.0"?>
+<!-- 
+    Single pipeline launch file
+ -->
+<launch>
+    <arg name="launch_cruncher"         default="true"/>
+    <arg name="launch_monitor"          default="true"/>
+    <arg name="launch_plotter"          default="true"/>
+    <arg name="launch_webserver"        default="true"/>
+    <arg name="launch_throttle"         default="true"/>
+    <arg name="launch_img_odom_agg"     default="true"/>
+    <arg name="launch_paramwatcher"     default="true"/>
+
+    <arg name="offline"                 default="false"/>
+    
+    <arg name="main_rate"               default="12.0"/>
+    <arg name="throttle_rate"           default="10.0"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="reset"                   default="True"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <arg name="cruncher_compress_in"    default="True"/>
+    <arg name="cruncher_groundtruth"    default="True"/>
+
+    <arg name="monitor_printprediction" default="False"/>
+
+    <arg name="plotter_port"            default="5006"/>
+    <arg name="plotter_address"         default="0.0.0.0"/>
+
+    <arg name="tt_mode"                 default="1"/>
+    <arg name="tt_img_dims"             default="(640,480)"/>
+
+    <arg name="ioa_compress"            default="True"/>
+    <arg name="ioa_img_topic"           default="$(arg namespace)/occam/image0"/>
+    <arg name="ioa_odom_topic"          default="/odom/filtered"/>
+    <arg name="ioa_pub_topic"           default="$(arg namespace)/img_odom"/>
+
+    <arg name="compress_transport"      default="True"/>
+
+    <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
+
+    <node if="$(arg launch_webserver)" pkg="web_video_server" type="web_video_server" name="web_video_server" output="screen"/>
+
+    <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
+    
+    <!-- Main VPR Pipeline -->
+    <group ns="$(arg namespace)">
+        <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
+            args="-Ci $(arg cruncher_compress_in) -Co $(arg compress_transport) -G $(arg cruncher_groundtruth) 
+                    -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset)">
+        </node>
+        
+        <group if="$(arg launch_monitor)" >
+            <node pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
+                args="-Ci $(arg compress_transport) -Co $(arg compress_transport) -p $(arg monitor_printprediction)
+                        -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset)">
+            </node>
+            
+            <node pkg="aarapsi_robot_pack" type="svm_trainer.py" name="svm_trainer" output="screen" 
+                args="-r $(arg main_rate) -N svm_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset)">
+            </node>
+        </group>
+        
+        <node if="$(arg launch_plotter)" pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
+            args="-P $(arg plotter_port) -A $(arg plotter_address) -Ci $(arg compress_transport)
+                    -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset)">
+        </node>
+    </group>
+
+    <group if="$(arg offline)">
+        <!-- Param Watcher Node: -->
+        <group if="$(arg launch_paramwatcher)">
+            <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"/>
+        </group>
+
+    	<!-- Camera Topic Throttling Node: -->
+        <group >
+            <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
+                    args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims)" />
+        </group>
+
+        <!-- Image+Odom Aggregation Node: -->
+        <group >
+            <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
+                    args="-N img_odom_agg -r $(arg throttle_rate) -a $(arg anon) -C $(arg ioa_compress)
+                            --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic)" />
+        </group>
+    </group>
+
+</launch>

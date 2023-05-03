@@ -5,10 +5,10 @@ import cv2
 import sys
 import argparse as ap
 from cv_bridge import CvBridge
-from std_msgs.msg import Header
+from std_msgs.msg import Header, String
 from sensor_msgs.msg import Image, CompressedImage
-from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_bool, check_string
-from pyaarapsi.core.ros_tools import imgmsgtrans, NodeState, roslogger, LogType, ROS_Home
+from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_bool, check_string, check_positive_int
+from pyaarapsi.core.ros_tools import imgmsgtrans, NodeState, roslogger, LogType, ROS_Home, set_rospy_log_lvl
 from pyaarapsi.core.helper_tools import formatException
 
 '''
@@ -73,24 +73,25 @@ class mrc:
 
         self.mode           = mode
         self.resize_dims    = resize_dims
-        self.log_level      = log_level
 
         rospy.init_node(self.node_name, anonymous=anon, log_level=log_level)
         self.ROS_HOME       = ROS_Home(self.node_name, self.namespace, rate)
         self.print('Starting %s node.' % (node_name))
 
-        self.init_params(rate, reset)
+        self.init_params(rate, log_level, reset)
         self.init_vars()
         self.init_rospy()
 
-    def init_params(self, rate, reset):
+    def init_params(self, rate, log_level, reset):
         self.rate_num       = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate,      check_positive_float,   force=reset)
+        self.log_level      = self.ROS_HOME.params.add(self.nodespace + "/log_level", log_level, check_positive_int,     force=reset)
 
     def init_vars(self):
         pass
 
     def init_rospy(self):
         self.rate_obj       = rospy.Rate(self.rate_num.get())
+        self.param_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_cb, queue_size=100)
 
         # set up topics
         c_in, c_out = self.get_cam_topics()
@@ -115,6 +116,18 @@ class mrc:
                                Throttle_Topic(c_in[i], c_out[i], namespace, exts, types, rate, self.ROS_HOME, \
                                     transform=lambda x: self.img_resize(x, mode="square"), printer=self.print) \
                                 for i in range(len(c_in))]
+
+    def param_cb(self, msg):
+        if self.ROS_HOME.params.exists(msg.data):
+            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
+            self.ROS_HOME.params.update(msg.data)
+
+            if msg.data == self.log_level.name:
+                set_rospy_log_lvl(self.log_level.get())
+            elif msg.data == self.rate_num.name:
+                self.rate_obj = rospy.Rate(self.rate_num.get())
+        else:
+            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
         
     def get_cam_topics(self):
         # Helper function to abstract topic generation
