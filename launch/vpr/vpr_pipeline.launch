@@ -40,7 +40,9 @@
 
     <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
 
-    <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
+    <group if="$(arg offline)">
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
+    </group>
     
     <group ns="$(arg namespace)">
         <!-- Web Server Node: -->
