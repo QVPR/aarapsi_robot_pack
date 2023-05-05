@@ -10,3 +10,4 @@ src/CMakeLists.txt
 *.pyc
 *.swp
 *.npz
+*.bag

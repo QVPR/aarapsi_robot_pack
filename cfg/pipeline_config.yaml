@@ -4,9 +4,9 @@ vpr_nodes:
   img_dims:
   - 64
   - 64
-  npz_dbp: /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/compressed_sets
-  svm_dbp: /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/cfg/svm_models
-  bag_dbp: /home/claxton/OneDrive/aarapsi_home/3.0 Data/3.1 rosbags/improved
+  npz_dbp: /data/compressed_sets
+  svm_dbp: /cfg/svm_models
+  bag_dbp: /data/rosbags
   odom_topic: /odom/filtered
   img_topic: /ros_indigosdk_occam/image0/compressed
   
