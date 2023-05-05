@@ -154,7 +154,7 @@ class mrc: # main ROS class
 
     def update_VPR(self, param_to_change):
         dataset_dict = self.make_dataset_dict()
-        if not self.image_processor.swap(dataset_dict):
+        if not self.image_processor.swap(dataset_dict, generate=False):
             self.print("VPR reference data swap failed. Previous set will be retained (changed ROS parameter will revert)", LogType.WARN)
             param_to_change.revert()
             self.print(param_to_change.value)

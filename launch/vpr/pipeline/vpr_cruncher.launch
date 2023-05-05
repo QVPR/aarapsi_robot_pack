@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!-- 
+    Cruncher launch file
+ -->
+<launch>
+    <arg name="offline"                 default="false"/>
+    <arg name="cruncher_compress_in"    default="True"/>
+    <arg name="compress_transport"      default="True"/>
+    <arg name="cruncher_groundtruth"    default="True"/>
+    <arg name="main_rate"               default="12.0"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="namespace"               default="/vpr_nodes"/>
+    <arg name="reset"                   default="True"/>
+    <arg name="log_level"               default="2"/>
+
+    <group if="$(arg offline)">
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
+    </group>
+    
+    <group ns="$(arg namespace)">
+        <node pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
+            args="-Ci $(arg cruncher_compress_in) -Co $(arg compress_transport) -G $(arg cruncher_groundtruth) 
+                    -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 3">
+        </node>
+    </group>
+
+</launch>
