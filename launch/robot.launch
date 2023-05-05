@@ -25,6 +25,8 @@
     <arg name="ioa_odom_topic"          default="/odom/filtered"/>
     <arg name="ioa_pub_topic"           default="$(arg namespace)/img_odom"/>
 
+    <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
+
     <!-- SLAM Node: -->
     <group if="$(arg launch_slam_node)">
         <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_localization.launch"/>
