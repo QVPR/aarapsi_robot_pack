@@ -4,14 +4,26 @@
  -->
 <launch>
     <!-- Global Arguments: -->
-    <arg name="log_level"           default="2"/>
-    <arg name="launch_slam_node"    default="true"/>
-    <arg name="launch_slam_ekf"     default="true"/>
-    <arg name="launch_throttle"     default="true"/>
-    <arg name="launch_aggregator"   default="true"/>
-    <arg name="launch_twist2joy"    default="false"/>
-    <arg name="launch_follower"     default="false"/>
-    <arg name="launch_paramwatcher" default="true"/>
+    <arg name="log_level"               default="2"/>
+    <arg name="launch_slam_node"        default="true"/>
+    <arg name="launch_slam_ekf"         default="true"/>
+    <arg name="launch_throttle"         default="true"/>
+    <arg name="launch_img_odom_agg"     default="true"/>
+    <arg name="launch_paramwatcher"     default="true"/>
+    
+    <arg name="throttle_rate"           default="10.0"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="reset"                   default="True"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <arg name="tt_mode"                 default="1"/>
+    <arg name="tt_img_dims"             default="(640,480)"/>
+
+    <arg name="ioa_compress"            default="True"/>
+    <arg name="ioa_img_topic"           default="$(arg namespace)/occam/image0"/>
+    <arg name="ioa_odom_topic"          default="/odom/filtered"/>
+    <arg name="ioa_pub_topic"           default="$(arg namespace)/img_odom"/>
 
     <!-- SLAM Node: -->
     <group if="$(arg launch_slam_node)">
@@ -23,62 +35,17 @@
         <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_ekf.launch"/>
     </group>
 
-    <!-- Camera Topic Throttling Node: -->
-    <group if="$(arg launch_throttle)">
-        <arg name="tt_node_name"    default="throttle"/>
-        <arg name="tt_anon"         default="True"/>
-        <arg name="tt_rate"         default="10.0"/>
-        <arg name="tt_mode"         default="1"/>
-        <arg name="tt_img_dims"     default="(64,64)"/>
-
-        <node pkg="aarapsi_robot_pack" type="throttle.py" name="$(arg tt_node_name)" output="screen"
-                args="-N $(arg tt_node_name) -r $(arg tt_rate) -a $(arg tt_anon) -m $(arg tt_mode) -V $(arg log_level)
-                        -i $(arg tt_img_dims)" />
-    </group>
+    <!-- Param Watcher Node: -->
+    <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
+            args="-ID 0"/>
 
     <!-- Image+Odom Aggregation Node: -->
-    <group if="$(arg launch_img_odom_agg)">
-        <arg name="ioa_node_name"   default="img_odom_agg"/>
-        <arg name="ioa_anon"        default="True"/>
-        <arg name="ioa_rate"        default="10.0"/>
-        <arg name="ioa_compress"    default="True"/>
-        <arg name="ioa_img_topic"   default="/vpr_nodes/occam/image0"/>
-        <arg name="ioa_odom_topic"  default="/odom/filtered"/>
-        <arg name="ioa_pub_topic"   default="/img_odom"/>
+    <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
+            args="-N img_odom_agg -r $(arg throttle_rate) -a $(arg anon) -C $(arg ioa_compress)
+                    --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic) -V $(arg log_level) -ID 1" />
 
-        <node pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="$(arg ioa_node_name)"  output="screen"
-                args="-N $(arg ioa_node_name) -r $(arg ioa_rate) -a $(arg ioa_anon) -C $(arg ioa_compress) -V $(arg log_level)
-                        --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic)" />
-    </group>
-    
-    <!-- Twist2Joy Node: -->
-    <group if="$(arg launch_twist2joy)">
-        <arg name="tj_node_name"    default="twist2joy"/>
-        <arg name="tj_anon"         default="True"/>
-        <arg name="tj_rate"         default="10.0"/>
+    <!-- Camera Topic Throttling Node: -->
+    <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
+            args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -ID 2" />
 
-        <arg name="tj_twist_topic"  default="/twist2joy/in"/>
-        <arg name="tj_joy_sub_tpc"  default="/bluetooth_teleop/joy"/>
-        <arg name="tj_joy_pub_tpc"  default="/bluetooth_teleop/joy"/>
-
-        <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)" output="screen"
-                args="$(arg tj_twist_topic) $(arg tj_joy_sub_tpc) $(arg tj_joy_pub_tpc) 
-                -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level)"/>
-    </group>
-
-    <!-- Follower Node: -->
-    <group if="$(arg launch_follower)">
-        <arg name="fw_node_name"    default="follower"/>
-        <arg name="fw_anon"         default="True"/>
-        <arg name="fw_rate"         default="10.0"/>
-
-        <node pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)" output="screen"
-                args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level)"/>
-    </group>
-
-    <!-- Param Watcher Node: -->
-    <group if="$(arg launch_paramwatcher)">
-        <arg name="pw_node_name"   default="param_watcher"/>
-        <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="$(arg pw_node_name)" output="screen"/>
-    </group>
 </launch>
