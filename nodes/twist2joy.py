@@ -11,7 +11,7 @@ from sensor_msgs.msg import Joy
 from geometry_msgs.msg import Twist
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool
-from pyaarapsi.core.ros_tools import roslogger, LogType, Heartbeat, NodeState
+from pyaarapsi.core.ros_tools import roslogger, init_node, LogType, Heartbeat, NodeState
 from pyaarapsi.core.enum_tools import enum_name
 from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
 
@@ -24,23 +24,20 @@ Configured to keep safety lock-outs from the ps4 controller
 '''
 
 class mrc:
-    def __init__(self, twist_sub_topic, twist_pub_topic, joy_sub_topic, node_name, anon, namespace, rate, log_level):
+    def __init__(self, twist_sub_topic, twist_pub_topic, joy_sub_topic, node_name, anon, namespace, rate_num, log_level, order_id=0):
 
-        self.node_name      = node_name
-        self.namespace      = namespace
-        self.anon           = anon
-        self.log_level      = log_level
-        self.rate_num       = rate
-    
-        rospy.init_node(self.node_name, anonymous=self.anon, log_level=self.log_level)
-        roslogger('Starting %s node.' % (self.node_name), LogType.INFO, ros=True)
-        self.rate_obj   = rospy.Rate(self.rate_num)
-        self.heartbeat  = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
+        init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
 
-        self.joy_sub        = rospy.Subscriber(joy_sub_topic, Joy, self.joy_cb, queue_size=1)
-        self.twist_sub      = rospy.Subscriber(twist_sub_topic, Twist, self.twist_cb, queue_size=1)
-        self.twist_pub      = rospy.Publisher(twist_pub_topic, Twist, queue_size=1)
+        self.init_params()
+        self.init_vars()
+        self.init_rospy(rate_num, joy_sub_topic, twist_sub_topic, twist_pub_topic)
 
+        rospy.set_param(self.namespace + '/launch_step', order_id + 1)
+
+    def init_params(self):
+        pass
+
+    def init_vars(self):
         self.mode           = 0
         # Button order:
         # X, O, Square, Triangle, LeftB, RightB, Share, Options, PS, LStickIn, RStickIn, LeftAr, RightAr, UpAr, DownAr
@@ -75,6 +72,13 @@ class mrc:
         self.enabled        = False
         self.feature_mode   = FeatureType.RAW
 
+    def init_rospy(self, rate_num, joy_sub_topic, twist_sub_topic, twist_pub_topic):
+        self.rate_obj       = rospy.Rate(rate_num)
+
+        self.joy_sub        = rospy.Subscriber(joy_sub_topic, Joy, self.joy_cb, queue_size=1)
+        self.twist_sub      = rospy.Subscriber(twist_sub_topic, Twist, self.twist_cb, queue_size=1)
+        self.twist_pub      = rospy.Publisher(twist_pub_topic, Twist, queue_size=1)
+
     def main(self):
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
@@ -90,16 +94,16 @@ class mrc:
         try:
             if msg.buttons[self.raw_ind]:
                 self.feature_mode = FeatureType.RAW
-                rospy.set_param(namespace + '/feature_type', enum_name(self.feature_mode))
+                rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
             elif msg.buttons[self.patchnorm_ind]:
                 self.feature_mode = FeatureType.PATCHNORM
-                rospy.set_param(namespace + '/feature_type', enum_name(self.feature_mode))
+                rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
             elif msg.buttons[self.netvlad_ind]:
                 self.feature_mode = FeatureType.NETVLAD
-                rospy.set_param(namespace + '/feature_type', enum_name(self.feature_mode))
+                rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
             elif msg.buttons[self.hybridnet_ind]:
                 self.feature_mode = FeatureType.HYBRIDNET
-                rospy.set_param(namespace + '/feature_type', enum_name(self.feature_mode))
+                rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
         except:
             rospy.logdebug_throttle(60, "Param switching is disabled for rosbags :-(")
 
@@ -133,38 +137,32 @@ class mrc:
         roslogger("vx: %s, vw: %s" % (str(new_vx), str(new_vw)), LogType.INFO, ros=True)
         self.twist_pub.publish(new_twist)
         
-if __name__ == '__main__':
+def do_args():
     parser = ap.ArgumentParser(prog="twist2joy.py", 
                             description="ROS Twist to Joy Republisher Tool",
                             epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
     
     # Positional Arguments:
-    parser.add_argument('twist-sub-topic',      type=check_string,                                    help='Set input geometry_msgs/Twist topic.')
-    parser.add_argument('twist-pub-topic',      type=check_string,                                    help='Set output geometry_msgs/Twist topic.')
-    parser.add_argument('joy-sub-topic',        type=check_string,                                    help='Set input sensor_msgs/Joy topic.')
+    parser.add_argument('twist-sub-topic',           type=check_string,                                           help='Set input geometry_msgs/Twist topic.')
+    parser.add_argument('twist-pub-topic',           type=check_string,                                           help='Set output geometry_msgs/Twist topic.')
+    parser.add_argument('joy-sub-topic',             type=check_string,                                           help='Set input sensor_msgs/Joy topic.')
 
     # Optional Arguments:
-    parser.add_argument('--node-name',  '-N',   type=check_string,              default="twist2joy",  help="Specify node name (default: %(default)s).")
-    parser.add_argument('--anon',       '-a',   type=check_bool,                default=False,        help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',  '-n',   type=check_string,              default="/vpr_nodes", help="Specify ROS namespace (default: %(default)s).")
-    parser.add_argument('--rate',       '-r',   type=check_positive_float,      default=50.0,         help='Set publish rate (default: %(default)s).')
-    parser.add_argument('--log-level',  '-V',   type=int, choices=[1,2,4,8,16], default=2,            help="Specify ROS log level (default: %(default)s).")
+    parser.add_argument('--node-name',        '-N',  type=check_string,                 default="twist2joy",      help="Specify node name (default: %(default)s).")
+    parser.add_argument('--anon',             '-a',  type=check_bool,                   default=False,            help="Specify whether node should be anonymous (default: %(default)s).")
+    parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
+    parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=50.0,             help='Set publish rate (default: %(default)s).')
+    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16],    default=2,                help="Specify ROS log level (default: %(default)s).")
+    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
     
     raw_args    = parser.parse_known_args()
-    args        = vars(raw_args[0])
+    return vars(raw_args[0])
 
-    twist_sub = args['twist-sub-topic']
-    twist_pub = args['twist-pub-topic']
-    joy_sub     = args['joy-sub-topic']
-
-    node_name   = args['node_name']
-    anon        = args['anon']
-    namespace   = args['namespace']
-    rate        = args['rate']
-    log_level   = args['log_level']
-
+if __name__ == '__main__':
     try:
-        nmrc = mrc(twist_sub, twist_pub, joy_sub, node_name, anon, namespace, rate, log_level)
+        args = do_args()
+        nmrc = mrc(args['twist-sub-topic'], args['twist-pub-topic'], args['joy-sub-topic'], args['node_name'], \
+                   args['anon'], args['namespace'], args['rate'], args['log_level'], order_id=args['order_id'])
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=True)
         sys.exit()

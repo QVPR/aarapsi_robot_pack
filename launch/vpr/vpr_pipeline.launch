@@ -40,52 +40,49 @@
 
     <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
 
-    <node if="$(arg launch_webserver)" pkg="web_video_server" type="web_video_server" name="web_video_server" output="screen"/>
-
     <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
     
-    <!-- Main VPR Pipeline -->
     <group ns="$(arg namespace)">
-        <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
-            args="-Ci $(arg cruncher_compress_in) -Co $(arg compress_transport) -G $(arg cruncher_groundtruth) 
-                    -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset)">
-        </node>
-        
-        <group if="$(arg launch_monitor)" >
-            <node pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
-                args="-Ci $(arg compress_transport) -Co $(arg compress_transport) -p $(arg monitor_printprediction)
-                        -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset)">
-            </node>
-            
-            <node pkg="aarapsi_robot_pack" type="svm_trainer.py" name="svm_trainer" output="screen" 
-                args="-r $(arg main_rate) -N svm_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset)">
-            </node>
-        </group>
-        
-        <node if="$(arg launch_plotter)" pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
-            args="-P $(arg plotter_port) -A $(arg plotter_address) -Ci $(arg compress_transport)
-                    -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset)">
-        </node>
-    </group>
+        <!-- Web Server Node: -->
+        <node if="$(arg launch_webserver)" pkg="web_video_server" type="web_video_server" name="web_video_server" output="screen"/>
 
-    <group if="$(arg offline)">
-        <!-- Param Watcher Node: -->
-        <group if="$(arg launch_paramwatcher)">
-            <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"/>
-        </group>
+        <group if="$(arg offline)">
+            <!-- Param Watcher Node: -->
+            <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
+                    args="-ID 0"/>
 
-    	<!-- Camera Topic Throttling Node: -->
-        <group >
-            <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
-                    args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims)" />
-        </group>
-
-        <!-- Image+Odom Aggregation Node: -->
-        <group >
+            <!-- Image+Odom Aggregation Node: -->
             <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
                     args="-N img_odom_agg -r $(arg throttle_rate) -a $(arg anon) -C $(arg ioa_compress)
-                            --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic)" />
+                            --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic) -V $(arg log_level) -ID 1" />
+
+            <!-- Camera Topic Throttling Node: -->
+            <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
+                    args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -ID 2" />
         </group>
+
+        <!-- Cruncher Node: -->
+        <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
+            args="-Ci $(arg cruncher_compress_in) -Co $(arg compress_transport) -G $(arg cruncher_groundtruth) 
+                    -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 3">
+        </node>
+
+        <!-- Monitor's SVM Trainer Node: -->
+        <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="svm_trainer.py" name="svm_trainer" output="screen" 
+            args="-r $(arg main_rate) -N svm_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
+        </node>
+
+        <!-- Monitor Node: -->
+        <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
+            args="-Ci $(arg compress_transport) -Co $(arg compress_transport) -p $(arg monitor_printprediction)
+                    -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 5">
+        </node>
+
+        <!-- Plotter Node: -->
+        <node if="$(arg launch_plotter)" pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
+            args="-P $(arg plotter_port) -A $(arg plotter_address) -Ci $(arg compress_transport)
+                    -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
+        </node>
     </group>
 
 </launch>

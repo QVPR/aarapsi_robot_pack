@@ -6,7 +6,5 @@ float64[] dvc                           # distance vector; length matches the le
 int64 matchId                           # Index of VPR match
 int64 trueId                            # Index ground truth thinks is best (-1 if no groundtruth)
 int8 state                              # int matching 0: unknown, 1: bad, 2: good
-bool compressed                         # Bool whether or not this msg struct belongs to a compressed query image
-string matchPath                        # Full file path to matched reference image
 
 ## Note: Indices are with respect to the reference data where the first item is index 0.

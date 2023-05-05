@@ -57,7 +57,7 @@ class mrc:
             self.msg_time_old = self.msg_time
             self.msg_received = True
 
-if __name__ == '__main__':
+def do_args():
     parser = ap.ArgumentParser(prog="repeater.py", 
                             description="ROS Bluetooth Signal Repeater",
                             epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
@@ -68,16 +68,12 @@ if __name__ == '__main__':
     parser.add_argument('--log-level', '-V', type=int, choices=[1,2,4,8,16], default=2,                help="Specify ROS log level (default: %(default)s).")
     
     raw_args = parser.parse_known_args()
-    args = vars(raw_args[0])
+    return vars(raw_args[0])
 
-    node_name   = args['node_name']
-    rate        = args['rate']
-    namespace   = args['namespace']
-    anon        = args['anon']
-    log_level   = args['log_level']
-
+if __name__ == '__main__':
     try:
-        nmrc = mrc(node_name, namespace, anon, log_level, rate)
+        args = do_args()
+        nmrc = mrc(args['node_name'], args['namespace'], args['anon'], args['log_level'], args['rate'])
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=True)
         sys.exit()

@@ -99,8 +99,8 @@ class mrc:
             self.old_sensor_cmd = msg
             return
         
-        self.delta_yaw      = yaw_from_q(msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_cmd.pose.pose.orientation)
-        self.current_yaw    = np.mean([self.current_yaw, self.vpr_ego[2]]) + self.delta_yaw
+        self.delta_yaw      = self.angle_wrap(yaw_from_q(msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_cmd.pose.pose.orientation))
+        self.current_yaw    = self.angle_wrap(0.5 * self.angle_wrap(self.current_yaw + self.vpr_ego[2]) + self.delta_yaw)
         self.old_sensor_cmd = msg
         self.yaw_pub.publish(Float64(data=self.current_yaw))
 
@@ -109,8 +109,15 @@ class mrc:
         target_index        = (np.argmin(spd[:]) + self.lookahead_inds) % self.path_array.shape[0]
         self.target_yaw     = self.path_array[target_index, 2]
 
+    def angle_wrap(self, angle_in, mode='DEG'):
+        if mode == 'DEG':
+            return ((angle_in + 180.0) % 360) - 180
+        elif mode == 'RAD':
+            return ((angle_in + np.pi) % (np.pi * 2)) - np.pi
+        else:
+            raise Exception('Mode must be either DEG or RAD.')
+
     def main(self):
-        # TODO: FIX ANGLE WRAP!!
         while not rospy.is_shutdown():
             if not self.path_received:
                 roslogger("Waiting for path ...", LogType.INFO, ros=True, throttle=10)
@@ -127,13 +134,13 @@ class mrc:
 
             self.update_target()
 
-            yaw_cmd             = -1 * (self.target_yaw - self.current_yaw)
+            yaw_cmd             = -1 * self.angle_wrap(self.target_yaw - self.current_yaw)
             new_twist           = Twist()
             new_twist.linear.x  = 0.5
             new_twist.angular.z = yaw_cmd
 
             roslogger("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw), LogType.INFO, ros=True)
-            roslogger("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, self.true_yaw - self.current_yaw), LogType.INFO, ros=True)
+            roslogger("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, self.angle_wrap(self.true_yaw - self.current_yaw)), LogType.INFO, ros=True)
 
             self.twist_pub.publish(new_twist)
             self.dyaw_pub.publish(Float64(data=yaw_cmd))

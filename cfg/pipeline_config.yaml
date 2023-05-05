@@ -1,28 +1,29 @@
 vpr_nodes:
-  database_path: /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/compressed_sets
+  launch_step: 0
   feature_type: RAW
-  frame_id: map
   img_dims:
   - 64
   - 64
-  match_metric: euclidean
-
+  npz_dbp: /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/compressed_sets
+  svm_dbp: /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/cfg/svm_models
+  bag_dbp: /home/claxton/OneDrive/aarapsi_home/3.0 Data/3.1 rosbags/improved
+  odom_topic: /odom/filtered
+  img_topic: /ros_indigosdk_occam/image0/compressed
+  
   cal:
     qry:
-      data_name: s1_cw_o0_e0_a0
+      bag_name: s1_cw_o0_e0_a0
+      filters: '{}'
+      sample_rate: 10.0
     ref:
-      data_name: s2_cw_o0_e1_a0
-    view: forward
+      bag_name: s2_cw_o0_e1_a0
+      filters: '{}'
+      sample_rate: 10.0
 
   ref:
-    data_name: s2_ccw_o0_e0_a0
-    images_path:
-    - /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/forward
-    - /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/left
-    - /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/right
-    - /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/panorama
-    odometry_path: /home/claxton/aarapsi_offrobot_ws/src/aarapsi_robot_pack/data/s2_ccw_o0_e0_a0/odometry.csv
-    view: forward
+    bag_name: s2_ccw_o0_e0_a0
+    filters: '{}'
+    sample_rate: 10.0
 
   tolerance:
     mode: METRE_LINE
@@ -33,25 +34,25 @@ vpr_nodes:
     rate: 12.0
 
   throttle:
+    log_level: 2
     rate: 10.0
 
   param_watcher:
+    log_level: 1
     rate: 2.0
 
   img_odom_agg:
+    log_level: 2
     rate: 10.0
 
   vpr_cruncher:
-    log_level: 2
+    log_level: 1
     compress:
       in: true
       out: true
     dvc_weight: 1
     method:
       groundtruth: true
-      images: true
-      label: true
-      plotting: false
     rate: 12.0
     time_history_length: 20
 
@@ -64,6 +65,7 @@ vpr_nodes:
     rate: 12.0
 
   vpr_plotter:
+    log_level: 2
     compress:
       in: true
     rate: 12.0
