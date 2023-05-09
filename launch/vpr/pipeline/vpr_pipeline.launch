@@ -63,6 +63,12 @@
                     args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -ID 2" />
         </group>
 
+
+        <!-- Cruncher's Trainer Node: -->
+        <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="dataset_trainer.py" name="dataset_trainer" output="screen" 
+            args="-r $(arg main_rate) -N dataset_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 3">
+        </node>
+
         <!-- Cruncher Node: -->
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
             args="-Ci $(arg cruncher_compress_in) -Co $(arg compress_transport) -G $(arg cruncher_groundtruth) 
