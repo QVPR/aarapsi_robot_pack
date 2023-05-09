@@ -9,7 +9,7 @@ import os
 import copy
 from rospy_message_converter import message_converter
 from std_msgs.msg import String
-from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_tuple, check_enum
+from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum
 from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node
 from pyaarapsi.core.helper_tools import formatException
 from pyaarapsi.core.enum_tools import enum_name
@@ -17,7 +17,7 @@ from pyaarapsi.core.enum_tools import enum_name
 from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
 from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
 
-from aarapsi_robot_pack.msg import RequestResponse, RequestSVM
+from aarapsi_robot_pack.msg import ResponseSVM, RequestSVM, ResponseDataset, RequestDataset
 
 '''
 
@@ -46,11 +46,13 @@ class mrc():
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
         self.param_sub              = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
         self.svm_request_sub        = rospy.Subscriber(self.namespace + '/requests/svm/request', RequestSVM, self.svm_request_callback, queue_size=1)
-        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/ready', RequestResponse, queue_size=1)
-
+        self.dataset_request_sub    = rospy.Subscriber(self.namespace + '/requests/dataset/ready', ResponseDataset, self.dataset_request_callback, queue_size=1)
+        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/ready', ResponseSVM, queue_size=1)
+        self.dataset_request_pub    = self.ROS_HOME.add_pub(self.namespace + "/requests/dataset/request", RequestDataset, queue_size=1)
+        
     def init_params(self, rate_num, log_level, reset):
         self.FEAT_TYPE              = self.ROS_HOME.params.add(self.namespace + "/feature_type",        None,             lambda x: check_enum(x, FeatureType),       force=False)
-        self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,             check_positive_two_int_tuple,               force=False)
+        self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,             check_positive_two_int_list,                force=False)
         self.NPZ_DBP                = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",             None,             check_string,                               force=False)
         self.BAG_DBP                = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",             None,             check_string,                               force=False)
         self.SVM_DBP                = self.ROS_HOME.params.add(self.namespace + "/svm_dbp",             None,             check_string,                               force=False)
@@ -70,13 +72,23 @@ class mrc():
         
     def init_vars(self):
         # Set up SVM
-        self.svm_model_params       = self.make_svm_model_params()
-        self.svm                    = SVMModelProcessor(self.svm_model_params, try_gen=True, ros=True, printer=self.print)
+        self.svm                    = SVMModelProcessor(ros=True)
         self.svm_queue              = []
+        self.dataset_queue          = []
         
+    def dataset_request_callback(self, msg):
+        if msg.success == False:
+            self.print('Dataset request processed, error. Parameters: %s' % str(msg.params), LogType.ERROR)
+        try:
+            index = self.dataset_queue.index(msg.params)
+            self.print('Dataset request processed, success. Removing from dataset queue.')
+            self.dataset_queue.pop(index)
+
+        except ValueError:
+            pass
+
     def svm_request_callback(self, msg):
-        dict_received = message_converter.convert_ros_message_to_dictionary(msg)
-        self.svm_queue.append(dict_received)
+        self.svm_queue.append(msg)
 
     def make_svm_model_params(self):
         qry_dict = dict(bag_name=self.CAL_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
@@ -90,15 +102,15 @@ class mrc():
     def update_SVM(self):
         if not len(self.svm_queue):
             return
-        params_for_swap = copy.deepcopy(self.svm_queue[-1])
-        params_for_swap.pop('request_id')
-        if not self.svm.swap(params_for_swap, generate=True):
+        params_for_swap = self.svm_queue.pop(-1)
+        dict_params_for_swap = message_converter.convert_ros_message_to_dictionary(params_for_swap)
+        self.generate_new_svm(dict_params_for_swap)
+        if not self.svm.swap(dict_params_for_swap, generate=True, allow_false=True):
             self.print("Model generation failed.", LogType.WARN, throttle=5)
-            self.svm_request_pub.publish(RequestResponse(request_id=self.svm_queue[-1]['request_id'], success=False))
+            self.svm_request_pub.publish(ResponseSVM(params=params_for_swap, success=False))
         else:
             self.print("SVM model generated.")
-            self.svm_request_pub.publish(RequestResponse(request_id=self.svm_queue[-1]['request_id'], success=True))
-        self.svm_queue.pop(-1)
+            self.svm_request_pub.publish(ResponseSVM(params=params_for_swap, success=True))
 
     def param_callback(self, msg):
         if self.ROS_HOME.params.exists(msg.data):
@@ -112,8 +124,41 @@ class mrc():
         else:
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
+    def generate_new_svm(self, svm_model_params):
+        if not self.svm.load_model(svm_model_params): # No model currently exists;
+            output_statuses = self.svm.generate_model(**svm_model_params, save=True)
+            if not all(output_statuses): # if the model failed to generate, datasets not ready, therefore...
+                # ...check what failed, and queue these datasets to be built:
+                if not output_statuses[0]: # qry set failed to generate:
+                    dataset_msg = message_converter.convert_dictionary_to_ros_message('aarapsi_robot_pack/RequestDataset', svm_model_params['qry'])
+                    self.dataset_queue.append(dataset_msg)
+                if not output_statuses[1]: # ref set failed to generate:
+                    dataset_msg = message_converter.convert_dictionary_to_ros_message('aarapsi_robot_pack/RequestDataset', svm_model_params['ref'])
+                    self.dataset_queue.append(dataset_msg)
+
+                self.dataset_request_pub.publish(self.dataset_queue[0])
+
+                wait_intervals = 0
+                while len(self.dataset_queue):
+                    if rospy.is_shutdown():
+                        sys.exit()
+                    self.print('Waiting for SVM dataset construction...', throttle=5)
+                    self.rate_obj.sleep()
+                    wait_intervals += 1
+                    if wait_intervals > 10 / (1/self.RATE_NUM.get()):
+                        # Resend the oldest queue'd element every 10 seconds
+                        try:
+                            self.dataset_request_pub.publish(self.dataset_queue[0])
+                        except:
+                            pass
+                        wait_intervals = 0
+
+                if not all(self.svm.generate_model(**svm_model_params, save=True)):
+                    raise Exception('Model generation failed even after new datasets were constructed!')
+
     def main(self):
         self.ROS_HOME.set_state(NodeState.MAIN)
+        self.generate_new_svm(self.make_svm_model_params())
 
         while not rospy.is_shutdown():
             self.rate_obj.sleep()

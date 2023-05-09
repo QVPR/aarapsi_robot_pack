@@ -9,7 +9,7 @@ import os
 import copy
 from rospy_message_converter import message_converter
 from std_msgs.msg import String
-from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_tuple, check_enum
+from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum
 from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node
 from pyaarapsi.core.helper_tools import formatException, np_ndarray_to_uint8_list, uint8_list_to_np_ndarray
 from pyaarapsi.core.enum_tools import enum_name, enum_get
@@ -49,12 +49,12 @@ class mrc():
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
         self.param_sub              = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
         self.srv_extraction         = rospy.Service(self.namespace + '/do_extraction', DoExtraction, self.handle_do_extraction)
-        self.dataset_request_sub    = rospy.Subscriber(self.namespace + '/requests/dataset/request', RequestDataset, self.dataset_request_callback, queue_size=1)
+        self.dataset_request_sub    = rospy.Subscriber(self.namespace + '/requests/dataset/request', RequestDataset, self.dataset_request_callback, queue_size=10)
         self.dataset_request_pub    = self.ROS_HOME.add_pub(self.namespace + '/requests/dataset/ready', ResponseDataset, queue_size=1)
 
     def init_params(self, rate_num, log_level, reset):
         self.FEAT_TYPE              = self.ROS_HOME.params.add(self.namespace + "/feature_type",        None,                   lambda x: check_enum(x, FeatureType),           force=False)
-        self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,                   check_positive_two_int_tuple,                   force=False)
+        self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,                   check_positive_two_int_list,                    force=False)
         self.NPZ_DBP                = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",             None,                   check_string,                                   force=False)
         self.BAG_DBP                = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",             None,                   check_string,                                   force=False)
         self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,                   check_string,                                   force=False)
@@ -69,10 +69,12 @@ class mrc():
         
     def init_vars(self):
         # Process reference data
-        self.vpr                = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=True, init_hybridnet=True, init_netvlad=True, cuda=True, autosave=True, printer=self.print)
+        self.vpr                = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=True, init_hybridnet=True, init_netvlad=True, cuda=True, \
+                                                      autosave=True, use_tqdm=True, ros=True)
         self.dataset_queue      = []
         
     def dataset_request_callback(self, msg):
+        self.print("New parameters received.")
         self.dataset_queue.append(msg)
 
     def make_dataset_dict(self):
@@ -84,7 +86,7 @@ class mrc():
         if not len(self.dataset_queue):
             return
         params_for_swap = self.dataset_queue.pop(-1)
-        if not self.vpr.swap(message_converter.convert_ros_message_to_dictionary(params_for_swap), generate=True):
+        if not self.vpr.swap(message_converter.convert_ros_message_to_dictionary(params_for_swap), generate=True, allow_false=True):
             self.print("Dataset generation failed.", LogType.WARN, throttle=5)
             self.dataset_request_pub.publish(ResponseDataset(params=params_for_swap, success=False))
         else:
@@ -97,7 +99,7 @@ class mrc():
         try:
             query           = uint8_list_to_np_ndarray(req.input)
             feat_type       = enum_get(req.feat_type, FeatureType)
-            img_dims        = tuple(req.img_dims)      
+            img_dims        = req.img_dims
             ft_qry          = self.vpr.getFeat(query, feat_type, use_tqdm=False, dims=img_dims)
             ans.output      = np_ndarray_to_uint8_list(ft_qry)
             ans.vector_dims = list(ft_qry.shape)

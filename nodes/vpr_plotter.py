@@ -17,7 +17,7 @@ from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
 from pyaarapsi.vpr_simple.vpr_plots              import doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, doXYWVFigBokeh, \
                                                         updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
 
-from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_two_int_tuple, check_positive_int, check_valid_ip, check_enum, check_string
+from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_two_int_list, check_positive_int, check_valid_ip, check_enum, check_string
 from pyaarapsi.core.helper_tools    import formatException
 from pyaarapsi.core.ros_tools       import roslogger, get_ROS_message_types_dict, set_rospy_log_lvl, init_node, NodeState, LogType
 from pyaarapsi.core.enum_tools      import enum_name
@@ -46,7 +46,7 @@ class mrc: # main ROS class
 
     def init_params(self, rate_num, log_level, compress_in, reset):
         self.FEAT_TYPE       = self.ROS_HOME.params.add(self.namespace + "/feature_type",        None,                   lambda x: check_enum(x, FeatureType), force=False)
-        self.IMG_DIMS        = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,                   check_positive_two_int_tuple,         force=False)
+        self.IMG_DIMS        = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,                   check_positive_two_int_list,          force=False)
         self.NPZ_DBP         = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",             None,                   check_string,                         force=False)
         self.BAG_DBP         = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",             None,                   check_string,                         force=False)
         self.IMG_TOPIC       = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,                   check_string,                         force=False)
@@ -74,11 +74,11 @@ class mrc: # main ROS class
         
         # Process reference data (only needs to be done once)
 
-        dataset_dict                = self.make_dataset_dict()
+
         try:
-            self.image_processor    = VPRDatasetProcessor(dataset=dataset_dict, try_gen=False, init_hybridnet=False, init_netvlad=False, cuda=False, autosave=False, printer=self.print)
-            self.ref_dict           = copy.deepcopy(self.image_processor.dataset['dataset'])
-            self.image_processor.destroy() # destroy to save client memory
+            # Process reference data
+            dataset_dict            = self.make_dataset_dict()
+            self.image_processor    = VPRDatasetProcessor(dataset_dict, try_gen=False, ros=True)
         except:
             self.print(formatException(), LogType.ERROR)
             self.exit()
@@ -181,7 +181,7 @@ class Doc_Frame:
         iframe_end_even       = """&type=ros_compressed" width=510 height=510 style="border: 0; transform: scale(0.49); transform-origin: 0 0;"/>"""
         self.fig_iframe_feed_ = Div(text=iframe_start + nmrc.namespace + "/image" + iframe_end_rect, width=500, height=250)
         self.fig_iframe_mtrx_ = Div(text=iframe_start + nmrc.namespace + "/matrices/rolling" + iframe_end_even, width=250, height=250)
-        self.num_points       = len(nmrc.ref_dict['px'])
+        self.num_points       = len(nmrc.image_processor.dataset['dataset']['px'])
         self.rolling_mtrx_img = np.zeros((self.num_points, self.num_points)) # Make similarity matrix figure
         
         printer('[Bokeh Server] Waiting for services ...')
@@ -193,7 +193,7 @@ class Doc_Frame:
         self.fig_xywv_handles = doXYWVFigBokeh(self.num_points) # Make linear&angular metrics figure
         self.fig_dvec_handles = doDVecFigBokeh(self.num_points) # Make distance vector figure
         self.fig_fdvc_handles = doFDVCFigBokeh(self.num_points) # Make filtered dvc figure
-        self.fig_odom_handles = doOdomFigBokeh(nmrc.ref_dict['px'], nmrc.ref_dict['py']) # Make odometry figure
+        self.fig_odom_handles = doOdomFigBokeh(nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py']) # Make odometry figure
         self.fig_svmm_handles = doSVMMFigBokeh(self.num_points) # Make SVM metrics figure
         
 
@@ -214,10 +214,10 @@ def main_loop(nmrc, doc_frame):
     trueInd         = nmrc.state.data.trueId
 
     # Update odometry visualisation:
-    updateXYWVFigBokeh(doc_frame, matchInd, nmrc.ref_dict['px'], nmrc.ref_dict['py'], nmrc.ref_dict['pw'])
-    updateDVecFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.ref_dict['px'], nmrc.ref_dict['py'])
-    updateFDVCFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.ref_dict['px'], nmrc.ref_dict['py'])
-    updateOdomFigBokeh(doc_frame, matchInd, trueInd, nmrc.ref_dict['px'], nmrc.ref_dict['py'])
+    updateXYWVFigBokeh(doc_frame, matchInd, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'], nmrc.image_processor.dataset['dataset']['pw'])
+    updateDVecFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
+    updateFDVCFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
+    updateOdomFigBokeh(doc_frame, matchInd, trueInd, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
     if not nmrc.field_exists:
         return
     updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.COMPRESS_IN.get(), nmrc.bridge, nmrc.new_field)
