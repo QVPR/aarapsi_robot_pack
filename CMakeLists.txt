@@ -54,29 +54,32 @@ catkin_python_setup()
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
+add_message_files( 
+  FILES # in alphabetical order:
+  CompressedImageDetails.msg
+  CompressedImageLabelStamped.msg
+  CompressedImageOdom.msg
+  CompressedMonitorDetails.msg
+  DatasetParams.msg
   Debug.msg
   Heartbeat.msg
-  LabelDetails.msg
-  ImageStructure.msg
-  MonitorDetails.msg
-  CompressedMonitorDetails.msg
-  ImageLabelStamped.msg
-  CompressedImageLabelStamped.msg
   ImageDetails.msg
-  CompressedImageDetails.msg
+  ImageLabelStamped.msg
   ImageOdom.msg
-  CompressedImageOdom.msg
+  ImageStructure.msg
+  LabelDetails.msg
+  MonitorDetails.msg
   RequestDataset.msg
   RequestSVM.msg
-  RequestResponse.msg
+  ResponseDataset.msg
+  ResponseSVM.msg
 )
 
 ## Generate services in the 'srv' folder
 add_service_files(
   FILES
   GenerateObj.srv
+  DoExtraction.srv
 )
 
 ## Generate actions in the 'action' folder

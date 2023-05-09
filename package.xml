@@ -62,6 +62,8 @@
   <exec_depend>python3-sklearn</exec_depend> <!-- pip install scikit-learn -->
   <exec_depend>python3-sklearnex</exec_depend> <!-- pip install scikit-learn-intelex -->
   <exec_depend>python3-tqdm</exec_depend>
+  <exec_depend>python3-nvidia-ml</exec_depend>  <!-- p pip install nvidia-ml-py3 -->
+  <exec_depend>python3-pickle</exec_depend>
  
   <export>
   </export>

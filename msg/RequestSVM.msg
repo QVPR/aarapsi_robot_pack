@@ -1,7 +1,6 @@
 int64 request_id
-string ref
-string qry
-string database_path
-uint8 view
-uint8 ft_type
-int64[] img_dims
+aarapsi_robot_pack/DatasetParams ref
+aarapsi_robot_pack/DatasetParams qry
+string bag_dbp
+string npz_dbp
+string svm_dbp

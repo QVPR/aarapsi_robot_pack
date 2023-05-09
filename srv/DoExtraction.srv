@@ -1,0 +1,7 @@
+string feat_type
+int64[] img_dims
+uint8[] input
+---
+bool success # Whether or not succeeded
+int64[] vector_dims
+uint8[] output
