@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!-- 
+    Monitor launch file
+ -->
+<launch>
+    <arg name="launch_monitor"          default="true"/>
+    <arg name="launch_trainer"          default="true"/>
+
+    <arg name="offline"                 default="false"/>
+    
+    <arg name="main_rate"               default="12.0"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="reset"                   default="True"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <arg name="monitor_printprediction" default="False"/>
+
+    <arg name="compress_transport"      default="True"/>
+
+    <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
+
+    <group if="$(arg offline)">
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
+    </group>
+    
+    <group ns="$(arg namespace)">
+        <!-- Monitor's Trainer Node: -->
+        <node if="$(arg launch_trainer)" pkg="aarapsi_robot_pack" type="svm_trainer.py" name="svm_trainer" output="screen" 
+            args="-r $(arg main_rate) -N svm_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 5">
+        </node>
+
+        <!-- Monitor Node: -->
+        <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
+            args="-Ci $(arg compress_transport) -Co $(arg compress_transport) -p $(arg monitor_printprediction)
+                    -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
+        </node>
+    </group>
+
+</launch>

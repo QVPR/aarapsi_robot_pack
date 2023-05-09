@@ -3,14 +3,21 @@
     Cruncher launch file
  -->
 <launch>
+    <arg name="launch_cruncher"         default="true"/>
+    <arg name="launch_trainer"          default="true"/>
+
     <arg name="offline"                 default="false"/>
-    <arg name="cruncher_compress_in"    default="True"/>
-    <arg name="compress_transport"      default="True"/>
-    <arg name="cruncher_groundtruth"    default="True"/>
+
     <arg name="main_rate"               default="12.0"/>
     <arg name="anon"                    default="True"/>
-    <arg name="namespace"               default="/vpr_nodes"/>
     <arg name="reset"                   default="True"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <arg name="cruncher_compress_in"    default="True"/>
+    <arg name="cruncher_groundtruth"    default="True"/>
+    <arg name="compress_transport"      default="True"/>
+
     <arg name="log_level"               default="2"/>
 
     <group if="$(arg offline)">
@@ -18,9 +25,15 @@
     </group>
     
     <group ns="$(arg namespace)">
-        <node pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
+        <!-- Cruncher's Trainer Node: -->
+        <node if="$(arg launch_trainer)" pkg="aarapsi_robot_pack" type="dataset_trainer.py" name="dataset_trainer" output="screen" 
+            args="-r $(arg main_rate) -N dataset_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 3">
+        </node>
+
+        <!-- Cruncher Node: -->
+        <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
             args="-Ci $(arg cruncher_compress_in) -Co $(arg compress_transport) -G $(arg cruncher_groundtruth) 
-                    -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 3">
+                    -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
         </node>
     </group>
 
