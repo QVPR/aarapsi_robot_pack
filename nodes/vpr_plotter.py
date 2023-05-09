@@ -12,14 +12,15 @@ import copy
 
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjRequest
 
-from pyaarapsi.vpr_simple.new_vpr_feature_tool   import VPRImageProcessor
-from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
+from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
+from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
 from pyaarapsi.vpr_simple.vpr_plots              import doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, doXYWVFigBokeh, \
                                                         updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
 
-from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_positive_two_int_tuple, check_positive_int, check_valid_ip, check_enum, check_string
-from pyaarapsi.core.helper_tools import formatException
-from pyaarapsi.core.ros_tools import roslogger, get_ROS_message_types_dict, set_rospy_log_lvl, init_node, NodeState, LogType
+from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_two_int_tuple, check_positive_int, check_valid_ip, check_enum, check_string
+from pyaarapsi.core.helper_tools    import formatException
+from pyaarapsi.core.ros_tools       import roslogger, get_ROS_message_types_dict, set_rospy_log_lvl, init_node, NodeState, LogType
+from pyaarapsi.core.enum_tools      import enum_name
 
 from functools import partial
 from bokeh.layouts import column, row
@@ -75,8 +76,7 @@ class mrc: # main ROS class
 
         dataset_dict                = self.make_dataset_dict()
         try:
-            self.image_processor    = VPRImageProcessor(bag_dbp=self.BAG_DBP.get(), npz_dbp=self.NPZ_DBP.get(), dataset=dataset_dict, try_gen=True, \
-                                                        init_hybridnet=True, init_netvlad=True, cuda=True, autosave=True, printer=self.print)
+            self.image_processor    = VPRDatasetProcessor(dataset=dataset_dict, try_gen=False, init_hybridnet=False, init_netvlad=False, cuda=False, autosave=False, printer=self.print)
             self.ref_dict           = copy.deepcopy(self.image_processor.dataset['dataset'])
             self.image_processor.destroy() # destroy to save client memory
         except:
@@ -105,8 +105,9 @@ class mrc: # main ROS class
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
     def make_dataset_dict(self):
-        return dict(bag_name=self.REF_BAG_NAME.get(), odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], \
-                    sample_rate=self.REF_SAMPLE_RATE.get(), ft_types=[self.FEAT_TYPE.get()], img_dims=self.IMG_DIMS.get(), filters={})
+        return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                    odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.REF_SAMPLE_RATE.get(), \
+                    ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
     
     def _timer_srv_GetSVMField(self, generate=False):
         if not self.main_ready:
@@ -260,6 +261,7 @@ if __name__ == '__main__':
     
     server = Server({'/': lambda doc: main(doc, nmrc)}, num_procs=1, address=args['address'], port=args['port'])
     server.start()
+    nmrc.print("Ready for user connections.")
     server.io_loop.start()
 
 ## Useful

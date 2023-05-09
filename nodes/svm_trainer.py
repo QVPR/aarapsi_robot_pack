@@ -6,13 +6,18 @@ import argparse as ap
 import numpy as np
 import sys
 import os
+import copy
+from rospy_message_converter import message_converter
 from std_msgs.msg import String
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_tuple, check_enum
 from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node
 from pyaarapsi.core.helper_tools import formatException
+from pyaarapsi.core.enum_tools import enum_name
 
-from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
+from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
 from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
+
+from aarapsi_robot_pack.msg import RequestResponse, RequestSVM
 
 '''
 
@@ -38,8 +43,10 @@ class mrc():
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_rospy(self):
-        self.rate_obj       = rospy.Rate(self.RATE_NUM.get())
-        self.param_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
+        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
+        self.param_sub              = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
+        self.svm_request_sub        = rospy.Subscriber(self.namespace + '/requests/svm/request', RequestSVM, self.svm_request_callback, queue_size=1)
+        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/ready', RequestResponse, queue_size=1)
 
     def init_params(self, rate_num, log_level, reset):
         self.FEAT_TYPE              = self.ROS_HOME.params.add(self.namespace + "/feature_type",        None,             lambda x: check_enum(x, FeatureType),       force=False)
@@ -61,37 +68,37 @@ class mrc():
         self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,         check_positive_float,                       force=reset)
         self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,        check_positive_int,                         force=reset)
         
-        self.SVM_DATA_PARAMS        = [self.FEAT_TYPE, self.IMG_DIMS, self.NPZ_DBP, self.BAG_DBP, self.SVM_DBP, self.IMG_TOPIC, self.ODOM_TOPIC, \
-                                       self.CAL_QRY_BAG_NAME, self.CAL_QRY_FILTERS, self.CAL_QRY_SAMPLE_RATE, \
-                                       self.CAL_REF_BAG_NAME, self.CAL_REF_FILTERS, self.CAL_REF_SAMPLE_RATE]
-        self.SVM_DATA_NAMES         = [i.name for i in self.SVM_DATA_PARAMS]
-        
     def init_vars(self):
         # Set up SVM
         self.svm_model_params       = self.make_svm_model_params()
-        self.svm                    = SVMModelProcessor(self.svm_model_params, try_gen=True, ros=True, \
-                                                        init_hybridnet=True, init_netvlad=True, cuda=True, \
-                                                        autosave=True, printer=self.print)
+        self.svm                    = SVMModelProcessor(self.svm_model_params, try_gen=True, ros=True, printer=self.print)
+        self.svm_queue              = []
+        
+    def svm_request_callback(self, msg):
+        dict_received = message_converter.convert_ros_message_to_dictionary(msg)
+        self.svm_queue.append(dict_received)
 
     def make_svm_model_params(self):
-        return dict(ref=self.make_ref_dataset_dict(), qry=self.make_qry_dataset_dict(), bag_dbp=self.BAG_DBP.get(), npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
+        qry_dict = dict(bag_name=self.CAL_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
+                        ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
+        ref_dict = dict(bag_name=self.CAL_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
+                        ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
+        return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
 
-    def make_ref_dataset_dict(self):
-        return dict(bag_name=self.CAL_REF_BAG_NAME.get(), odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], \
-                    sample_rate=self.CAL_REF_SAMPLE_RATE.get(), ft_types=[self.FEAT_TYPE.get()], img_dims=self.IMG_DIMS.get(), filters={})
-
-    def make_qry_dataset_dict(self):
-        return dict(bag_name=self.CAL_QRY_BAG_NAME.get(), odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], \
-                    sample_rate=self.CAL_QRY_SAMPLE_RATE.get(), ft_types=[self.FEAT_TYPE.get()], img_dims=self.IMG_DIMS.get(), filters={})
-
-    def update_SVM(self, param_to_change=None):
-        self.svm_model_params       = self.make_svm_model_params()
-        if not self.svm.swap(self.svm_model_params, generate=True):
-            self.print("Model generation failed. Reverting change to ROS parameter %s." % param_to_change.name, LogType.WARN, throttle=5)
-            param_to_change.revert()
+    def update_SVM(self):
+        if not len(self.svm_queue):
+            return
+        params_for_swap = copy.deepcopy(self.svm_queue[-1])
+        params_for_swap.pop('request_id')
+        if not self.svm.swap(params_for_swap, generate=True):
+            self.print("Model generation failed.", LogType.WARN, throttle=5)
+            self.svm_request_pub.publish(RequestResponse(request_id=self.svm_queue[-1]['request_id'], success=False))
         else:
-            self.print("SVM model swapped.")
-            self.print(str(self.svm_model_params), LogType.DEBUG)
+            self.print("SVM model generated.")
+            self.svm_request_pub.publish(RequestResponse(request_id=self.svm_queue[-1]['request_id'], success=True))
+        self.svm_queue.pop(-1)
 
     def param_callback(self, msg):
         if self.ROS_HOME.params.exists(msg.data):
@@ -102,14 +109,6 @@ class mrc():
                 set_rospy_log_lvl(self.LOG_LEVEL.get())
             elif msg.data == self.RATE_NUM.name:
                 self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-
-            svm_data_comp   = [i == msg.data for i in self.SVM_DATA_NAMES]
-            try:
-                param = np.array(self.SVM_DATA_PARAMS)[svm_data_comp][0]
-                self.print("Change to SVM parameters detected.", LogType.WARN)
-                self.update_SVM(param)
-            except:
-                self.print(formatException(), LogType.DEBUG)
         else:
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
@@ -118,6 +117,10 @@ class mrc():
 
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
+            self.loop_contents()
+    
+    def loop_contents(self):
+        self.update_SVM()
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:

@@ -10,18 +10,22 @@ import argparse as ap
 import os
 import sys
 import cv2
+import copy
+
+from rospy_message_converter import message_converter
 
 from aarapsi_robot_pack.msg import RequestSVM, RequestResponse # Our custom structures
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse
 
 from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
-from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
+from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
 
 from pyaarapsi.vpred                import *
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_tuple, check_bool, check_enum, check_string, check_positive_int
 from pyaarapsi.core.helper_tools    import formatException
 from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, get_ROS_message_types_dict, init_node, LogType, NodeState
+from pyaarapsi.core.enum_tools      import enum_name
 
 class mrc: # main ROS class
     def __init__(self, compress_in, compress_out, rate_num, namespace, node_name, anon, print_prediction, log_level, reset, order_id=0):
@@ -75,10 +79,11 @@ class mrc: # main ROS class
         self.states                 = [0,0,0]
 
         # Set up SVM
-        self.svm_model_params       = self.make_svm_model_params()
-        self.svm                    = SVMModelProcessor(self.svm_model_params, try_gen=True, ros=True, \
+        self.svm                    = SVMModelProcessor(self.make_svm_model_params(), try_gen=True, ros=True, \
                                                         init_hybridnet=True, init_netvlad=True, cuda=True, \
                                                         autosave=True, printer=self.print)
+        self.svm_requests           = []
+        self.svm_last_id            = -1
 
         # flags to denest main loop:
         self.new_label              = False # new label received
@@ -86,15 +91,13 @@ class mrc: # main ROS class
         self.svm_swap_pending       = False
 
     def make_svm_model_params(self):
-        return dict(ref=self.make_ref_dataset_dict(), qry=self.make_qry_dataset_dict(), bag_dbp=self.BAG_DBP.get(), npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
-
-    def make_ref_dataset_dict(self):
-        return dict(bag_name=self.CAL_REF_BAG_NAME.get(), odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], \
-                    sample_rate=self.CAL_REF_SAMPLE_RATE.get(), ft_types=[self.FEAT_TYPE.get()], img_dims=self.IMG_DIMS.get(), filters={})
-
-    def make_qry_dataset_dict(self):
-        return dict(bag_name=self.CAL_QRY_BAG_NAME.get(), odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], \
-                    sample_rate=self.CAL_QRY_SAMPLE_RATE.get(), ft_types=[self.FEAT_TYPE.get()], img_dims=self.IMG_DIMS.get(), filters={})
+        qry_dict = dict(bag_name=self.CAL_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
+                        ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
+        ref_dict = dict(bag_name=self.CAL_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
+                        ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
+        return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
 
     def init_rospy(self):
 
@@ -104,27 +107,37 @@ class mrc: # main ROS class
         self.param_checker_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
         self.vpr_label_sub          = rospy.Subscriber(self.namespace + "/label" + self.INPUTS['topic'], self.INPUTS['label'], self.label_callback, queue_size=1)
         self.svm_request_sub        = rospy.Subscriber(self.namespace + '/requests/svm/ready', RequestResponse, self.svm_request_callback, queue_size=1)
+        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/request', RequestSVM, queue_size=1)
         self.svm_state_pub          = self.ROS_HOME.add_pub(self.namespace + "/monitor/state" + self.INPUTS['topic'], self.OUTPUTS['mon_dets'], queue_size=1)
         self.svm_field_pub          = self.ROS_HOME.add_pub(self.namespace + "/monitor/field" + self.INPUTS['topic'], self.OUTPUTS['img_dets'], queue_size=1)
-        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/request', RequestSVM, queue_size=1)
         self.svm_field_srv          = rospy.Service(self.namespace + '/GetSVMField', GenerateObj, self.handle_GetSVMField)
 
+    def debug_cb(self, msg):
+        if msg.node_name == self.node_name:
+            if msg.instruction == 0:
+                self.print(self.make_svm_model_params(), LogType.DEBUG)
+            else:
+                self.print(msg.instruction, LogType.DEBUG)
+
     def update_SVM(self, param_to_change=None):
-        self.svm_model_params       = self.make_svm_model_params()
-        if not self.svm.swap(self.svm_model_params) and not self.svm_swap_pending:
-            self.print("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR, throttle=5)
+        svm_model_params       = self.make_svm_model_params()
+        if not self.svm.swap(svm_model_params):
+            self.print("Model swap failed. Previous model will be retained (Rchanged ROS parameter will revert)", LogType.WARN, throttle=5)
             param_to_change.revert()
-            self.svm_swap_pending = True
-        elif not self.svm.swap(self.svm_model_params) and self.svm_swap_pending:
-            self.print("Model swap failed. Previous model will be retained (ROS parameters won't be updated!)", LogType.ERROR, throttle=5)
+            self.svm_swap_pending   = True
+            self.svm_last_id        = self.svm_last_id + 1
+            svm_model_params['request_id'] = self.svm_last_id
+            self.svm_requests.append(svm_model_params)
+            svm_msg = message_converter.convert_dictionary_to_ros_message('aarapsi_robot_pack/RequestSVM', svm_model_params)
+            self.svm_request_pub.publish(svm_msg)
+            del svm_msg
         else:
             self.print("SVM model swapped.")
-            self.print(str(self.svm_model_params), LogType.DEBUG)
             self.publish_svm_mat(True)
             self.svm_swap_pending = False
 
     def svm_request_callback(self, msg):
-        pass # TODO
+        pass
 
     def param_callback(self, msg):
         if self.ROS_HOME.params.exists(msg.data):
@@ -141,6 +154,8 @@ class mrc: # main ROS class
                 param = np.array(self.SVM_DATA_PARAMS)[svm_data_comp][0]
                 self.print("Change to SVM parameters detected.", LogType.WARN)
                 self.update_SVM(param)
+            except IndexError:
+                pass
             except:
                 self.print(formatException(), LogType.DEBUG)
         else:
@@ -230,7 +245,15 @@ class mrc: # main ROS class
         nmrc.rate_obj.sleep()
         self.new_label = False
 
-        (y_pred_rt, y_zvalues_rt, [factor1_qry, factor2_qry], prob) = self.svm.predict(self.label.data.dvc)
+        # Predict model information, but have a try-except to catch if model is transitioning state
+        predict_success = False
+        while not predict_success:
+            try:
+                (y_pred_rt, y_zvalues_rt, [factor1_qry, factor2_qry], prob) = self.svm.predict(self.label.data.dvc)
+                predict_success = True
+            except:
+                self.print("Predict failed. Trying again ...", LogType.WARN, throttle=1)
+                rospy.sleep(0.005)
 
         if self.PRINT_PREDICTION.get():
             if self.label.data.state == 0:
