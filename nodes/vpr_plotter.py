@@ -73,8 +73,6 @@ class mrc: # main ROS class
         self.INPUTS                 = get_ROS_message_types_dict(self.COMPRESS_IN.get())
         
         # Process reference data (only needs to be done once)
-
-
         try:
             # Process reference data
             dataset_dict            = self.make_dataset_dict()

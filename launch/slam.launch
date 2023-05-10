@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!-- 
+    Bringup launch file for SLAM nodes
+ -->
+<launch>
+    <!-- Global Arguments: -->
+    <arg name="log_level"               default="2"/>
+    <arg name="launch_slam_node"        default="true"/>
+    <arg name="launch_slam_ekf"         default="true"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
+
+    <group ns="$(arg namespace)">
+        <!-- SLAM Node: -->
+        <group if="$(arg launch_slam_node)">
+            <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_localization.launch"/>
+        </group>
+
+        <!-- SLAM EKF Node: -->
+        <group if="$(arg launch_slam_ekf)">
+            <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_ekf.launch"/>
+        </group>
+
+    </group>
+
+</launch>
