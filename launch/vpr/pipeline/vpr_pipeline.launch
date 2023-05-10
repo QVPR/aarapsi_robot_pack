@@ -38,6 +38,8 @@
 
     <arg name="compress_transport"      default="True"/>
 
+    <arg name="use_gpu"                 default="True"/>
+
     <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
 
     <group if="$(arg offline)">
@@ -63,10 +65,9 @@
                     args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -ID 2" />
         </group>
 
-
         <!-- Cruncher's Trainer Node: -->
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="dataset_trainer.py" name="dataset_trainer" output="screen" 
-            args="-r $(arg main_rate) -N dataset_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 3">
+            args="-r $(arg main_rate) -N dataset_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -G $(arg use_gpu) -ID 3">
         </node>
 
         <!-- Cruncher Node: -->

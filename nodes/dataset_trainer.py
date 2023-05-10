@@ -35,12 +35,12 @@ monitor's performance and activities.
 '''
 
 class mrc():
-    def __init__(self, node_name, rate_num, namespace, anon, log_level, reset, order_id=0):
+    def __init__(self, node_name, rate_num, namespace, anon, log_level, reset, use_gpu=True, order_id=0):
 
         init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
 
         self.init_params(log_level, rate_num, reset)
-        self.init_vars()
+        self.init_vars(use_gpu)
         self.init_rospy()
 
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
@@ -67,9 +67,10 @@ class mrc():
         self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,               check_positive_float,                           force=reset)
         self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,              check_positive_int,                             force=reset)
         
-    def init_vars(self):
+    def init_vars(self, use_gpu):
         # Process reference data
-        self.vpr                = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=True, init_hybridnet=True, init_netvlad=True, cuda=True, \
+        self.use_gpu            = use_gpu
+        self.vpr                = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
                                                       autosave=True, use_tqdm=True, ros=True)
         self.dataset_queue      = []
         
@@ -170,7 +171,8 @@ def do_args():
     parser.add_argument('--anon',             '-a',  type=check_bool,                   default=False,            help="Set whether node should be anonymous (default: %(default)s).")
     parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",     help="Set ROS namespace (default: %(default)s).")
     parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16],    default=2,                help="Set ROS log level (default: %(default)s).")
-    parser.add_argument('--reset',            '-R',  type=check_bool,                   default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
+    parser.add_argument('--reset',            '-R',  type=check_bool,                   default=False,            help='Force reset of parameters to specified ones (default: %(default)s).')
+    parser.add_argument('--use-gpu',          '-G',  type=check_bool,                   default=True,             help='Specify whether to use GPU (default: %(default)s).')
     parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
 
     raw_args = parser.parse_known_args()
@@ -180,7 +182,7 @@ def do_args():
 if __name__ == '__main__':
     args        = do_args()
     try:
-        nmrc = mrc(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
+        nmrc = mrc(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], use_gpu=args['use_gpu'], order_id=args['order_id'])
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
