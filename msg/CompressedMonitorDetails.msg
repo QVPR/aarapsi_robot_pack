@@ -2,8 +2,8 @@
 # about what reference data to use and have a copy of the reference data they can access already
 
 sensor_msgs/CompressedImage queryImage	# Query image
-aarapsi_robot_pack/LabelDetails data    # Label details (indices, dvc, ...)
-std_msgs/Header header		            # Header
+aarapsi_robot_pack/LabelDetails data    	# Label details (indices, dvc, ...)
+std_msgs/Header header		            	# Header
 float64 mState			                # Continuous monitor state estimate 
 float64 prob			                # Monitor probability estimate
 bool mStateBin			                # Binary monitor state estimate

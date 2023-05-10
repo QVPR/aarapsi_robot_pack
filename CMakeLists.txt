@@ -60,6 +60,7 @@ add_message_files(
   CompressedImageLabelStamped.msg
   CompressedImageOdom.msg
   CompressedMonitorDetails.msg
+  ControllerStateInfo.msg
   DatasetParams.msg
   Debug.msg
   Heartbeat.msg
@@ -73,6 +74,8 @@ add_message_files(
   RequestSVM.msg
   ResponseDataset.msg
   ResponseSVM.msg
+  SafetyStates.msg
+  xyw.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -80,6 +83,7 @@ add_service_files(
   FILES
   GenerateObj.srv
   DoExtraction.srv
+  GetSafetyStates.srv
 )
 
 ## Generate actions in the 'action' folder
