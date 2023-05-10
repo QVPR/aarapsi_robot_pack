@@ -17,7 +17,7 @@ import sys
 
 from rospy_message_converter import message_converter
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse, DoExtraction, DoExtractionRequest
-from aarapsi_robot_pack.msg import RequestDataset, ResponseDataset
+from aarapsi_robot_pack.msg import RequestDataset, ResponseDataset, xyw
 
 from pyaarapsi.vpr_simple.vpr_helpers            import Tolerance_Mode, FeatureType
 from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
@@ -104,7 +104,7 @@ class mrc: # main ROS class
             self.print(formatException(), LogType.ERROR)
             self.exit()
         
-        self.rolling_mtrx_img       = np.zeros((len(self.image_processor.dataset['dataset']['px']),)*2) # Make empty similarity matrix figure
+        self.sim_mtrx_img           = np.zeros((len(self.image_processor.dataset['dataset']['px']),)*2) # Make empty similarity matrix figure
 
         self.generate_path(self.image_processor.dataset['dataset']['px'], self.image_processor.dataset['dataset']['py'], self.image_processor.dataset['dataset']['pw'], self.image_processor.dataset['dataset']['time'])
 
@@ -121,7 +121,7 @@ class mrc: # main ROS class
         self.path_pub               = self.ROS_HOME.add_pub(self.namespace + '/path', Path, queue_size=1)
         self.vpr_feed_pub           = self.ROS_HOME.add_pub(self.namespace + "/image" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
         self.vpr_label_pub          = self.ROS_HOME.add_pub(self.namespace + "/label" + self.OUTPUTS['topic'], self.OUTPUTS['label'], queue_size=1)
-        self.rolling_mtrx           = self.ROS_HOME.add_pub(self.namespace + "/matrices/rolling" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
+        self.sim_mtrx_pub           = self.ROS_HOME.add_pub(self.namespace + "/similiarity_matrix" + self.OUTPUTS['topic'], self.OUTPUTS['image'], queue_size=1)
         self.dataset_request_pub    = self.ROS_HOME.add_pub(self.namespace + "/requests/dataset/request", RequestDataset, queue_size=1)
         self.dataset_request_sub    = rospy.Subscriber(self.namespace + '/requests/dataset/ready', ResponseDataset, self.dataset_request_callback, queue_size=1)
         self.data_sub               = rospy.Subscriber(self.namespace + "/img_odom" + self.INPUTS['topic'], self.INPUTS['data'], self.data_callback, queue_size=1)
@@ -255,10 +255,10 @@ class mrc: # main ROS class
     def publish_ros_info(self, cv2_img, tInd, mInd, dvc, state):
     # Publish label and/or image feed
 
-        self.rolling_mtrx_img = np.delete(self.rolling_mtrx_img, 0, 1) # delete first column (oldest query)
-        self.rolling_mtrx_img = np.concatenate((self.rolling_mtrx_img, dvc), 1)
+        self.sim_mtrx_img = np.delete(self.sim_mtrx_img, 0, 1) # delete first column (oldest query)
+        self.sim_mtrx_img = np.concatenate((self.sim_mtrx_img, dvc), 1)
 
-        mtrx_rgb = grey2dToColourMap(self.rolling_mtrx_img, dims=(500,500), colourmap=cv2.COLORMAP_JET)
+        mtrx_rgb = grey2dToColourMap(self.sim_mtrx_img, dims=(500,500), colourmap=cv2.COLORMAP_JET)
 
         if self.COMPRESS_OUT.get():
             ros_image_to_pub = self.bridge.cv2_to_compressed_imgmsg(cv2_img, "jpeg") # jpeg (png slower)
@@ -271,10 +271,13 @@ class mrc: # main ROS class
         ros_image_to_pub.header.stamp = rospy.Time.now()
         ros_image_to_pub.header.frame_id = 'map'
 
+        self.vpr_ego = [self.image_processor.dataset['dataset']['px'][mInd], self.image_processor.dataset['dataset']['py'][mInd], self.image_processor.dataset['dataset']['pw'][mInd]]
+        self.ego_known = True
+
+
         struct_to_pub.queryImage        = ros_image_to_pub
-        struct_to_pub.data.odom.x       = self.ego[0]
-        struct_to_pub.data.odom.y       = self.ego[1]
-        struct_to_pub.data.odom.z       = self.ego[2]
+        struct_to_pub.data.gt_ego       = xyw(x=self.ego[0], y=self.ego[1], w=self.ego[2])
+        struct_to_pub.data.vpr_ego      = xyw(x=self.vpr_ego[0], y=self.vpr_ego[1], w=self.vpr_ego[2])
         struct_to_pub.data.dvc          = dvc
         struct_to_pub.data.matchId      = mInd
         struct_to_pub.data.trueId       = tInd
@@ -289,13 +292,10 @@ class mrc: # main ROS class
         odom_to_pub.header.stamp = rospy.Time.now()
         odom_to_pub.header.frame_id = 'map'
 
-        self.rolling_mtrx.publish(ros_matrix_to_pub)
+        self.sim_mtrx_pub.publish(ros_matrix_to_pub)
         self.odom_estimate_pub.publish(odom_to_pub)
         self.vpr_feed_pub.publish(ros_image_to_pub) # image feed publisher
         self.vpr_label_pub.publish(struct_to_pub) # label publisher
-
-        self.vpr_ego = [self.image_processor.dataset['dataset']['px'][mInd], self.image_processor.dataset['dataset']['py'][mInd], self.image_processor.dataset['dataset']['pw'][mInd]]
-        self.ego_known = True
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:
