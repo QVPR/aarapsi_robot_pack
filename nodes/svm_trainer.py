@@ -36,10 +36,11 @@ class mrc():
 
         init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
 
-        self.init_params(log_level, rate_num, reset)
+        self.init_params(rate_num, log_level, reset)
         self.init_vars()
         self.init_rospy()
 
+        self.generate_new_svm(self.make_svm_model_params())
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_rospy(self):
@@ -158,7 +159,6 @@ class mrc():
 
     def main(self):
         self.ROS_HOME.set_state(NodeState.MAIN)
-        self.generate_new_svm(self.make_svm_model_params())
 
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
