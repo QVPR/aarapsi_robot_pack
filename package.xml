@@ -49,6 +49,7 @@
   <exec_depend>message_runtime</exec_depend>
   <exec_depend>rospy_message_converter</exec_depend>
   <exec_depend>image_geometry</exec_depend>
+  <exec_depend>web_video_server</exec_depend>
 
   <exec_depend>python3-rospkg</exec_depend>
   <exec_depend>python3-cv_bridge</exec_depend>	
@@ -59,11 +60,17 @@
   <exec_depend>python3-time</exec_depend> 
   <exec_depend>python3-matplotlib</exec_depend> 
   <exec_depend>python3-pyyaml</exec_depend>
-  <exec_depend>python3-sklearn</exec_depend> <!-- pip install scikit-learn -->
-  <exec_depend>python3-sklearnex</exec_depend> <!-- pip install scikit-learn-intelex -->
+  <exec_depend>python3-sklearn</exec_depend>            <!-- pip install scikit-learn -->
+  <exec_depend>python3-sklearnex</exec_depend>          <!-- pip install scikit-learn-intelex -->
   <exec_depend>python3-tqdm</exec_depend>
-  <exec_depend>python3-nvidia-ml</exec_depend>  <!-- p pip install nvidia-ml-py3 -->
+  <exec_depend>python3-nvidia-ml</exec_depend>          <!-- p pip install nvidia-ml-py3 -->
   <exec_depend>python3-pickle</exec_depend>
+  <exec_depend>python3-gdown</exec_depend>              <!-- pip install gdown -->
+  <exec_depend>python3-fastdist</exec_depend>           <!-- pip install fastdist -->
+  <exec_depend>python3-numba</exec_depend>              <!-- pip install numba -->
+  <exec_depend>python3-bokeh</exec_depend>              <!-- pip install bokeh -->
+  <exec_depend>python3-numexpr</exec_depend>            <!-- pip install numexpr==2.7.3 -->
+  
  
   <export>
   </export>
