@@ -156,11 +156,6 @@ class mrc:
     def loop_contents(self):
         self.update_target()
 
-        yaw_cmd             = -1 * self.angle_wrap(self.target_yaw - self.current_yaw)
-        new_twist           = Twist()
-        new_twist.linear.x  = 0.5
-        new_twist.angular.z = yaw_cmd
-
         #roslogger("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw), LogType.INFO, ros=True)
         #roslogger("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, self.angle_wrap(self.true_yaw - self.current_yaw)), LogType.INFO, ros=True)
 
@@ -198,10 +193,17 @@ class mrc:
         msg.group.groundtruth_topic = self.gt_odom
         self.info_pub.publish(msg)
 
-        if msg.mStateBin == True:
-            self.twist_pub.publish(new_twist)
+        yaw_cmd             = -1 * self.angle_wrap(self.target_yaw - self.current_yaw)
+        new_twist           = Twist()
+        
+        new_twist.angular.z = yaw_cmd
+
+        if msg.group.mStateBin == True:
+            new_twist.linear.x  = 0.5
         else:
-            rospy.loginfo('Ignoring datapoint; low confidence. Score: %s' % (str(msg.mState)))
+            new_twist.linear.x  = 0.2
+            rospy.loginfo('Poor datapoint; low confidence. Reducing top speed... Score: %s' % (str(msg.group.mState)))
+        self.twist_pub.publish(new_twist)
 
     def exit(self):
         roslogger("Exit state received.", LogType.INFO, ros=False)

@@ -84,8 +84,8 @@ class mrc:
 
     def handle_GetSafetyStates(self, requ):
         ans = GetSafetyStatesResponse()
-        ans.states.autonomous = self.enable
-        ans.states.fast_mode = (self.mode==2)
+        ans.states.autonomous = self.enabled
+        ans.states.fast_mode = self.mode == 2
         return ans
 
     def main(self):
