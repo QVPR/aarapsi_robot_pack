@@ -46,7 +46,7 @@ class Throttle_Topic:
         self.msgs       = [[] for i in types]
 
         exts_string     = ''.join(self.exts)
-        printer("Throttling %s[%s] to %s[%s] at %0.2f Hz" % (topic_in, exts_string, topic_out, exts_string, rate))
+        printer("Throttling %s[%s] to %s[%s] at %0.2f Hz" % (topic_in, exts_string, self.namespace + topic_out, exts_string, rate))
 
     def cb(self, msg):
         index = self.types.index(type(msg))

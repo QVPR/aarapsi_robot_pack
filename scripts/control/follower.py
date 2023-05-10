@@ -149,45 +149,59 @@ class mrc:
 
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
-
-            self.update_target()
-
-            yaw_cmd             = -1 * self.angle_wrap(self.target_yaw - self.current_yaw)
-            new_twist           = Twist()
-            new_twist.linear.x  = 0.5
-            new_twist.angular.z = yaw_cmd
-
-            roslogger("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw), LogType.INFO, ros=True)
-            roslogger("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, self.angle_wrap(self.true_yaw - self.current_yaw)), LogType.INFO, ros=True)
-
-            safety_states_srv       = self.srv_safety(GetSafetyStatesRequest())
-
-            msg                     = ControllerStateInfo()
-            try:
-                msg.query_image     = self.img_convert(self.svm_details.queryImage)
-                msg.label_details   = self.svm_details.data
-                msg.mState          = self.svm_details.mState
-                msg.prob            = self.svm_details.prob
-                msg.mStateBin       = self.svm_details.mStateBin
-                msg.factors         = self.svm_details.factors
-            except:
-                pass
-            msg.safety_states       = safety_states_srv.states
-
-            msg.current_yaw         = self.current_yaw
-            msg.target_yaw          = self.target_yaw
-            msg.true_yaw            = self.true_yaw
-            msg.delta_yaw           = self.delta_yaw
-
-            msg.lookahead           = self.lookahead_inds
-            msg.lookahead_mode      = 'index-based'
-
-            msg.vpr_topic           = self.vpr_odom
-            msg.jackal_topic        = self.jackal_odom
-            msg.groundtruth_topic   = self.gt_odom
-            self.info_pub.publish(msg)
-            
+            self.loop_contents()
+        
         self.exit()
+    
+    def loop_contents(self):
+        self.update_target()
+
+        yaw_cmd             = -1 * self.angle_wrap(self.target_yaw - self.current_yaw)
+        new_twist           = Twist()
+        new_twist.linear.x  = 0.5
+        new_twist.angular.z = yaw_cmd
+
+        #roslogger("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw), LogType.INFO, ros=True)
+        #roslogger("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, self.angle_wrap(self.true_yaw - self.current_yaw)), LogType.INFO, ros=True)
+
+        safety_states_srv       = self.srv_safety(GetSafetyStatesRequest())
+
+        msg                     = ControllerStateInfo()
+        try:
+            msg.query_image         = self.img_convert(self.svm_details.queryImage)
+            # Extract Label Details:
+            msg.dvc                 = self.svm_details.data.dvc
+            msg.group.gt_ego        = self.svm_details.data.gt_ego
+            msg.group.vpr_ego       = self.svm_details.data.vpr_ego
+            msg.group.matchId       = self.svm_details.data.matchId
+            msg.group.trueId        = self.svm_details.data.trueId
+            msg.group.state         = self.svm_details.data.state
+            # Extract Monitor Details:
+            msg.group.mState        = self.svm_details.mState
+            msg.group.prob          = self.svm_details.prob
+            msg.group.mStateBin     = self.svm_details.mStateBin
+            msg.group.factors       = self.svm_details.factors
+        except:
+            pass
+        msg.group.safety_states     = safety_states_srv.states
+
+        msg.group.current_yaw       = self.current_yaw
+        msg.group.target_yaw        = self.target_yaw
+        msg.group.true_yaw          = self.true_yaw
+        msg.group.delta_yaw         = self.delta_yaw
+
+        msg.group.lookahead         = self.lookahead_inds
+        msg.group.lookahead_mode    = 'index-based'
+
+        msg.group.vpr_topic         = self.vpr_odom
+        msg.group.jackal_topic      = self.jackal_odom
+        msg.group.groundtruth_topic = self.gt_odom
+        self.info_pub.publish(msg)
+
+        if msg.mStateBin == True:
+            self.twist_pub.publish(new_twist)
+        else:
+            rospy.loginfo('Ignoring datapoint; low confidence. Score: %s' % (str(msg.mState)))
 
     def exit(self):
         roslogger("Exit state received.", LogType.INFO, ros=False)

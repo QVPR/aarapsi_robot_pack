@@ -95,34 +95,52 @@ class mrc:
     def joy_cb(self, msg):
         # Toggle enable:
         if msg.buttons[self.enable] > 0:
-            self.enabled = True
+            if not self.enabled == True:
+                self.enabled = True
+                rospy.logwarn("Autonomous mode: Enabled")
         elif msg.buttons[self.disable] > 0:
-            self.enabled = False
+            if not self.enabled == False:
+                self.enabled = False
+                rospy.loginfo("Autonomous mode: Disabled")
 
         # Toggle mode:
         try:
             if msg.buttons[self.raw_ind]:
-                self.feature_mode = FeatureType.RAW
-                rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
+                if not self.feature_mode == FeatureType.RAW:
+                    self.feature_mode = FeatureType.RAW
+                    rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
+                    rospy.loginfo("Switched to %s." % enum_name(self.feature_mode))
             elif msg.buttons[self.patchnorm_ind]:
-                self.feature_mode = FeatureType.PATCHNORM
-                rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
+                if not self.feature_mode == FeatureType.PATCHNORM:
+                    self.feature_mode = FeatureType.PATCHNORM
+                    rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
+                    rospy.loginfo("Switched to %s." % enum_name(self.feature_mode))
             elif msg.buttons[self.netvlad_ind]:
-                self.feature_mode = FeatureType.NETVLAD
-                rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
+                if not self.feature_mode == FeatureType.NETVLAD:
+                    self.feature_mode = FeatureType.NETVLAD
+                    rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
+                    rospy.loginfo("Switched to %s." % enum_name(self.feature_mode))
             elif msg.buttons[self.hybridnet_ind]:
-                self.feature_mode = FeatureType.HYBRIDNET
-                rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
+                if not self.feature_mode == FeatureType.HYBRIDNET:
+                    self.feature_mode = FeatureType.HYBRIDNET
+                    rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
+                    rospy.loginfo("Switched to %s." % enum_name(self.feature_mode))
         except:
             rospy.logdebug_throttle(60, "Param switching is disabled for rosbags :-(")
 
         # Toggle safety:
         if msg.buttons[self.fast_safety_i] > 0:
-            self.mode = 2
+            if not self.mode == 2:
+                self.mode = 2
+                rospy.logerr('Fast mode enabled.')
         elif msg.buttons[self.slow_safety_i] > 0:
-            self.mode = 1
+            if not self.mode == 1:
+                self.mode = 1
+                rospy.logwarn('Slow mode enabled.')
         else:
-            self.mode = 0
+            if not self.mode == 0:
+                self.mode = 0
+                rospy.loginfo('Safety released.')
 
     def twist_cb(self, msg):
         if self.mode == 0 or not self.enabled:

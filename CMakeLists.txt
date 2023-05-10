@@ -61,6 +61,7 @@ add_message_files(
   CompressedImageOdom.msg
   CompressedMonitorDetails.msg
   ControllerStateInfo.msg
+  ControllerStateInfoGroup.msg
   DatasetParams.msg
   Debug.msg
   Heartbeat.msg
