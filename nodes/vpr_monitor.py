@@ -108,8 +108,8 @@ class mrc: # main ROS class
         self.vpr_label_sub          = rospy.Subscriber(self.namespace + "/label" + self.INPUTS['topic'], self.INPUTS['label'], self.label_callback, queue_size=1)
         self.svm_request_sub        = rospy.Subscriber(self.namespace + '/requests/svm/ready', ResponseSVM, self.svm_request_callback, queue_size=1)
         self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/request', RequestSVM, queue_size=1)
-        self.svm_state_pub          = self.ROS_HOME.add_pub(self.namespace + "/monitor/state" + self.INPUTS['topic'], self.OUTPUTS['mon_dets'], queue_size=1)
-        self.svm_field_pub          = self.ROS_HOME.add_pub(self.namespace + "/monitor/field" + self.INPUTS['topic'], self.OUTPUTS['img_dets'], queue_size=1)
+        self.svm_state_pub          = self.ROS_HOME.add_pub(self.namespace + "/state" + self.INPUTS['topic'], self.OUTPUTS['mon_dets'], queue_size=1)
+        self.svm_field_pub          = self.ROS_HOME.add_pub(self.namespace + "/field" + self.INPUTS['topic'], self.OUTPUTS['img_dets'], queue_size=1)
         self.svm_field_srv          = rospy.Service(self.namespace + '/GetSVMField', GenerateObj, self.handle_GetSVMField)
 
     def debug_cb(self, msg):
