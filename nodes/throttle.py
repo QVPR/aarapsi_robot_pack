@@ -42,7 +42,7 @@ class Throttle_Topic:
                            for i in range(len(self.exts))]
         self.pubs       = [self.ROS_HOME.add_pub(self.namespace + self.topic_out + self.exts[i], self.types[i], queue_size=1) \
                            for i in range(len(self.exts))]
-        self.timer      = rospy.Timer(rospy.Duration(1/rate), self.timer)
+        self.timer      = rospy.Timer(rospy.Duration(1/rate), self.timer) #TODO What is this??
         self.msgs       = [[] for i in types]
 
         exts_string     = ''.join(self.exts)
