@@ -87,9 +87,14 @@ class mrc: # main ROS class
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
         self.param_checker_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
-        self.svm_state_sub          = rospy.Subscriber(self.namespace + "/monitor/state" + self.INPUTS['topic'], self.INPUTS['mon_dets'], self.state_callback, queue_size=1)
-        self.svm_field_sub          = rospy.Subscriber(self.namespace + "/monitor/field" + self.INPUTS['topic'], self.INPUTS['img_dets'], self.field_callback, queue_size=1)
+        self.svm_state_sub          = rospy.Subscriber(self.namespace + "/state" + self.INPUTS['topic'], self.INPUTS['mon_dets'], self.state_callback, queue_size=1)
+        self.svm_field_sub          = rospy.Subscriber(self.namespace + "/field" + self.INPUTS['topic'], self.INPUTS['img_dets'], self.field_callback, queue_size=1)
         self.srv_GetSVMField        = rospy.ServiceProxy(self.namespace + '/GetSVMField', GenerateObj)
+        self.timer_check_if_dead    = rospy.Timer(rospy.Duration(secs=2), self.timer_check_if_dead)
+
+    def timer_check_if_dead(self, event):
+        if rospy.is_shutdown():
+            self.exit()
 
     def param_callback(self, msg):
         if self.ROS_HOME.params.exists(msg.data):
@@ -123,14 +128,14 @@ class mrc: # main ROS class
         self._timer_srv_GetSVMField(generate=True)
 
     def field_callback(self, msg):
-    # /vpr_nodes/monitor/field(/compressed) (aarapsi_robot_pack/(Compressed)ImageDetails)
+    # /vpr_nodes/field(/compressed) (aarapsi_robot_pack/(Compressed)ImageDetails)
     # Store new SVM field
         self.svm_field_msg  = msg
         self.new_field      = True
         self.field_exists   = True
 
     def state_callback(self, msg):
-    # /vpr_nodes/monitor/state(/compressed) (aarapsi_robot_pack/(Compressed)MonitorDetails)
+    # /vpr_nodes/state(/compressed) (aarapsi_robot_pack/(Compressed)MonitorDetails)
     # Store new label message and act as drop-in replacement for odom_callback + img_callback
         self.state              = msg
         self.new_state          = True
@@ -146,13 +151,15 @@ class mrc: # main ROS class
 
     def exit(self):
         global server
-        server.io_loop.stop()
-        server.stop()
-        msg = 'Exit state reached.'
-        if not rospy.is_shutdown():
-            self.print(msg)
-        else:
-            print(msg)
+        try:
+            server.io_loop.stop()
+        except:
+            print('Server IO Loop not accessible for forced shutdown, ignoring.')
+        try:
+            server.stop()
+        except:
+            print('Server not accessible for forced shutdown, ignoring.')
+        print('Exit state reached.')
         sys.exit()
 
 def do_args():
@@ -180,9 +187,9 @@ class Doc_Frame:
         iframe_end_rect       = """&type=ros_compressed" width=2000 height=1000 style="border: 0; transform: scale(0.5); transform-origin: 0 0;"/>"""
         iframe_end_even       = """&type=ros_compressed" width=510 height=510 style="border: 0; transform: scale(0.49); transform-origin: 0 0;"/>"""
         self.fig_iframe_feed_ = Div(text=iframe_start + nmrc.namespace + "/image" + iframe_end_rect, width=500, height=250)
-        self.fig_iframe_mtrx_ = Div(text=iframe_start + nmrc.namespace + "/matrices/rolling" + iframe_end_even, width=250, height=250)
+        self.fig_iframe_mtrx_ = Div(text=iframe_start + nmrc.namespace + "/similiarity_matrix" + iframe_end_even, width=250, height=250)
         self.num_points       = len(nmrc.image_processor.dataset['dataset']['px'])
-        self.rolling_mtrx_img = np.zeros((self.num_points, self.num_points)) # Make similarity matrix figure
+        self.sim_mtrx_img     = np.zeros((self.num_points, self.num_points)) # Make similarity matrix figure
         
         printer('[Bokeh Server] Waiting for services ...')
         rospy.wait_for_service(nmrc.namespace + '/GetSVMField')
