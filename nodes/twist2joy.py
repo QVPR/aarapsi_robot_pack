@@ -13,7 +13,9 @@ from geometry_msgs.msg import Twist
 from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool
 from pyaarapsi.core.ros_tools import roslogger, init_node, LogType, Heartbeat, NodeState
 from pyaarapsi.core.enum_tools import enum_name
-from pyaarapsi.vpr_simple.imageprocessor_helpers import FeatureType
+from pyaarapsi.vpr_simple.vpr_helpers import FeatureType
+
+from aarapsi_robot_pack.srv import GetSafetyStates, GetSafetyStatesResponse
 
 '''
 ROS Twist->Joy Node
@@ -78,6 +80,13 @@ class mrc:
         self.joy_sub        = rospy.Subscriber(joy_sub_topic, Joy, self.joy_cb, queue_size=1)
         self.twist_sub      = rospy.Subscriber(twist_sub_topic, Twist, self.twist_cb, queue_size=1)
         self.twist_pub      = rospy.Publisher(twist_pub_topic, Twist, queue_size=1)
+        self.srv_safety     = rospy.Service(self.namespace + '/safety', GetSafetyStates, self.handle_GetSafetyStates)
+
+    def handle_GetSafetyStates(self, requ):
+        ans = GetSafetyStatesResponse()
+        ans.states.autonomous = self.enable
+        ans.states.fast_mode = (self.mode==2)
+        return ans
 
     def main(self):
         while not rospy.is_shutdown():
