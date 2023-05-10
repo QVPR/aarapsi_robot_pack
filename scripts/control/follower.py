@@ -6,6 +6,7 @@ import sys
 
 import numpy as np
 import argparse as ap
+from cv_bridge import CvBridge
 
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import Twist, PoseArray, Pose, Point
@@ -14,9 +15,10 @@ from scipy.spatial.distance import cdist
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
 from pyaarapsi.core.ros_tools import roslogger, LogType, yaw_from_q, ROS_Param
-from pyaarapsi.core.helper_tools import formatException
+from pyaarapsi.core.helper_tools import formatException, np_ndarray_to_uint8_list
 
-from aarapsi_robot_pack.srv import GenerateObj, GenerateObjRequest
+from aarapsi_robot_pack.srv import GenerateObj, GenerateObjRequest, GetSafetyStates, GetSafetyStatesRequest
+from aarapsi_robot_pack.msg import ControllerStateInfo, xyw, MonitorDetails, CompressedMonitorDetails
 
 class mrc:
     def __init__(self, node_name, rate, anon, log_level):
@@ -31,6 +33,7 @@ class mrc:
         self.current_yaw    = 0.0
         self.target_yaw     = 0.0
         self.true_yaw       = 0.0
+        self.delta_yaw      = 0.0
         self.old_sensor_cmd = None
 
         self.target_update  = False
@@ -43,17 +46,32 @@ class mrc:
         self.ready          = True
         self.path_received  = False
         self.path_processed = False
+        self.svm_details    = None
 
-        self.vpr_odom_sub   = rospy.Subscriber('/vpr_nodes/vpr_odom',               Odometry,  self.vpr_odom_cb,  queue_size=1) # from vpr_cruncher 
-        self.vpr_path_sub   = rospy.Subscriber('/vpr_nodes/path',                   Path,      self.path_cb,      queue_size=1) # from vpr_cruncher
-        self.sensors_sub    = rospy.Subscriber('/jackal_velocity_controller/odom',  Odometry,  self.sensors_cb,   queue_size=1) # wheel encoders (and maybe imu ??? don't think so)
-        self.gt_sub         = rospy.Subscriber('/odom/filtered',                    Odometry,  self.gt_cb,        queue_size=1) # ONLY for ground truth
-        self.twist_pub      = rospy.Publisher('/twist2joy/in',                      Twist,                        queue_size=1)
-        self.yaw_pub        = rospy.Publisher('/vpr_nodes/' + node_name + '/yaw',   Float64,                      queue_size=1)
-        self.dyaw_pub       = rospy.Publisher('/vpr_nodes/' + node_name + '/dyaw',  Float64,                      queue_size=1)
+        self.vpr_odom       = '/vpr_nodes/vpr_odom'
+        self.jackal_odom    = '/jackal_velocity_controller/odom'
+        self.gt_odom        = '/odom/filtered'
 
+        self.bridge         = CvBridge()
+
+        if bool(rospy.get_param('/vpr_nodes/vpr_monitor/compress/out')):
+            self.state_topic    = '/vpr_nodes/state/compressed'
+            self.state_type     = CompressedMonitorDetails
+            self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.compressed_imgmsg_to_cv2(img, "bgr8"))
+        else:
+            self.state_topic    = '/vpr_nodes/state'
+            self.state_type     = CompressedMonitorDetails
+            self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.imgmsg_to_cv2(img, "passthrough"))
+
+        self.vpr_path_sub   = rospy.Subscriber('/vpr_nodes/path',                   Path,               self.path_cb,       queue_size=1) # from vpr_cruncher
+        self.sensors_sub    = rospy.Subscriber(self.jackal_odom,                    Odometry,           self.sensors_cb,    queue_size=1) # wheel encoders (and maybe imu ??? don't think so)
+        self.gt_sub         = rospy.Subscriber(self.gt_odom,                        Odometry,           self.gt_cb,         queue_size=1) # ONLY for ground truth
+        self.state_sub      = rospy.Subscriber(self.state_topic,                    self.state_type,    self.state_cb,      queue_size=1)
+        self.info_pub       = rospy.Publisher('/vpr_nodes/' + node_name + '/info',  ControllerStateInfo,                    queue_size=1)
+        self.twist_pub      = rospy.Publisher('/twist2joy/in',                      Twist,                                  queue_size=1)
         self.srv_path       = rospy.ServiceProxy('/vpr_nodes/path',                 GenerateObj)
-
+        self.srv_safety     = rospy.ServiceProxy('/vpr_nodes/safety',               GetSafetyStates)
+        
         self.main()
 
     def srv_GetPath(self, generate=False):
@@ -85,11 +103,12 @@ class mrc:
         self.path_msg       = msg
         self.path_received  = True
 
-    def vpr_odom_cb(self, msg):
+    def state_cb(self, msg):
         if not self.ready:
             return
         
-        self.vpr_ego        = [msg.pose.pose.position.x, msg.pose.pose.position.y, yaw_from_q(msg.pose.pose.orientation)]
+        self.svm_details    = msg
+        self.vpr_ego        = [msg.data.vpr_ego.x, msg.data.vpr_ego.y, msg.data.vpr_ego.w]
         self.vpr_ego_hist.append(self.vpr_ego)
     
     def sensors_cb(self, msg):
@@ -102,7 +121,6 @@ class mrc:
         self.delta_yaw      = self.angle_wrap(yaw_from_q(msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_cmd.pose.pose.orientation))
         self.current_yaw    = self.angle_wrap(0.5 * self.angle_wrap(self.current_yaw + self.vpr_ego[2]) + self.delta_yaw)
         self.old_sensor_cmd = msg
-        self.yaw_pub.publish(Float64(data=self.current_yaw))
 
     def update_target(self):
         spd                 = cdist(self.path_array[:,0:2], np.matrix([self.vpr_ego[0], self.vpr_ego[1]]))
@@ -142,8 +160,32 @@ class mrc:
             roslogger("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw), LogType.INFO, ros=True)
             roslogger("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, self.angle_wrap(self.true_yaw - self.current_yaw)), LogType.INFO, ros=True)
 
-            self.twist_pub.publish(new_twist)
-            self.dyaw_pub.publish(Float64(data=yaw_cmd))
+            safety_states_srv       = self.srv_safety(GetSafetyStatesRequest())
+
+            msg                     = ControllerStateInfo()
+            try:
+                msg.query_image     = self.img_convert(self.svm_details.queryImage)
+                msg.label_details   = self.svm_details.data
+                msg.mState          = self.svm_details.mState
+                msg.prob            = self.svm_details.prob
+                msg.mStateBin       = self.svm_details.mStateBin
+                msg.factors         = self.svm_details.factors
+            except:
+                pass
+            msg.safety_states       = safety_states_srv.states
+
+            msg.current_yaw         = self.current_yaw
+            msg.target_yaw          = self.target_yaw
+            msg.true_yaw            = self.true_yaw
+            msg.delta_yaw           = self.delta_yaw
+
+            msg.lookahead           = self.lookahead_inds
+            msg.lookahead_mode      = 'index-based'
+
+            msg.vpr_topic           = self.vpr_odom
+            msg.jackal_topic        = self.jackal_odom
+            msg.groundtruth_topic   = self.gt_odom
+            self.info_pub.publish(msg)
             
         self.exit()
 
