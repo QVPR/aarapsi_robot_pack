@@ -1,3 +1,5 @@
+# Basic python Bokeh configuration file
+
 attrs:
     figure:
         background_fill_color: "#DDDDDD"

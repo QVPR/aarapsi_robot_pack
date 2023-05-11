@@ -41,16 +41,16 @@
     <arg name="use_gpu"                 default="True"/>
 
     <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
-
-    <group if="$(arg offline)">
-        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
-    </group>
     
     <group ns="$(arg namespace)">
-        <!-- Web Server Node: -->
-        <node if="$(arg launch_webserver)" pkg="web_video_server" type="web_video_server" name="web_video_server" output="screen"/>
+        
 
         <group if="$(arg offline)">
+            <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/>
+            
+            <!-- Web Server Node: -->
+            <node if="$(arg launch_webserver)" pkg="web_video_server" type="web_video_server" name="web_video_server" output="screen"/>
+
             <!-- Param Watcher Node: -->
             <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
                     args="-ID 0"/>

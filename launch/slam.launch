@@ -13,7 +13,7 @@
     <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
 
     <group ns="$(arg namespace)">
-        <!-- SLAM Node: -->
+        <!-- SLAM Localization Nodes: -->
         <group if="$(arg launch_slam_node)">
             <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_localization.launch"/>
         </group>

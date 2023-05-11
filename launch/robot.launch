@@ -4,52 +4,29 @@
  -->
 <launch>
     <!-- Global Arguments: -->
-    <arg name="log_level"               default="2"/>
-    <arg name="launch_slam_node"        default="true"/>
-    <arg name="launch_slam_ekf"         default="true"/>
-    <arg name="launch_throttle"         default="true"/>
-    <arg name="launch_img_odom_agg"     default="true"/>
-    <arg name="launch_paramwatcher"     default="true"/>
-    
-    <arg name="throttle_rate"           default="10.0"/>
-    <arg name="anon"                    default="True"/>
-    <arg name="reset"                   default="True"/>
+    <arg name="launch_slam"             default="true"/>
+    <arg name="launch_init"             default="true"/>
+    <arg name="launch_core"             default="false"/> <!-- Typically we do this offboard, but for onboard solutions set to true -->
 
     <arg name="namespace"               default="/vpr_nodes"/>
-
-    <arg name="tt_mode"                 default="1"/>
-    <arg name="tt_img_dims"             default="(640,480)"/>
-
-    <arg name="ioa_compress"            default="True"/>
-    <arg name="ioa_img_topic"           default="$(arg namespace)/occam/image0"/>
-    <arg name="ioa_odom_topic"          default="/odom/filtered"/>
-    <arg name="ioa_pub_topic"           default="$(arg namespace)/img_odom"/>
 
     <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
 
     <group ns="$(arg namespace)">
-        <!-- SLAM Node: -->
-        <group if="$(arg launch_slam_node)">
-            <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_localization.launch"/>
+        <!-- SLAM Nodes: -->
+        <group if="$(arg launch_slam)">
+            <include file="$(find aarapsi_robot_pack)/launch/slam.launch"/>
         </group>
 
-        <!-- SLAM EKF Node: -->
-        <group if="$(arg launch_slam_ekf)">
-            <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_ekf.launch"/>
+        <!-- Web Server, Parameter Watcher, Image+Odom Aggregator, Image Throttle Nodes: -->
+        <group if="$(arg launch_init)">
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/pipeline/vpr_initialisation.launch"/>
         </group>
 
-        <!-- Param Watcher Node: -->
-        <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
-                args="-ID 0"/>
-
-        <!-- Image+Odom Aggregation Node: -->
-        <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
-                args="-N img_odom_agg -r $(arg throttle_rate) -a $(arg anon) -C $(arg ioa_compress)
-                        --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic) -V $(arg log_level) -ID 1" />
-
-        <!-- Camera Topic Throttling Node: -->
-        <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
-                args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -ID 2" />
+        <!-- Core Pipeline Nodes: -->
+        <group if="$(arg launch_core)">
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/pipeline/vpr_pipeline.launch"/>
+        </group>
     </group>
 
 </launch>
