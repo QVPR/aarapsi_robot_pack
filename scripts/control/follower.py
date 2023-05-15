@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import rospy
-import copy
 import sys
 
 import numpy as np
@@ -9,26 +8,36 @@ import argparse as ap
 from cv_bridge import CvBridge
 
 from nav_msgs.msg import Odometry, Path
-from geometry_msgs.msg import Twist, PoseArray, Pose, Point
-from std_msgs.msg import Header, Float64
-from scipy.spatial.distance import cdist
+from geometry_msgs.msg import Twist
+from std_msgs.msg import String
+from fastdist import fastdist
 
-from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools import roslogger, LogType, yaw_from_q, ROS_Param
+from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string, check_positive_int
+from pyaarapsi.core.ros_tools import roslogger, LogType, NodeState, yaw_from_q, set_rospy_log_lvl, init_node
 from pyaarapsi.core.helper_tools import formatException, np_ndarray_to_uint8_list
 
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjRequest, GetSafetyStates, GetSafetyStatesRequest
-from aarapsi_robot_pack.msg import ControllerStateInfo, xyw, MonitorDetails, CompressedMonitorDetails
+from aarapsi_robot_pack.msg import ControllerStateInfo, CompressedMonitorDetails
 
 class mrc:
-    def __init__(self, node_name, rate, anon, log_level):
-        
-        rospy.init_node(node_name, anonymous=anon, log_level=log_level)
-        roslogger('Starting %s node.' % (node_name), LogType.INFO, ros=True)
+    def __init__(self, node_name, rate_num, namespace, anon, log_level, reset, order_id=0):
 
-        self.rate_num       = rate
-        self.dt             = 1/rate
-        self.rate_obj       = rospy.Rate(self.rate_num)
+        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
+            raise Exception('init_node failed.')
+
+        self.init_params(rate_num, log_level, reset)
+        self.init_vars()
+        self.init_rospy()
+
+        self.main_ready      = True
+        rospy.set_param(self.namespace + '/launch_step', order_id + 1)
+
+    def init_params(self, rate_num, log_level, reset):
+        self.LOG_LEVEL       = self.ROS_HOME.params.add(self.nodespace + "/log_level", log_level, check_positive_int,   force=reset)
+        self.RATE_NUM        = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate_num,  check_positive_float, force=reset)
+
+    def init_vars(self):
+        self.dt             = 1/self.RATE_NUM.get()
 
         self.current_yaw    = 0.0
         self.target_yaw     = 0.0
@@ -40,13 +49,12 @@ class mrc:
         self.lookahead_inds = 5
         self.vpr_ego        = [0.0, 0.0, 0.0] # x y w
         self.vpr_ego_hist   = []
-
-        self.time           = rospy.Time.now().to_sec()
         
         self.ready          = True
         self.path_received  = False
         self.path_processed = False
         self.svm_details    = None
+        self.svm_override   = False
 
         self.vpr_odom       = '/vpr_nodes/vpr_odom'
         self.jackal_odom    = '/jackal_velocity_controller/odom'
@@ -63,16 +71,38 @@ class mrc:
             self.state_type     = CompressedMonitorDetails
             self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.imgmsg_to_cv2(img, "passthrough"))
 
-        self.vpr_path_sub   = rospy.Subscriber('/vpr_nodes/path',                   Path,               self.path_cb,       queue_size=1) # from vpr_cruncher
-        self.sensors_sub    = rospy.Subscriber(self.jackal_odom,                    Odometry,           self.sensors_cb,    queue_size=1) # wheel encoders (and maybe imu ??? don't think so)
-        self.gt_sub         = rospy.Subscriber(self.gt_odom,                        Odometry,           self.gt_cb,         queue_size=1) # ONLY for ground truth
-        self.state_sub      = rospy.Subscriber(self.state_topic,                    self.state_type,    self.state_cb,      queue_size=1)
-        self.info_pub       = rospy.Publisher('/vpr_nodes/' + node_name + '/info',  ControllerStateInfo,                    queue_size=1)
-        self.twist_pub      = rospy.Publisher('/twist2joy/in',                      Twist,                                  queue_size=1)
-        self.srv_path       = rospy.ServiceProxy('/vpr_nodes/path',                 GenerateObj)
-        self.srv_safety     = rospy.ServiceProxy('/vpr_nodes/safety',               GetSafetyStates)
+    def init_rospy(self):
+        self.rate_obj       = rospy.Rate(self.RATE_NUM.get())
+        self.time           = rospy.Time.now().to_sec()
+
+        self.vpr_path_sub   = rospy.Subscriber('/vpr_nodes/path',                             Path,                self.path_cb,        queue_size=1) # from vpr_cruncher
+        self.sensors_sub    = rospy.Subscriber(self.jackal_odom,                              Odometry,            self.sensors_cb,     queue_size=1) # wheel encoders (and maybe imu ??? don't think so)
+        self.gt_sub         = rospy.Subscriber(self.gt_odom,                                  Odometry,            self.gt_cb,          queue_size=1) # ONLY for ground truth
+        self.state_sub      = rospy.Subscriber(self.state_topic,                              self.state_type,     self.state_cb,       queue_size=1)
+        self.param_sub      = rospy.Subscriber(self.namespace + "/params_update",             String,              self.param_callback, queue_size=100)
+        self.info_pub       = self.ROS_HOME.add_pub('/vpr_nodes/' + self.node_name + '/info', ControllerStateInfo,                      queue_size=1)
+        self.twist_pub      = self.ROS_HOME.add_pub('/twist2joy/in',                          Twist,                                    queue_size=1)
+        self.srv_path       = rospy.ServiceProxy('/vpr_nodes/path',                           GenerateObj)
+        self.srv_safety     = rospy.ServiceProxy('/vpr_nodes/safety',                         GetSafetyStates)
         
         self.main()
+
+    def param_callback(self, msg):
+        self.parameters_ready = False
+        if self.ROS_HOME.params.exists(msg.data):
+            if not self.ROS_HOME.params.update(msg.data):
+                self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
+        
+            else:
+                self.print("Change to parameter [%s]; updated." % msg.data, LogType.DEBUG)
+
+                if msg.data == self.LOG_LEVEL.name:
+                    set_rospy_log_lvl(self.LOG_LEVEL.get())
+                elif msg.data == self.RATE_NUM.name:
+                    self.rate_obj = rospy.Rate(self.RATE_NUM.get())
+        else:
+            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
+        self.parameters_ready = True
 
     def srv_GetPath(self, generate=False):
         try:
@@ -82,7 +112,7 @@ class mrc:
             requ.generate = generate
             resp = self.srv_path(requ)
             if resp.success == False:
-                roslogger('[srv_GetPath] Service executed, success=False!', LogType.ERROR, ros=True)
+                self.print('[srv_GetPath] Service executed, success=False!', LogType.ERROR)
         except:
             rospy.logerr(formatException())
 
@@ -123,7 +153,9 @@ class mrc:
         self.old_sensor_cmd = msg
 
     def update_target(self):
-        spd                 = cdist(self.path_array[:,0:2], np.matrix([self.vpr_ego[0], self.vpr_ego[1]]))
+        spd                 = fastdist.matrix_to_matrix_distance(self.path_array[:,0:2], \
+                                                                    np.matrix([self.vpr_ego[0], self.vpr_ego[1]]), \
+                                                                    fastdist.euclidean, "euclidean")
         target_index        = (np.argmin(spd[:]) + self.lookahead_inds) % self.path_array.shape[0]
         self.target_yaw     = self.path_array[target_index, 2]
 
@@ -136,16 +168,18 @@ class mrc:
             raise Exception('Mode must be either DEG or RAD.')
 
     def main(self):
+        self.ROS_HOME.set_state(NodeState.MAIN)
+
         while not rospy.is_shutdown():
             if not self.path_received:
-                roslogger("Waiting for path ...", LogType.INFO, ros=True, throttle=10)
+                self.print("Waiting for path ...", throttle=10)
                 self.srv_GetPath()
                 rospy.sleep(1)
                 continue
             
             self.path_process()
             break
-        roslogger("Path processed. Entering main loop.", LogType.INFO, ros=True)
+        self.print("Path processed. Entering main loop.")
 
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
@@ -156,8 +190,8 @@ class mrc:
     def loop_contents(self):
         self.update_target()
 
-        #roslogger("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw), LogType.INFO, ros=True)
-        #roslogger("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, self.angle_wrap(self.true_yaw - self.current_yaw)), LogType.INFO, ros=True)
+        #self.print("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw))
+        #self.print("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, self.angle_wrap(self.true_yaw - self.current_yaw)))
 
         safety_states_srv       = self.srv_safety(GetSafetyStatesRequest())
 
@@ -193,40 +227,56 @@ class mrc:
         msg.group.groundtruth_topic = self.gt_odom
         self.info_pub.publish(msg)
 
-        yaw_cmd             = -1 * self.angle_wrap(self.target_yaw - self.current_yaw)
         new_twist           = Twist()
-        
-        new_twist.angular.z = yaw_cmd
+        new_twist.angular.z = -1 * self.angle_wrap(self.target_yaw - self.current_yaw)
 
-        if msg.group.mStateBin == True:
+        if msg.group.mStateBin == True or self.svm_override:
             new_twist.linear.x  = 0.5
         else:
             new_twist.linear.x  = 0.2
             rospy.loginfo('Poor datapoint; low confidence. Reducing top speed... Score: %s' % (str(msg.group.mState)))
         self.twist_pub.publish(new_twist)
 
+    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
+        if ros is None:
+            ros = self.ROS_HOME.logros
+        if name is None:
+            name = self.ROS_HOME.node_name
+        if no_stamp is None:
+            no_stamp = self.ROS_HOME.logstamp
+        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
+
     def exit(self):
-        roslogger("Exit state received.", LogType.INFO, ros=False)
+        self.print("Quit received.")
         sys.exit()
+
+
+def do_args():
+    parser = ap.ArgumentParser(prog="Path Follower.py", 
+                            description="ROS Path Follower Tool",
+                            epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
+    parser.add_argument('--node-name',        '-N',  type=check_string,                 default="follower",       help="Specify node name (default: %(default)s).")
+    parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=10.0,             help='Specify node rate (default: %(default)s).')
+    parser.add_argument('--anon',             '-a',  type=check_bool,                   default=False,            help="Specify whether node should be anonymous (default: %(default)s).")
+    parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
+    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16],    default=2,                help="Specify ROS log level (default: %(default)s).")
+    parser.add_argument('--reset',            '-R',  type=check_bool,                   default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
+    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
+
+    raw_args = parser.parse_known_args()
+    return vars(raw_args[0])
 
 if __name__ == '__main__':
     try:
-        parser = ap.ArgumentParser(prog="Path Follower", 
-                                description="ROS Path Follower Tool",
-                                epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-        parser.add_argument('--node-name', '-N', type=check_string,              default="follower",  help="Specify node name (default: %(default)s).")
-        parser.add_argument('--rate',      '-r', type=check_positive_float,      default=10.0,        help='Set node rate (default: %(default)s).')
-        parser.add_argument('--anon',      '-a', type=check_bool,                default=False,       help="Specify whether node should be anonymous (default: %(default)s).")
-        parser.add_argument('--log-level', '-V', type=int, choices=[1,2,4,8,16], default=2,           help="Specify ROS log level (default: %(default)s).")
-        
-        raw_args = parser.parse_known_args()
-        args = vars(raw_args[0])
-
-        node_name   = args['node_name']
-        rate        = args['rate']
-        anon        = args['anon']
-        log_level   = args['log_level']
-
-        nmrc = mrc(node_name, rate, anon, log_level)
-    except rospy.ROSInterruptException:
+        args = do_args()
+        nmrc = mrc(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
+        nmrc.main()
+        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
+        sys.exit()
+    except SystemExit as e:
         pass
+    except ConnectionRefusedError as e:
+        roslogger("Error: Is the roscore running and accessible?", LogType.ERROR, ros=False) # False as rosnode likely terminated
+    except:
+        roslogger("Error state reached, system exit triggered.", LogType.WARN, ros=False) # False as rosnode likely terminated
+        roslogger(formatException(), LogType.ERROR, ros=False)
