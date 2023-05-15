@@ -33,8 +33,10 @@ class mrc:
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_params(self, rate_num, log_level, reset):
-        self.LOG_LEVEL       = self.ROS_HOME.params.add(self.nodespace + "/log_level", log_level, check_positive_int,   force=reset)
-        self.RATE_NUM        = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate_num,  check_positive_float, force=reset)
+        self.LOG_LEVEL       = self.ROS_HOME.params.add(self.nodespace + "/log_level",          log_level, check_positive_int,   force=reset)
+        self.RATE_NUM        = self.ROS_HOME.params.add(self.nodespace + "/rate",               rate_num,  check_positive_float, force=reset)
+        self.SVM_OVERRIDE    = self.ROS_HOME.params.add(self.nodespace + "/svm_override",       False,     check_bool,           force=reset)
+        
 
     def init_vars(self):
         self.dt             = 1/self.RATE_NUM.get()
@@ -54,7 +56,6 @@ class mrc:
         self.path_received  = False
         self.path_processed = False
         self.svm_details    = None
-        self.svm_override   = False
 
         self.vpr_odom       = '/vpr_nodes/vpr_odom'
         self.jackal_odom    = '/jackal_velocity_controller/odom'
@@ -230,7 +231,7 @@ class mrc:
         new_twist           = Twist()
         new_twist.angular.z = -1 * self.angle_wrap(self.target_yaw - self.current_yaw)
 
-        if msg.group.mStateBin == True or self.svm_override:
+        if msg.group.mStateBin == True or self.SVM_OVERRIDE.get():
             new_twist.linear.x  = 0.5
         else:
             new_twist.linear.x  = 0.2
