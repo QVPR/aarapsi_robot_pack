@@ -20,7 +20,6 @@
 
     <arg name="namespace"               default="/vpr_nodes"/>
 
-    <arg name="cruncher_compress_in"    default="True"/>
     <arg name="cruncher_groundtruth"    default="True"/>
 
     <arg name="monitor_printprediction" default="False"/>
@@ -35,8 +34,6 @@
     <arg name="ioa_img_topic"           default="$(arg namespace)/occam/image0"/>
     <arg name="ioa_odom_topic"          default="/odom/filtered"/>
     <arg name="ioa_pub_topic"           default="$(arg namespace)/img_odom"/>
-
-    <arg name="compress_transport"      default="True"/>
 
     <arg name="use_gpu"                 default="True"/>
 
@@ -76,8 +73,7 @@
 
         <!-- Cruncher Node: -->
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
-            args="-Ci $(arg cruncher_compress_in) -Co $(arg compress_transport) -G $(arg cruncher_groundtruth) 
-                    -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
+            args="-G $(arg cruncher_groundtruth) -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
         </node>
 
         <!-- Monitor's SVM Trainer Node: -->
@@ -87,14 +83,12 @@
 
         <!-- Monitor Node: -->
         <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
-            args="-Ci $(arg compress_transport) -Co $(arg compress_transport) -p $(arg monitor_printprediction)
-                    -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
+            args="-p $(arg monitor_printprediction) -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
         </node>
 
         <!-- Plotter Node: -->
         <node if="$(arg launch_plotter)" pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
-            args="-P $(arg plotter_port) -A $(arg plotter_address) -Ci $(arg compress_transport)
-                    -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
+            args="-P $(arg plotter_port) -A $(arg plotter_address) -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
         </node>
     </group>
 

@@ -2,19 +2,15 @@
 
 import rospy
 from std_msgs.msg import String
-from cv_bridge import CvBridge
 
 import numpy as np
-import rospkg
 import argparse as ap
-import os
 import sys
 import cv2
-import copy
 
 from rospy_message_converter import message_converter
 
-from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM # Our custom structures
+from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, ImageLabelDetails, MonitorDetails, ImageDetails # Our custom structures
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse
 
 from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
@@ -23,23 +19,23 @@ from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
 from pyaarapsi.vpred                import *
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_list, check_bool, check_enum, check_string, check_positive_int
-from pyaarapsi.core.helper_tools    import formatException
-from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, get_ROS_message_types_dict, init_node, LogType, NodeState
+from pyaarapsi.core.helper_tools    import formatException, np_ndarray_to_uint8_list, uint8_list_to_np_ndarray
+from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, LogType, NodeState
 from pyaarapsi.core.enum_tools      import enum_name
 
 class mrc: # main ROS class
-    def __init__(self, compress_in, compress_out, rate_num, namespace, node_name, anon, print_prediction, log_level, reset, order_id=0):
+    def __init__(self, rate_num, namespace, node_name, anon, print_prediction, log_level, reset, order_id=0):
 
         init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
 
-        self.init_params(rate_num, log_level, print_prediction, compress_in, compress_out, reset)
+        self.init_params(rate_num, log_level, print_prediction, reset)
         self.init_vars()
         self.init_rospy()
 
         self.main_ready             = True
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
         
-    def init_params(self, rate_num, log_level, print_prediction, compress_in, compress_out, reset):
+    def init_params(self, rate_num, log_level, print_prediction, reset):
         self.FEAT_TYPE              = self.ROS_HOME.params.add(self.namespace + "/feature_type",        None,             lambda x: check_enum(x, FeatureType),       force=False)
         self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,             check_positive_two_int_list,                force=False)
         self.NPZ_DBP                = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",             None,             check_string,                               force=False)
@@ -59,20 +55,13 @@ class mrc: # main ROS class
         self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,         check_positive_float,                       force=reset)
         self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,        check_positive_int,                         force=reset)
         self.PRINT_PREDICTION       = self.ROS_HOME.params.add(self.nodespace + "/print_prediction",    print_prediction, check_bool,                                 force=reset)
-        self.COMPRESS_IN            = self.ROS_HOME.params.add(self.nodespace + "/compress/in",         compress_in,      check_bool,                                 force=reset)
-        self.COMPRESS_OUT           = self.ROS_HOME.params.add(self.nodespace + "/compress/out",        compress_out,     check_bool,                                 force=reset)
-        
+       
         self.SVM_DATA_PARAMS        = [self.FEAT_TYPE, self.IMG_DIMS, self.NPZ_DBP, self.BAG_DBP, self.SVM_DBP, self.IMG_TOPIC, self.ODOM_TOPIC, \
                                        self.CAL_QRY_BAG_NAME, self.CAL_QRY_FILTERS, self.CAL_QRY_SAMPLE_RATE, \
                                        self.CAL_REF_BAG_NAME, self.CAL_REF_FILTERS, self.CAL_REF_SAMPLE_RATE]
         self.SVM_DATA_NAMES         = [i.name for i in self.SVM_DATA_PARAMS]
 
     def init_vars(self):
-
-        self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
-
-        self.INPUTS                 = get_ROS_message_types_dict(self.COMPRESS_IN.get())
-        self.OUTPUTS                = get_ROS_message_types_dict(self.COMPRESS_OUT.get())
         
         self.time_history           = []
 
@@ -104,13 +93,13 @@ class mrc: # main ROS class
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
         self.last_time              = rospy.Time.now()
 
-        self.param_checker_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
-        self.vpr_label_sub          = rospy.Subscriber(self.namespace + "/label" + self.INPUTS['topic'], self.INPUTS['label'], self.label_callback, queue_size=1)
-        self.svm_request_sub        = rospy.Subscriber(self.namespace + '/requests/svm/ready', ResponseSVM, self.svm_request_callback, queue_size=1)
-        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/request', RequestSVM, queue_size=1)
-        self.svm_state_pub          = self.ROS_HOME.add_pub(self.namespace + "/state" + self.INPUTS['topic'], self.OUTPUTS['mon_dets'], queue_size=1)
-        self.svm_field_pub          = self.ROS_HOME.add_pub(self.namespace + "/field" + self.INPUTS['topic'], self.OUTPUTS['img_dets'], queue_size=1)
-        self.svm_field_srv          = rospy.Service(self.namespace + '/GetSVMField', GenerateObj, self.handle_GetSVMField)
+        self.param_checker_sub      = rospy.Subscriber(     self.namespace + "/params_update",          String,             self.param_callback,        queue_size=100)
+        self.vpr_label_sub          = rospy.Subscriber(     self.namespace + "/label",                  ImageLabelDetails,  self.label_callback,        queue_size=1)
+        self.svm_request_sub        = rospy.Subscriber(     self.namespace + '/requests/svm/ready',     ResponseSVM,        self.svm_request_callback,  queue_size=1)
+        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/request',   RequestSVM,                                     queue_size=1)
+        self.svm_state_pub          = self.ROS_HOME.add_pub(self.namespace + "/state",                  MonitorDetails,                                 queue_size=1)
+        self.svm_field_pub          = self.ROS_HOME.add_pub(self.namespace + "/field",                  ImageDetails,                                   queue_size=1)
+        self.svm_field_srv          = rospy.Service(        self.namespace + '/GetSVMField',            GenerateObj,        self.handle_GetSVMField)
 
     def debug_cb(self, msg):
         if msg.node_name == self.node_name:
@@ -178,12 +167,12 @@ class mrc: # main ROS class
             success = False
 
         ans.success = success
-        ans.topic = self.namespace + "/monitor/field" + self.INPUTS['topic']
+        ans.topic = self.namespace + "/monitor/field"
         self.print("Service requested [Gen=%s], Success=%s" % (str(req.generate), str(success)), LogType.DEBUG)
         return ans
 
     def label_callback(self, msg):
-    # /vpr_nodes/label(/compressed) (aarapsi_robot_pack/(Compressed)ImageLabelStamped)
+    # /vpr_nodes/label (aarapsi_robot_pack/ImageLabelDetails)
     # Store new label message and act as drop-in replacement for odom_callback + img_callback
 
         self.label            = msg
@@ -201,16 +190,9 @@ class mrc: # main ROS class
         img_np_crop = img_np[min(indices_rows) : max(indices_rows)+1, \
                              min(indices_cols) : max(indices_cols)+1]
         img_np_crop_resize = cv2.resize(img_np_crop, (array_dim, array_dim), interpolation = cv2.INTER_AREA)
-        
-        if self.COMPRESS_OUT.get():
-            ros_img_to_pub = self.bridge.cv2_to_compressed_imgmsg(img_np_crop_resize, "jpeg") # jpeg (png slower)
-        else:
-            ros_img_to_pub = self.bridge.cv2_to_imgmsg(img_np_crop_resize, "bgr8")
 
-        self.SVM_FIELD_MSG                          = self.OUTPUTS['img_dets']()
-        self.SVM_FIELD_MSG.image                    = ros_img_to_pub
-        self.SVM_FIELD_MSG.image.header.frame_id    = 'map'
-        self.SVM_FIELD_MSG.image.header.stamp       = rospy.Time.now()
+        self.SVM_FIELD_MSG                          = ImageDetails()
+        self.SVM_FIELD_MSG.image                    = np_ndarray_to_uint8_list(img_np_crop_resize)
         self.SVM_FIELD_MSG.data.xlim                = x_lim
         self.SVM_FIELD_MSG.data.ylim                = y_lim
         self.SVM_FIELD_MSG.data.xlab                = 'VA ratio'
@@ -269,7 +251,7 @@ class mrc: # main ROS class
                     self.print('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool), LogType.ERROR)
 
         # Populate and publish SVM State details
-        ros_msg                 = self.OUTPUTS['mon_dets']()
+        ros_msg                 = MonitorDetails()
         ros_msg.queryImage      = self.label.queryImage
         ros_msg.header.stamp    = rospy.Time.now()
         ros_msg.header.frame_id	= 'map'
@@ -292,8 +274,6 @@ def do_args():
                                 epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
     
     # Optional Arguments:
-    parser.add_argument('--compress-in',      '-Ci', type=check_bool,                   default=False,            help='Enable image compression on input (default: %(default)s)')
-    parser.add_argument('--compress-out',     '-Co', type=check_bool,                   default=False,            help='Enable image compression on output (default: %(default)s)')
     parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=10.0,             help='Set node rate (default: %(default)s).')
     parser.add_argument('--node-name',        '-N',  type=check_string,                 default="vpr_all_in_one", help="Specify node name (default: %(default)s).")
     parser.add_argument('--anon',             '-a',  type=check_bool,                   default=True,             help="Specify whether node should be anonymous (default: %(default)s).")
@@ -309,8 +289,7 @@ def do_args():
 if __name__ == '__main__':
     try:
         args = do_args()
-        nmrc = mrc(compress_in=args['compress_in'], compress_out=args['compress_out'], \
-                    rate_num=args['rate'], namespace=args['namespace'], node_name=args['node_name'], anon=args['anon'],  
+        nmrc = mrc(rate_num=args['rate'], namespace=args['namespace'], node_name=args['node_name'], anon=args['anon'],  
                     print_prediction=args['print_prediction'], log_level=args['log_level'], reset=args['reset'], order_id=args['order_id']\
                 )
         nmrc.print("Initialisation complete. Listening for queries...", LogType.INFO)

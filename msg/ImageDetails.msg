@@ -1,3 +1,3 @@
-sensor_msgs/Image image
-aarapsi_robot_pack/ImageStructure data
+uint8[] image
 std_msgs/Header header
+aarapsi_robot_pack/ImageStructure data

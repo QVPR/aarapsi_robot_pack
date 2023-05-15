@@ -47,9 +47,6 @@ vpr_nodes:
 
   vpr_cruncher:
     log_level: 1
-    compress:
-      in: true
-      out: true
     dvc_weight: 1
     method:
       groundtruth: true
@@ -59,13 +56,8 @@ vpr_nodes:
   vpr_monitor:
     log_level: 2
     print_prediction: false
-    compress:
-      in: true
-      out: true
     rate: 12.0
 
   vpr_plotter:
     log_level: 2
-    compress:
-      in: true
     rate: 12.0

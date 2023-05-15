@@ -16,8 +16,6 @@
 
     <arg name="monitor_printprediction" default="False"/>
 
-    <arg name="compress_transport"      default="True"/>
-
     <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
 
     <group if="$(arg offline)">
@@ -32,8 +30,7 @@
 
         <!-- Monitor Node: -->
         <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
-            args="-Ci $(arg compress_transport) -Co $(arg compress_transport) -p $(arg monitor_printprediction)
-                    -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
+            args="-p $(arg monitor_printprediction) -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
         </node>
     </group>
 

@@ -4,14 +4,16 @@ import rospy
 import sys
 import argparse as ap
 
+from cv_bridge import CvBridge
+
 from std_msgs.msg import String
 from sensor_msgs.msg import CompressedImage, Image
 from nav_msgs.msg import Odometry
-from aarapsi_robot_pack.msg import ImageOdom, CompressedImageOdom
+from aarapsi_robot_pack.msg import ImageOdom
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string, check_positive_int
 from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, init_node, set_rospy_log_lvl
-from pyaarapsi.core.helper_tools import formatException
+from pyaarapsi.core.helper_tools import formatException, np_ndarray_to_uint8_list
 
 '''
 Image+Odometry Aggregator
@@ -47,26 +49,26 @@ class mrc:
         self.new_img    = False
         self.new_odom   = False
 
-        self.odom_topic = odom_topic
+        self.bridge     = CvBridge()
 
         self.compressed = compressed
         if self.compressed:
-            self.img_topic = img_topic + '/compressed'
-            self.pub_topic = pub_topic + '/compressed'
-            self.img_type  = CompressedImage
-            self.pub_type  = CompressedImageOdom
+            self.img_topic      = img_topic + '/compressed'
+            self.img_type       = CompressedImage
+            self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.compressed_imgmsg_to_cv2(img, "bgr8"))
         else:
-            self.img_topic = img_topic
-            self.pub_topic = pub_topic
-            self.img_type  = Image
-            self.pub_type  = ImageOdom
+            self.img_topic      = img_topic
+            self.img_type       = Image
+            self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.imgmsg_to_cv2(img, "passthrough"))
+        self.pub_topic  = pub_topic
+        self.odom_topic = odom_topic
 
     def init_rospy(self):
         self.rate_obj   = rospy.Rate(self.rate_num.get())
         self.param_sub  = rospy.Subscriber(self.namespace + "/params_update", String, self.param_cb, queue_size=100)
         self.img_sub    = rospy.Subscriber(self.img_topic, self.img_type, self.img_cb, queue_size=1)
         self.odom_sub   = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb, queue_size=1)
-        self.pub        = self.ROS_HOME.add_pub(self.pub_topic, self.pub_type, queue_size=1)
+        self.pub        = self.ROS_HOME.add_pub(self.pub_topic, ImageOdom, queue_size=1)
 
     def odom_cb(self, msg):
         self.odom       = msg
@@ -87,11 +89,11 @@ class mrc:
             self.new_img                = False
             self.new_odom               = False
 
-            msg_to_pub                  = self.pub_type()
+            msg_to_pub                  = ImageOdom()
             msg_to_pub.header.stamp     = rospy.Time.now()
             msg_to_pub.header.frame_id  = self.odom.header.frame_id
             msg_to_pub.odom             = self.odom
-            msg_to_pub.image            = self.img
+            msg_to_pub.image            = self.img_convert(self.img)
 
             self.pub.publish(msg_to_pub)
             del msg_to_pub

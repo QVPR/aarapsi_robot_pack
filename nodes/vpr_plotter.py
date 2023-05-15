@@ -2,15 +2,14 @@
 
 import rospy
 from std_msgs.msg import String
-from cv_bridge import CvBridge
 import numpy as np
 import rospkg
 import argparse as ap
 import os
 import sys
-import copy
 
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjRequest
+from aarapsi_robot_pack.msg import MonitorDetails, ImageDetails
 
 from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
@@ -67,8 +66,6 @@ class mrc: # main ROS class
         self.field_exists           = False # first SVM field message hasn't been received
         self.main_ready             = False
         self.srv_GetSVMField_once   = False
-
-        self.bridge                 = CvBridge() # to convert sensor_msgs/(Compressed)Image to cv2.
         
         self.INPUTS                 = get_ROS_message_types_dict(self.COMPRESS_IN.get())
         
@@ -84,11 +81,11 @@ class mrc: # main ROS class
     def init_rospy(self):
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
-        self.param_checker_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
-        self.svm_state_sub          = rospy.Subscriber(self.namespace + "/state" + self.INPUTS['topic'], self.INPUTS['mon_dets'], self.state_callback, queue_size=1)
-        self.svm_field_sub          = rospy.Subscriber(self.namespace + "/field" + self.INPUTS['topic'], self.INPUTS['img_dets'], self.field_callback, queue_size=1)
-        self.srv_GetSVMField        = rospy.ServiceProxy(self.namespace + '/GetSVMField', GenerateObj)
-        self.timer_check_if_dead    = rospy.Timer(rospy.Duration(secs=2), self.timer_check_if_dead)
+        self.param_checker_sub      = rospy.Subscriber(self.namespace + "/params_update",   String,         self.param_callback,        queue_size=100)
+        self.svm_state_sub          = rospy.Subscriber(self.namespace + "/state",           MonitorDetails, self.state_callback,        queue_size=1)
+        self.svm_field_sub          = rospy.Subscriber(self.namespace + "/field",           ImageDetails,   self.field_callback,        queue_size=1)
+        self.srv_GetSVMField        = rospy.ServiceProxy(self.namespace + '/GetSVMField',   GenerateObj)
+        self.timer_check_if_dead    = rospy.Timer(rospy.Duration(secs=2),                                   self.timer_check_if_dead)
 
     def timer_check_if_dead(self, event):
         if rospy.is_shutdown():
@@ -181,11 +178,11 @@ def do_args():
 class Doc_Frame:
     def __init__(self, nmrc, printer=print):
         # Prepare figures:
-        iframe_start          = """<iframe src="http://131.181.33.60:8080/stream?topic="""
-        iframe_end_rect       = """&type=ros_compressed" width=2000 height=1000 style="border: 0; transform: scale(0.5); transform-origin: 0 0;"/>"""
-        iframe_end_even       = """&type=ros_compressed" width=510 height=510 style="border: 0; transform: scale(0.49); transform-origin: 0 0;"/>"""
-        self.fig_iframe_feed_ = Div(text=iframe_start + nmrc.namespace + "/image" + iframe_end_rect, width=500, height=250)
-        self.fig_iframe_mtrx_ = Div(text=iframe_start + nmrc.namespace + "/similiarity_matrix" + iframe_end_even, width=250, height=250)
+        #iframe_start          = """<iframe src="http://131.181.33.60:8080/stream?topic="""
+        #iframe_end_rect       = """&type=ros_compressed" width=2000 height=1000 style="border: 0; transform: scale(0.5); transform-origin: 0 0;"/>"""
+        #iframe_end_even       = """&type=ros_compressed" width=510 height=510 style="border: 0; transform: scale(0.49); transform-origin: 0 0;"/>"""
+        #self.fig_iframe_feed_ = Div(text=iframe_start + nmrc.namespace + "/image" + iframe_end_rect, width=500, height=250)
+        #self.fig_iframe_mtrx_ = Div(text=iframe_start + nmrc.namespace + "/similiarity_matrix" + iframe_end_even, width=250, height=250)
         self.num_points       = len(nmrc.image_processor.dataset['dataset']['px'])
         self.sim_mtrx_img     = np.zeros((self.num_points, self.num_points)) # Make similarity matrix figure
         
@@ -225,7 +222,7 @@ def main_loop(nmrc, doc_frame):
     updateOdomFigBokeh(doc_frame, matchInd, trueInd, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
     if not nmrc.field_exists:
         return
-    updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.COMPRESS_IN.get(), nmrc.bridge, nmrc.new_field)
+    updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.new_field)
     updateSVMMFigBokeh(doc_frame, nmrc.state)
     nmrc.new_field = False
 
@@ -243,7 +240,7 @@ def ros_spin(nmrc, doc_frame):
 def main(doc, nmrc):
     try:
         doc_frame = Doc_Frame(nmrc)
-        doc.add_root(row(   column(doc_frame.fig_iframe_feed_, row(doc_frame.fig_iframe_mtrx_)), \
+        doc.add_root(row(   #column(doc_frame.fig_iframe_feed_, row(doc_frame.fig_iframe_mtrx_)), \
                             column(doc_frame.fig_dvec_handles['fig'], doc_frame.fig_odom_handles['fig'], doc_frame.fig_fdvc_handles['fig']), \
                             column(doc_frame.fig_cntr_handles['fig'], doc_frame.fig_svmm_handles['fig'], doc_frame.fig_xywv_handles['fig']) \
                         ))

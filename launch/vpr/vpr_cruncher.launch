@@ -14,9 +14,7 @@
 
     <arg name="namespace"               default="/vpr_nodes"/>
 
-    <arg name="cruncher_compress_in"    default="True"/>
     <arg name="cruncher_groundtruth"    default="True"/>
-    <arg name="compress_transport"      default="True"/>
 
     <arg name="log_level"               default="2"/>
 
@@ -32,8 +30,7 @@
 
         <!-- Cruncher Node: -->
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
-            args="-Ci $(arg cruncher_compress_in) -Co $(arg compress_transport) -G $(arg cruncher_groundtruth) 
-                    -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
+            args="-G $(arg cruncher_groundtruth) -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
         </node>
     </group>
 

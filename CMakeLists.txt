@@ -56,17 +56,13 @@ catkin_python_setup()
 ## Generate messages in the 'msg' folder
 add_message_files( 
   FILES # in alphabetical order:
-  CompressedImageDetails.msg
-  CompressedImageLabelStamped.msg
-  CompressedImageOdom.msg
-  CompressedMonitorDetails.msg
   ControllerStateInfo.msg
   ControllerStateInfoGroup.msg
   DatasetParams.msg
   Debug.msg
   Heartbeat.msg
   ImageDetails.msg
-  ImageLabelStamped.msg
+  ImageLabelDetails.msg
   ImageOdom.msg
   ImageStructure.msg
   LabelDetails.msg
