@@ -56,14 +56,14 @@
             <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
                     args="-ID 0"/>
 
+            <!-- Camera Topic Throttling Node: -->
+            <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
+                    args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -ID 1" />
+
             <!-- Image+Odom Aggregation Node: -->
             <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
                     args="-N img_odom_agg -r $(arg throttle_rate) -a $(arg anon) -C $(arg ioa_compress)
-                            --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic) -V $(arg log_level) -ID 1" />
-
-            <!-- Camera Topic Throttling Node: -->
-            <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
-                    args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -ID 2" />
+                            --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic) -V $(arg log_level) -ID 2" />
         </group>
 
         <!-- Cruncher's Trainer Node: -->

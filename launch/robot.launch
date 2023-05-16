@@ -20,12 +20,12 @@
 
         <!-- Web Server, Parameter Watcher, Image+Odom Aggregator, Image Throttle Nodes: -->
         <group if="$(arg launch_init)">
-            <include file="$(find aarapsi_robot_pack)/launch/vpr/pipeline/vpr_initialisation.launch"/>
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_initialisation.launch"/>
         </group>
 
         <!-- Core Pipeline Nodes: -->
         <group if="$(arg launch_core)">
-            <include file="$(find aarapsi_robot_pack)/launch/vpr/pipeline/vpr_pipeline.launch"/>
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_pipeline.launch"/>
         </group>
     </group>
 

@@ -2,7 +2,6 @@
 
 import rospy
 import sys
-import copy
 
 import numpy as np
 import argparse as ap

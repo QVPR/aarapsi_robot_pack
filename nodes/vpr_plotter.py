@@ -18,7 +18,7 @@ from pyaarapsi.vpr_simple.vpr_plots              import doDVecFigBokeh, doOdomFi
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_two_int_list, check_positive_int, check_valid_ip, check_enum, check_string
 from pyaarapsi.core.helper_tools    import formatException
-from pyaarapsi.core.ros_tools       import roslogger, get_ROS_message_types_dict, set_rospy_log_lvl, init_node, NodeState, LogType
+from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, NodeState, LogType
 from pyaarapsi.core.enum_tools      import enum_name
 
 from functools import partial
@@ -66,8 +66,6 @@ class mrc: # main ROS class
         self.field_exists           = False # first SVM field message hasn't been received
         self.main_ready             = False
         self.srv_GetSVMField_once   = False
-        
-        self.INPUTS                 = get_ROS_message_types_dict(self.COMPRESS_IN.get())
         
         # Process reference data (only needs to be done once)
         try:

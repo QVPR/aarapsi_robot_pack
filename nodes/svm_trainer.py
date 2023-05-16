@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 
 import rospy
-import rospkg
 import argparse as ap
-import numpy as np
 import sys
-import os
-import copy
 from rospy_message_converter import message_converter
 from std_msgs.msg import String
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum

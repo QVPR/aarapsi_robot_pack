@@ -19,7 +19,7 @@ from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
 from pyaarapsi.vpred                import *
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_list, check_bool, check_enum, check_string, check_positive_int
-from pyaarapsi.core.helper_tools    import formatException, np_ndarray_to_uint8_list, uint8_list_to_np_ndarray
+from pyaarapsi.core.helper_tools    import formatException, np_ndarray_to_uint8_list
 from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, LogType, NodeState
 from pyaarapsi.core.enum_tools      import enum_name
 
