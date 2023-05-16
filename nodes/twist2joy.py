@@ -28,7 +28,8 @@ Configured to keep safety lock-outs from the ps4 controller
 class mrc:
     def __init__(self, twist_sub_topic, twist_pub_topic, joy_sub_topic, node_name, anon, namespace, rate_num, log_level, reset=True, order_id=0):
 
-        init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
+        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
+            sys.exit()
 
         self.init_params(log_level, rate_num, reset)
         self.init_vars()

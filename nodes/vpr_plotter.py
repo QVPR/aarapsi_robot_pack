@@ -32,7 +32,8 @@ import logging
 class mrc: # main ROS class
     def __init__(self, compress_in, rate_num, namespace, node_name, anon, log_level, reset, order_id=0):
         
-        init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
+        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
+            sys.exit()
 
         self.init_params(rate_num, log_level, compress_in, reset)
         self.init_vars()
@@ -59,6 +60,9 @@ class mrc: # main ROS class
         self.RATE_NUM        = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,               check_positive_float,                 force=reset) # Hz
         self.LOG_LEVEL       = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,              check_positive_int,                   force=reset)
         
+        self.REF_DATA_PARAMS = [self.NPZ_DBP, self.BAG_DBP, self.REF_BAG_NAME, self.REF_FILTERS, self.REF_SAMPLE_RATE, self.IMG_TOPIC, self.ODOM_TOPIC, self.FEAT_TYPE, self.IMG_DIMS]
+        self.REF_DATA_NAMES  = [i.name for i in self.REF_DATA_PARAMS]
+
     def init_vars(self):
         # flags to denest main loop:
         self.new_state              = False # new SVM state message received
@@ -67,7 +71,6 @@ class mrc: # main ROS class
         self.main_ready             = False
         self.srv_GetSVMField_once   = False
         
-        # Process reference data (only needs to be done once)
         try:
             # Process reference data
             dataset_dict            = self.make_dataset_dict()
@@ -89,18 +92,43 @@ class mrc: # main ROS class
         if rospy.is_shutdown():
             self.exit()
 
+    def update_VPR(self):
+        dataset_dict = self.make_dataset_dict()
+        if not self.image_processor.swap(dataset_dict, generate=False, allow_false=True):
+            self.print("VPR reference data swap failed. Previous set will be retained (changed ROS parameter will revert)", LogType.WARN)
+            return False
+        else:
+            self.print("VPR reference data swapped.", LogType.INFO)
+            return True
+
     def param_callback(self, msg):
+        self.parameters_ready = False
         if self.ROS_HOME.params.exists(msg.data):
-            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
-            self.ROS_HOME.params.update(msg.data)
+            if not self.ROS_HOME.params.update(msg.data):
+                self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
+            
+            else:
+                self.print("Change to parameter [%s]; updated." % msg.data, LogType.DEBUG)
 
-            if msg.data == self.LOG_LEVEL.name:
-                set_rospy_log_lvl(self.LOG_LEVEL.get())
-            elif msg.data == self.RATE_NUM.name:
-                self.rate_obj = rospy.Rate(self.RATE_NUM.get())
+                if msg.data == self.LOG_LEVEL.name:
+                    set_rospy_log_lvl(self.LOG_LEVEL.get())
+                elif msg.data == self.RATE_NUM.name:
+                    self.rate_obj = rospy.Rate(self.RATE_NUM.get())
 
+                ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
+                try:
+                    param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
+                    self.print("Change to VPR reference data parameters detected.", LogType.WARN)
+                    if not self.update_VPR():
+                        param.revert()
+                except IndexError:
+                    pass
+                except:
+                    param.revert()
+                    self.print(formatException(), LogType.ERROR)
         else:
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
+        self.parameters_ready = True
 
     def make_dataset_dict(self):
         return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \

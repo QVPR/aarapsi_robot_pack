@@ -23,13 +23,14 @@ from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
 
 from pyaarapsi.core.enum_tools                   import enum_name
 from pyaarapsi.core.argparse_tools               import check_bounded_float, check_positive_float, check_positive_two_int_list, check_positive_int, check_bool, check_enum, check_string
-from pyaarapsi.core.ros_tools                    import q_from_yaw, roslogger, set_rospy_log_lvl, init_node, LogType, NodeState
+from pyaarapsi.core.ros_tools                    import yaw_from_q, q_from_yaw, roslogger, set_rospy_log_lvl, init_node, LogType, NodeState
 from pyaarapsi.core.helper_tools                 import formatException, np_ndarray_to_uint8_list, uint8_list_to_np_ndarray, vis_dict
 
 class mrc: # main ROS class
     def __init__(self, do_groundtruth, rate_num, namespace, node_name, anon, log_level, reset, order_id=0):
         
-        init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
+        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
+            sys.exit()
 
         self.init_params(rate_num, log_level, do_groundtruth, reset)
         self.init_vars()
@@ -54,10 +55,11 @@ class mrc: # main ROS class
         self.TOL_MODE        = self.ROS_HOME.params.add(self.namespace + "/tolerance/mode",      None,                   lambda x: check_enum(x, Tolerance_Mode),        force=False)
         self.TOL_THRES       = self.ROS_HOME.params.add(self.namespace + "/tolerance/threshold", None,                   check_positive_float,                           force=False)
         
+        self.GROUND_TRUTH    = self.ROS_HOME.params.add(self.namespace + "/groundtruth",         do_groundtruth,         check_bool,                                     force=False)
+        
         self.TIME_HIST_LEN   = self.ROS_HOME.params.add(self.nodespace + "/time_history_length", max(1,int(5*rate_num)), check_positive_int,                             force=reset)
         self.LOG_LEVEL       = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,              check_positive_int,                             force=reset)
         self.RATE_NUM        = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,               check_positive_float,                           force=reset) # Hz
-        self.GROUND_TRUTH    = self.ROS_HOME.params.add(self.nodespace + "/method/groundtruth",  do_groundtruth,         check_bool,                                     force=reset)
         self.DVC_WEIGHT      = self.ROS_HOME.params.add(self.nodespace + "/dvc_weight",          1,                      lambda x: check_bounded_float(x, 0, 1, 'both'), force=reset) # Hz
         
         self.REF_DATA_PARAMS = [self.NPZ_DBP, self.BAG_DBP, self.REF_BAG_NAME, self.REF_FILTERS, self.REF_SAMPLE_RATE, self.IMG_TOPIC, self.ODOM_TOPIC, self.FEAT_TYPE, self.IMG_DIMS]
@@ -202,7 +204,7 @@ class mrc: # main ROS class
     def data_callback(self, msg):
     # /data/img_odom (aarapsi_robot_pack/ImageOdom)
 
-        self.ego                    = [round(msg.odom.pose.pose.position.x, 3), round(msg.odom.pose.pose.position.y, 3), round(msg.odom.pose.pose.position.z, 3)]
+        self.ego                    = [round(msg.odom.pose.pose.position.x, 3), round(msg.odom.pose.pose.position.y, 3), round(yaw_from_q(msg.odom.pose.pose.orientation), 3)]
         self.store_query            = uint8_list_to_np_ndarray(msg.image)
         self.new_query              = True
         

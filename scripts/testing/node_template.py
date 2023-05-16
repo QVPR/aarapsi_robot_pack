@@ -60,7 +60,10 @@ class mrc():
         self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            self.rate_obj.sleep()
+            self.loop_contents()
+
+    def loop_contents(self):
+        self.rate_obj.sleep()
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:

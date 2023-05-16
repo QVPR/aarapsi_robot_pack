@@ -13,11 +13,11 @@ from std_msgs.msg import String
 from fastdist import fastdist
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string, check_positive_int
-from pyaarapsi.core.ros_tools import roslogger, LogType, NodeState, yaw_from_q, set_rospy_log_lvl, init_node
-from pyaarapsi.core.helper_tools import formatException, np_ndarray_to_uint8_list
+from pyaarapsi.core.ros_tools import roslogger, LogType, NodeState, yaw_from_q, q_from_yaw, set_rospy_log_lvl, init_node
+from pyaarapsi.core.helper_tools import formatException, np_ndarray_to_uint8_list, angle_wrap
 
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjRequest, GetSafetyStates, GetSafetyStatesRequest
-from aarapsi_robot_pack.msg import ControllerStateInfo, CompressedMonitorDetails
+from aarapsi_robot_pack.msg import ControllerStateInfo, MonitorDetails
 
 class mrc:
     def __init__(self, node_name, rate_num, namespace, anon, log_level, reset, order_id=0):
@@ -63,28 +63,21 @@ class mrc:
 
         self.bridge         = CvBridge()
 
-        if bool(rospy.get_param('/vpr_nodes/vpr_monitor/compress/out')):
-            self.state_topic    = '/vpr_nodes/state/compressed'
-            self.state_type     = CompressedMonitorDetails
-            self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.compressed_imgmsg_to_cv2(img, "bgr8"))
-        else:
-            self.state_topic    = '/vpr_nodes/state'
-            self.state_type     = CompressedMonitorDetails
-            self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.imgmsg_to_cv2(img, "passthrough"))
-
     def init_rospy(self):
         self.rate_obj       = rospy.Rate(self.RATE_NUM.get())
         self.time           = rospy.Time.now().to_sec()
 
-        self.vpr_path_sub   = rospy.Subscriber('/vpr_nodes/path',                             Path,                self.path_cb,        queue_size=1) # from vpr_cruncher
-        self.sensors_sub    = rospy.Subscriber(self.jackal_odom,                              Odometry,            self.sensors_cb,     queue_size=1) # wheel encoders (and maybe imu ??? don't think so)
-        self.gt_sub         = rospy.Subscriber(self.gt_odom,                                  Odometry,            self.gt_cb,          queue_size=1) # ONLY for ground truth
-        self.state_sub      = rospy.Subscriber(self.state_topic,                              self.state_type,     self.state_cb,       queue_size=1)
-        self.param_sub      = rospy.Subscriber(self.namespace + "/params_update",             String,              self.param_callback, queue_size=100)
-        self.info_pub       = self.ROS_HOME.add_pub('/vpr_nodes/' + self.node_name + '/info', ControllerStateInfo,                      queue_size=1)
-        self.twist_pub      = self.ROS_HOME.add_pub('/twist2joy/in',                          Twist,                                    queue_size=1)
-        self.srv_path       = rospy.ServiceProxy('/vpr_nodes/path',                           GenerateObj)
-        self.srv_safety     = rospy.ServiceProxy('/vpr_nodes/safety',                         GetSafetyStates)
+        self.vpr_path_sub   = rospy.Subscriber(self.namespace + '/path',           Path,                self.path_cb,        queue_size=1) # from vpr_cruncher
+        self.sensors_sub    = rospy.Subscriber(self.jackal_odom,                   Odometry,            self.sensors_cb,     queue_size=1) # wheel encoders (and maybe imu ??? don't think so)
+        self.gt_sub         = rospy.Subscriber(self.gt_odom,                       Odometry,            self.gt_cb,          queue_size=1) # ONLY for ground truth
+        self.state_sub      = rospy.Subscriber(self.namespace + '/state',          MonitorDetails,      self.state_cb,       queue_size=1)
+        self.param_sub      = rospy.Subscriber(self.namespace + "/params_update",  String,              self.param_callback, queue_size=100)
+        self.info_pub       = self.ROS_HOME.add_pub(self.nodespace + '/info',      ControllerStateInfo,                      queue_size=1)
+        self.twist_pub      = self.ROS_HOME.add_pub('/twist2joy/in',               Twist,                                    queue_size=1)
+        self.ego_good_pub   = self.ROS_HOME.add_pub(self.nodespace + '/odom/good', Odometry,                                 queue_size=1)
+        self.ego_bad_pub    = self.ROS_HOME.add_pub(self.nodespace + '/odom/bad',  Odometry,                                 queue_size=1)
+        self.srv_path       = rospy.ServiceProxy(self.namespace + '/path',         GenerateObj)
+        self.srv_safety     = rospy.ServiceProxy(self.namespace + '/safety',       GetSafetyStates)
         
         self.main()
 
@@ -149,8 +142,8 @@ class mrc:
             self.old_sensor_cmd = msg
             return
         
-        self.delta_yaw      = self.angle_wrap(yaw_from_q(msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_cmd.pose.pose.orientation))
-        self.current_yaw    = self.angle_wrap(0.5 * self.angle_wrap(self.current_yaw + self.vpr_ego[2]) + self.delta_yaw)
+        self.delta_yaw      = angle_wrap(yaw_from_q(msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_cmd.pose.pose.orientation))
+        self.current_yaw    = angle_wrap(0.5 * angle_wrap(self.current_yaw + self.vpr_ego[2]) + self.delta_yaw)
         self.old_sensor_cmd = msg
 
     def update_target(self):
@@ -159,14 +152,6 @@ class mrc:
                                                                     fastdist.euclidean, "euclidean")
         target_index        = (np.argmin(spd[:]) + self.lookahead_inds) % self.path_array.shape[0]
         self.target_yaw     = self.path_array[target_index, 2]
-
-    def angle_wrap(self, angle_in, mode='DEG'):
-        if mode == 'DEG':
-            return ((angle_in + 180.0) % 360) - 180
-        elif mode == 'RAD':
-            return ((angle_in + np.pi) % (np.pi * 2)) - np.pi
-        else:
-            raise Exception('Mode must be either DEG or RAD.')
 
     def main(self):
         self.ROS_HOME.set_state(NodeState.MAIN)
@@ -192,13 +177,13 @@ class mrc:
         self.update_target()
 
         #self.print("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw))
-        #self.print("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, self.angle_wrap(self.true_yaw - self.current_yaw)))
+        #self.print("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, angle_wrap(self.true_yaw - self.current_yaw)))
 
-        safety_states_srv       = self.srv_safety(GetSafetyStatesRequest())
+        safety_states_srv           = self.srv_safety(GetSafetyStatesRequest())
 
-        msg                     = ControllerStateInfo()
+        msg                         = ControllerStateInfo()
         try:
-            msg.query_image         = self.img_convert(self.svm_details.queryImage)
+            msg.query_image         = self.svm_details.queryImage
             # Extract Label Details:
             msg.dvc                 = self.svm_details.data.dvc
             msg.group.gt_ego        = self.svm_details.data.gt_ego
@@ -226,17 +211,29 @@ class mrc:
         msg.group.vpr_topic         = self.vpr_odom
         msg.group.jackal_topic      = self.jackal_odom
         msg.group.groundtruth_topic = self.gt_odom
+
         self.info_pub.publish(msg)
+        
+        current_ego                       = Odometry()
+        current_ego.header.stamp          = rospy.Time.now()
+        current_ego.header.frame_id       = 'map'
+        current_ego.pose.pose.position.x  = self.vpr_ego[0]
+        current_ego.pose.pose.position.y  = self.vpr_ego[1]
+        current_ego.pose.pose.orientation = q_from_yaw(self.vpr_ego[2])
 
         new_twist           = Twist()
-        new_twist.angular.z = -1 * self.angle_wrap(self.target_yaw - self.current_yaw)
+        new_twist.angular.z = -1 * angle_wrap(self.target_yaw - self.current_yaw)
 
         if msg.group.mStateBin == True or self.SVM_OVERRIDE.get():
             new_twist.linear.x  = 0.5
+            self.ego_good_pub.publish(current_ego)
         else:
             new_twist.linear.x  = 0.2
+            self.ego_bad_pub.publish(current_ego)
             rospy.loginfo('Poor datapoint; low confidence. Reducing top speed... Score: %s' % (str(msg.group.mState)))
+
         self.twist_pub.publish(new_twist)
+        
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:

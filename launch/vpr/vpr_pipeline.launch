@@ -20,8 +20,6 @@
 
     <arg name="namespace"               default="/vpr_nodes"/>
 
-    <arg name="cruncher_groundtruth"    default="True"/>
-
     <arg name="monitor_printprediction" default="False"/>
 
     <arg name="plotter_port"            default="5006"/>
@@ -29,11 +27,6 @@
 
     <arg name="tt_mode"                 default="1"/>
     <arg name="tt_img_dims"             default="(640,480)"/>
-
-    <arg name="ioa_compress"            default="True"/>
-    <arg name="ioa_img_topic"           default="$(arg namespace)/occam/image0"/>
-    <arg name="ioa_odom_topic"          default="/odom/filtered"/>
-    <arg name="ioa_pub_topic"           default="$(arg namespace)/img_odom"/>
 
     <arg name="use_gpu"                 default="True"/>
 
@@ -62,8 +55,7 @@
 
             <!-- Image+Odom Aggregation Node: -->
             <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
-                    args="-N img_odom_agg -r $(arg throttle_rate) -a $(arg anon) -C $(arg ioa_compress)
-                            --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic) -V $(arg log_level) -ID 2" />
+                    args="-N img_odom_agg -r $(arg throttle_rate) -n $(arg namespace) -a $(arg anon) -V $(arg log_level) -R $(arg reset) -ID 2" />
         </group>
 
         <!-- Cruncher's Trainer Node: -->
@@ -73,7 +65,7 @@
 
         <!-- Cruncher Node: -->
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
-            args="-G $(arg cruncher_groundtruth) -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
+            args="-r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
         </node>
 
         <!-- Monitor's SVM Trainer Node: -->

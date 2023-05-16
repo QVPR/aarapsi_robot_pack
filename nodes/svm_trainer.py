@@ -30,7 +30,8 @@ monitor's performance and activities.
 class mrc():
     def __init__(self, node_name, rate_num, namespace, anon, log_level, reset, order_id=0):
 
-        init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
+        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
+            sys.exit()
 
         self.init_params(rate_num, log_level, reset)
         self.init_vars()

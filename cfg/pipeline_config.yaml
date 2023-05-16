@@ -7,9 +7,12 @@ vpr_nodes:
   npz_dbp: /data/compressed_sets
   svm_dbp: /cfg/svm_models
   bag_dbp: /data/rosbags
+
   odom_topic: /odom/filtered
   img_topic: /ros_indigosdk_occam/image0/compressed
-  
+
+  groundtruth: true
+
   cal:
     qry:
       bag_name: s1_cw_o0_e0_a0
@@ -48,8 +51,6 @@ vpr_nodes:
   vpr_cruncher:
     log_level: 1
     dvc_weight: 1
-    method:
-      groundtruth: true
     rate: 12.0
     time_history_length: 20
 
