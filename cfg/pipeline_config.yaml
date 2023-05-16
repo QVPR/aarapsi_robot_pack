@@ -8,23 +8,23 @@ vpr_nodes:
   svm_dbp: /cfg/svm_models
   bag_dbp: /data/rosbags
 
-  odom_topic: /odom/filtered
-  img_topic: /ros_indigosdk_occam/image0/compressed
+  odom_topic: /odom
+  img_topic: /ros_indigosdk_occam/stitched_image0/compressed
 
   groundtruth: true
 
   cal:
     qry:
-      bag_name: s1_cw_o0_e0_a0
+      bag_name: s3_cw_1
       filters: '{}'
       sample_rate: 10.0
     ref:
-      bag_name: s2_cw_o0_e1_a0
+      bag_name: s3_cw_f8
       filters: '{}'
       sample_rate: 10.0
 
   ref:
-    bag_name: s2_ccw_o0_e0_a0
+    bag_name: s3_ccw_f8
     filters: '{}'
     sample_rate: 10.0
 

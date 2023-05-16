@@ -17,7 +17,7 @@ from pyaarapsi.vpr_simple.vpr_plots              import doDVecFigBokeh, doOdomFi
                                                         updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_two_int_list, check_positive_int, check_valid_ip, check_enum, check_string
-from pyaarapsi.core.helper_tools    import formatException
+from pyaarapsi.core.helper_tools    import formatException, vis_dict
 from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, NodeState, LogType
 from pyaarapsi.core.enum_tools      import enum_name
 
@@ -183,24 +183,6 @@ class mrc: # main ROS class
         print('Exit state reached.')
         sys.exit()
 
-def do_args():
-    parser = ap.ArgumentParser(prog="vpr_plotter", 
-                               description="ROS implementation of QVPR's VPR Primer: Plotting Extension",
-                               epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-    parser.add_argument('--port',             '-P',  type=check_positive_int,        default=5006,             help='Set bokeh server port  (default: %(default)s).')
-    parser.add_argument('--address',          '-A',  type=check_valid_ip,            default='0.0.0.0',        help='Set bokeh server address (default: %(default)s).')
-    parser.add_argument('--compress-in',      '-Ci', type=check_bool,                default=False,            help='Enable image compression on input (default: %(default)s)')
-    parser.add_argument('--rate',             '-r',  type=check_positive_float,      default=10.0,             help='Set node rate (default: %(default)s).')
-    parser.add_argument('--node-name',        '-N',  type=check_string,              default="vpr_plotter",    help="Specify node name (default: %(default)s).")
-    parser.add_argument('--anon',             '-a',  type=check_bool,                default=True,             help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',        '-n',  type=check_string,              default="/vpr_nodes",     help="Specify namespace for topics (default: %(default)s).")
-    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16], default=2,                help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--reset',            '-R',  type=check_bool,                default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
-    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
-    # Parse args...
-    raw_args = parser.parse_known_args()
-    return vars(raw_args[0])
-
 class Doc_Frame:
     def __init__(self, nmrc, printer=print):
         # Prepare figures:
@@ -226,8 +208,7 @@ class Doc_Frame:
         
 
 def main_loop(nmrc, doc_frame):
-# Main loop process
-
+    # Main loop process
     if not nmrc.srv_GetSVMField_once:
         nmrc._timer_srv_GetSVMField(generate=True)
 
@@ -255,10 +236,18 @@ def main_loop(nmrc, doc_frame):
 def ros_spin(nmrc, doc_frame):
     try:
         nmrc.rate_obj.sleep()
-        main_loop(nmrc, doc_frame)
+        try:
+            main_loop(nmrc, doc_frame)
+        except Exception as e:
+            if nmrc.parameters_ready:
+                nmrc.print(vis_dict(nmrc.image_processor.dataset))
+                raise Exception('Critical failure. ' + formatException()) from e
+            else:
+                nmrc.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                rospy.sleep(0.5)
 
-        if rospy.is_shutdown():
-            nmrc.exit()
+            if rospy.is_shutdown():
+                nmrc.exit()
     except:
         nmrc.print(formatException(), LogType.ERROR)
         nmrc.exit()
@@ -278,6 +267,24 @@ def main(doc, nmrc):
     except Exception:
         nmrc.print(formatException(), LogType.ERROR)
         nmrc.exit()
+
+def do_args():
+    parser = ap.ArgumentParser(prog="vpr_plotter", 
+                               description="ROS implementation of QVPR's VPR Primer: Plotting Extension",
+                               epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
+    parser.add_argument('--port',             '-P',  type=check_positive_int,        default=5006,             help='Set bokeh server port  (default: %(default)s).')
+    parser.add_argument('--address',          '-A',  type=check_valid_ip,            default='0.0.0.0',        help='Set bokeh server address (default: %(default)s).')
+    parser.add_argument('--compress-in',      '-Ci', type=check_bool,                default=False,            help='Enable image compression on input (default: %(default)s)')
+    parser.add_argument('--rate',             '-r',  type=check_positive_float,      default=10.0,             help='Set node rate (default: %(default)s).')
+    parser.add_argument('--node-name',        '-N',  type=check_string,              default="vpr_plotter",    help="Specify node name (default: %(default)s).")
+    parser.add_argument('--anon',             '-a',  type=check_bool,                default=True,             help="Specify whether node should be anonymous (default: %(default)s).")
+    parser.add_argument('--namespace',        '-n',  type=check_string,              default="/vpr_nodes",     help="Specify namespace for topics (default: %(default)s).")
+    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16], default=2,                help="Specify ROS log level (default: %(default)s).")
+    parser.add_argument('--reset',            '-R',  type=check_bool,                default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
+    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
+    # Parse args...
+    raw_args = parser.parse_known_args()
+    return vars(raw_args[0])
 
 if __name__ == '__main__':
     os.environ['BOKEH_ALLOW_WS_ORIGIN'] = '0.0.0.0,131.181.33.60'

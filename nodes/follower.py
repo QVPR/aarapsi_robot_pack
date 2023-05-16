@@ -33,6 +33,8 @@ class mrc:
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_params(self, rate_num, log_level, reset):
+        self.ODOM_TOPIC      = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,     check_string,         force=False)
+        
         self.LOG_LEVEL       = self.ROS_HOME.params.add(self.nodespace + "/log_level",          log_level, check_positive_int,   force=reset)
         self.RATE_NUM        = self.ROS_HOME.params.add(self.nodespace + "/rate",               rate_num,  check_positive_float, force=reset)
         self.SVM_OVERRIDE    = self.ROS_HOME.params.add(self.nodespace + "/svm_override",       False,     check_bool,           force=reset)
@@ -57,9 +59,7 @@ class mrc:
         self.path_processed = False
         self.svm_details    = None
 
-        self.vpr_odom       = '/vpr_nodes/vpr_odom'
         self.jackal_odom    = '/jackal_velocity_controller/odom'
-        self.gt_odom        = '/odom/filtered'
 
         self.bridge         = CvBridge()
 
@@ -69,7 +69,7 @@ class mrc:
 
         self.vpr_path_sub   = rospy.Subscriber(self.namespace + '/path',           Path,                self.path_cb,        queue_size=1) # from vpr_cruncher
         self.sensors_sub    = rospy.Subscriber(self.jackal_odom,                   Odometry,            self.sensors_cb,     queue_size=1) # wheel encoders (and maybe imu ??? don't think so)
-        self.gt_sub         = rospy.Subscriber(self.gt_odom,                       Odometry,            self.gt_cb,          queue_size=1) # ONLY for ground truth
+        self.gt_sub         = rospy.Subscriber(self.ODOM_TOPIC.get(),              Odometry,            self.gt_cb,          queue_size=1) # ONLY for ground truth
         self.state_sub      = rospy.Subscriber(self.namespace + '/state',          MonitorDetails,      self.state_cb,       queue_size=1)
         self.param_sub      = rospy.Subscriber(self.namespace + "/params_update",  String,              self.param_callback, queue_size=100)
         self.info_pub       = self.ROS_HOME.add_pub(self.nodespace + '/info',      ControllerStateInfo,                      queue_size=1)
@@ -208,9 +208,9 @@ class mrc:
         msg.group.lookahead         = self.lookahead_inds
         msg.group.lookahead_mode    = 'index-based'
 
-        msg.group.vpr_topic         = self.vpr_odom
+        msg.group.vpr_topic         = self.namespace + '/vpr_odom'
         msg.group.jackal_topic      = self.jackal_odom
-        msg.group.groundtruth_topic = self.gt_odom
+        msg.group.groundtruth_topic = self.ODOM_TOPIC.get()
 
         self.info_pub.publish(msg)
         

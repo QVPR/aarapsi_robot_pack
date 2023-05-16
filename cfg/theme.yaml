@@ -2,7 +2,7 @@
 
 attrs:
     figure:
-        background_fill_color: "#DDDDDD"
+        background_fill_color: "#FFFFFF"
         outline_line_color: white
         toolbar_location: above
         height: 500
