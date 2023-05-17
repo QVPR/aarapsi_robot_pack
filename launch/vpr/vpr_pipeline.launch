@@ -10,6 +10,9 @@
     <arg name="launch_throttle"         default="true"/>
     <arg name="launch_img_odom_agg"     default="true"/>
     <arg name="launch_paramwatcher"     default="true"/>
+    <arg name="launch_visualiser"       default="true"/>
+    <arg name="launch_twist2joy"        default="true"/>
+    <arg name="launch_follower"         default="true"/>
 
     <arg name="offline"                 default="false"/>
     
@@ -29,6 +32,18 @@
     <arg name="tt_img_dims"             default="(640,480)"/>
 
     <arg name="use_gpu"                 default="True"/>
+
+    <arg name="tj_node_name"            default="twist2joy"/>
+    <arg name="tj_anon"                 default="True"/>
+    <arg name="tj_rate"                 default="50.0"/>
+
+    <arg name="tj_twist_sub"            default="/twist2joy/in"/>
+    <arg name="tj_twist_pub"            default="/jackal_velocity_controller/cmd_vel"/>
+    <arg name="tj_joy_sub"              default="/bluetooth_teleop/joy"/>
+    
+    <arg name="fw_node_name"            default="follower"/>
+    <arg name="fw_anon"                 default="True"/>
+    <arg name="fw_rate"                 default="10.0"/>
 
     <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
 
@@ -82,6 +97,21 @@
         <node if="$(arg launch_plotter)" pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
             args="-P $(arg plotter_port) -A $(arg plotter_address) -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
         </node>
+
+        <!-- Visualisation Node: -->
+        <node if="$(arg launch_visualiser)" pkg="aarapsi_robot_pack" type="visualiser.py" name="visualiser" output="screen" 
+            args="-r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 8">
+        </node>
+    
+        <!-- Twist2Joy Node: -->
+        <node if="$(arg launch_twist2joy)" pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)" output="screen"
+                args="$(arg tj_twist_sub) $(arg tj_twist_pub) $(arg tj_joy_sub) 
+                -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level) -ID 9"/>
+
+        <!-- Follower Node: -->
+        <node if="$(arg launch_follower)" pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)" output="screen"
+                args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level) -ID 10"/>
+
     </group>
 
 </launch>
