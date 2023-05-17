@@ -291,7 +291,7 @@ class mrc: # main ROS class
 
         return trueInd
 
-    def publish_ros_info(self, tInd, mInd, dvc, state):
+    def publish_ros_info(self, tInd, mInd, dvc, gt_state, gt_error):
     # Publish label and/or image feed
 
         struct_to_pub                   = ImageLabelDetails()
@@ -305,7 +305,8 @@ class mrc: # main ROS class
         struct_to_pub.data.dvc          = dvc
         struct_to_pub.data.matchId      = mInd
         struct_to_pub.data.trueId       = tInd
-        struct_to_pub.data.state        = state
+        struct_to_pub.data.gt_state     = gt_state
+        struct_to_pub.data.gt_error     = gt_error
         struct_to_pub.header.frame_id   = 'map'
         struct_to_pub.header.stamp      = rospy.Time.now()
 
@@ -368,7 +369,7 @@ class mrc: # main ROS class
         ft_qry          = self.extract(self.store_query, self.FEAT_TYPE.get(), self.IMG_DIMS.get())
         matchInd, dvc   = self.getMatchInd(ft_qry) # Find match
         trueInd         = -1 #default; can't be negative.
-        tolState        = 0
+        tolState        = -1
 
         if self.GROUND_TRUTH.get():
             trueInd = self.getTrueInd() # find correct match based on shortest difference to measured odometry
@@ -387,16 +388,15 @@ class mrc: # main ROS class
                 tolError = np.abs(matchInd - trueInd)
             else:
                 raise Exception("Error: Unknown tolerance mode.")
-
             if tolError < self.TOL_THRES.get():
                 self.ICON_DICT['icon'] = self.ICON_DICT['good']
-                tolState = 2
+                tolState = 1
             else:
                 self.ICON_DICT['icon'] = self.ICON_DICT['poor']
-                tolState = 1
+                tolState = 0
         
         # Make ROS messages
-        self.publish_ros_info(trueInd, matchInd, dvc, tolState)
+        self.publish_ros_info(trueInd, matchInd, dvc, tolState, tolError)
 
     def exit(self):
         self.print("Quit received.", LogType.INFO)

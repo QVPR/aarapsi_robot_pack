@@ -3,7 +3,8 @@ aarapsi_robot_pack/xyw gt_ego           # x,y,yaw queryImage was recorded at (ch
 aarapsi_robot_pack/xyw vpr_ego          # x,y,yaw as generated from queryImage
 int64 matchId                           # Index of VPR match
 int64 trueId                            # Index ground truth thinks is best (-1 if no groundtruth)
-int8 state                              # int matching 0: unknown, 1: bad, 2: good
+int8 gt_state                           # int matching -1: unknown, 0: bad, 1: good
+float64 gt_error			# float value for error in groundtruth scheme
 
 aarapsi_robot_pack/SafetyStates safety_states
 

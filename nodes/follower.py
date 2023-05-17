@@ -190,7 +190,8 @@ class mrc:
             msg.group.vpr_ego       = self.svm_details.data.vpr_ego
             msg.group.matchId       = self.svm_details.data.matchId
             msg.group.trueId        = self.svm_details.data.trueId
-            msg.group.state         = self.svm_details.data.state
+            msg.group.gt_state      = self.svm_details.data.gt_state
+            msg.group.gt_error      = self.svm_details.data.gt_error
             # Extract Monitor Details:
             msg.group.mState        = self.svm_details.mState
             msg.group.prob          = self.svm_details.prob
