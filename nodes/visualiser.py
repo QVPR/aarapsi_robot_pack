@@ -36,6 +36,7 @@ class mrc():
         self.init_rospy()
 
         self.main_ready      = True
+        self.last_ego        = [0.0, 0.0, 0.0]
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_params(self, rate_num, log_level, reset):
@@ -50,6 +51,8 @@ class mrc():
         self.REF_FILTERS     = self.ROS_HOME.params.add(self.namespace + "/ref/filters",         None,                   check_string,                         force=False)
         self.REF_SAMPLE_RATE = self.ROS_HOME.params.add(self.namespace + "/ref/sample_rate",     None,                   check_positive_float,                 force=False) # Hz
         
+        self.SVM_MODE        = self.ROS_HOME.params.add(self.nodespace + "/svm_mode",            False,                  check_bool,                           force=reset)
+        self.NUM_MARKERS     = self.ROS_HOME.params.add(self.nodespace + "/num_markers",         100,                    check_positive_int,                   force=reset)
         self.LOG_LEVEL       = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,              check_positive_int,                   force=reset)
         self.RATE_NUM        = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,               check_positive_float,                 force=reset)
         
@@ -60,6 +63,11 @@ class mrc():
         self.control_msg     = None
         self.new_control_msg = False
         self.markers         = MarkerArray()
+        self.marker_id       = 0
+        self.colour_good     = ColorRGBA(r=0.1, g=0.9, b=0.2, a=0.80)
+        self.colour_svm_good = ColorRGBA(r=0.1, g=0.9, b=0.2, a=0.20)
+        self.colour_bad      = ColorRGBA(r=0.9, g=0.2, b=0.1, a=0.20)
+        self.colour_lost     = ColorRGBA(r=0.1, g=0.1, b=0.1, a=0.08)
         
         try:
             # Process reference data
@@ -112,7 +120,8 @@ class mrc():
                     param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
                     self.print("Change to VPR reference data parameters detected.", LogType.WARN)
                     if not self.update_VPR():
-                        param.revert()
+                        #param.revert()
+                        pass
                 except IndexError:
                     pass
                 except:
@@ -130,7 +139,7 @@ class mrc():
 
     def make_control_visualisation(self):
         # Generate / record statistics:
-        gt_ego              = [self.control_msg.group.gt_ego.x,  self.control_msg.group.gt_ego.y,  self.control_msg.group.gt_ego.w]
+        gt_ego              = self.last_ego
         vpr_ego             = [self.control_msg.group.vpr_ego.x, self.control_msg.group.vpr_ego.y, self.control_msg.group.vpr_ego.w]
         err_ego             = [gt_ego[0] - vpr_ego[0], gt_ego[1] - vpr_ego[1], angle_wrap(gt_ego[2] - vpr_ego[2], 'RAD')]
 
@@ -138,7 +147,8 @@ class mrc():
         vpr_ind             = self.control_msg.group.matchId
         err_id              = abs(gt_ind - vpr_ind)
 
-        in_gt_tolerance     = self.control_msg.group.state == 2
+        in_gt_tolerance     = self.control_msg.group.gt_state > 0
+        gt_error            = self.control_msg.group.gt_error
         in_svm_tolerance    = self.control_msg.group.mStateBin
         auto_mode           = self.control_msg.group.safety_states.autonomous
 
@@ -149,19 +159,39 @@ class mrc():
         current_yaw         = self.control_msg.group.current_yaw
         err_yaw             = angle_wrap(gt_ego[2] - current_yaw)
 
-        scale               = np.sqrt(np.sum(np.square(np.array(err_ego)))) / 8.0
+        if self.SVM_MODE.get():
+            if in_svm_tolerance:
+                colour = self.colour_svm_good
+            else:
+                colour = self.colour_bad
+            scale = abs(svm_zvalue)
+        else:
+            if in_gt_tolerance:
+                colour = self.colour_good
+                scale  = 0.2
+            elif gt_error < 2:
+                colour = self.colour_bad
+                scale = gt_error + 0.01
+            else:
+                colour = self.colour_lost
+                scale = 2
+
 
         new_marker                      = Marker()
         new_marker.header               = Header(stamp=rospy.Time.now(), frame_id='map')
         new_marker.type                 = new_marker.SPHERE
         new_marker.action               = new_marker.ADD
-        new_marker.id                   = gt_ind
-        new_marker.color                = ColorRGBA(r=1.0, g=0.2, b=0.1, a=0.2)
-        new_marker.scale                = Vector3(x=scale, y=scale, z=scale)
+        new_marker.id                   = self.marker_id
+        new_marker.color                = colour
+        new_marker.scale                = Vector3(x=scale, y=scale, z=0.01)
 
         new_marker.pose.position        = Point(x=gt_ego[0], y=gt_ego[1])
         new_marker.pose.orientation     = q_from_yaw(gt_ego[2])
         self.markers.markers.append(new_marker)
+
+        self.marker_id = (self.marker_id + 1) % self.NUM_MARKERS.get()
+        while len(self.markers.markers) > self.NUM_MARKERS.get():
+            self.markers.markers.pop(0)
 
         self.confidence_pub.publish(self.markers)
 
@@ -174,7 +204,10 @@ class mrc():
         self.rate_obj.sleep()
 
         if self.new_control_msg:
-            self.make_control_visualisation()
+            new_ego = [self.control_msg.group.gt_ego.x,  self.control_msg.group.gt_ego.y,  self.control_msg.group.gt_ego.w]
+            if np.sqrt(np.sum(np.square(np.array(new_ego) - np.array(self.last_ego)))) > 0.02:
+                self.make_control_visualisation()
+            self.last_ego = new_ego
 
         self.new_control_msg = False
 

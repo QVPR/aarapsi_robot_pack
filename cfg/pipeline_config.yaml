@@ -13,9 +13,9 @@ vpr_nodes:
 
   groundtruth: true
   path: 
-    bag_name: s1_ccw_o0_e0_a0
+    bag_name: s3_ccw_1
     odom_topic: /odom
-    img_topic: /ros_indigosdk_occam/image0/compressed
+    img_topic: /ros_indigosdk_occam/stitched_image0/compressed
 
   cal:
     qry:
@@ -34,7 +34,7 @@ vpr_nodes:
 
   tolerance:
     mode: METRE_LINE
-    threshold: 1.0
+    threshold: 0.2
 
   svm_trainer:
     log_level: 2
