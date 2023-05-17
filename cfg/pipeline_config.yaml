@@ -12,6 +12,10 @@ vpr_nodes:
   img_topic: /ros_indigosdk_occam/stitched_image0/compressed
 
   groundtruth: true
+  path: 
+    bag_name: s1_ccw_o0_e0_a0
+    odom_topic: /odom
+    img_topic: /ros_indigosdk_occam/image0/compressed
 
   cal:
     qry:
