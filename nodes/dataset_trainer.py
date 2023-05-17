@@ -3,6 +3,7 @@
 import rospy
 import argparse as ap
 import sys
+import copy
 from rospy_message_converter import message_converter
 from std_msgs.msg import String
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum
@@ -57,6 +58,10 @@ class mrc():
         self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,                   check_string,                                   force=False)
         self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,                   check_string,                                   force=False)
         
+        self.PATH_BAG               = self.ROS_HOME.params.add(self.namespace + "/path/bag_name",       None,                   check_string,                                   force=False)
+        self.PATH_ODOM              = self.ROS_HOME.params.add(self.namespace + "/path/odom_topic",     None,                   check_string,                                   force=False)
+        self.PATH_IMG               = self.ROS_HOME.params.add(self.namespace + "/path/img_topic",      None,                   check_string,                                   force=False)
+
         self.REF_BAG_NAME           = self.ROS_HOME.params.add(self.namespace + "/ref/bag_name",        None,                   check_string,                                   force=False)
         self.REF_FILTERS            = self.ROS_HOME.params.add(self.namespace + "/ref/filters",         None,                   check_string,                                   force=False)
         self.REF_SAMPLE_RATE        = self.ROS_HOME.params.add(self.namespace + "/ref/sample_rate",     None,                   check_positive_float,                           force=False) # Hz
@@ -66,18 +71,34 @@ class mrc():
         
     def init_vars(self, use_gpu):
         # Process reference data
+        path_dataset_dict       = self.make_dataset_dict(path=True)
+        ref_dataset_dict        = self.make_dataset_dict(path=False)
         self.use_gpu            = use_gpu
-        self.vpr                = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
-                                                      autosave=True, use_tqdm=True, ros=True)
+        try:
+            self.vpr                = VPRDatasetProcessor(path_dataset_dict, try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
+                                                        autosave=True, use_tqdm=True, ros=True)
+            self.path_odom          = copy.deepcopy(self.vpr.dataset)
+            self.vpr.load_dataset(ref_dataset_dict, try_gen=True)
+        except:
+            self.print(formatException(), LogType.ERROR)
+            self.exit()
         self.dataset_queue      = []
         
     def dataset_request_callback(self, msg):
         self.print("New parameters received.")
         self.dataset_queue.append(msg)
 
-    def make_dataset_dict(self):
-        return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                    odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.REF_SAMPLE_RATE.get(), \
+    def make_dataset_dict(self, path=False):
+        if path:
+            bag_name    = self.PATH_BAG.get()
+            odom_topic  = self.PATH_ODOM.get()
+            img_topics  = [self.PATH_IMG.get()]
+        else:
+            bag_name = self.REF_BAG_NAME.get()
+            odom_topic  = self.ODOM_TOPIC.get()
+            img_topics  = [self.IMG_TOPIC.get()]
+        return dict(bag_name=bag_name, npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                    odom_topic=odom_topic, img_topics=img_topics, sample_rate=self.REF_SAMPLE_RATE.get(), \
                     ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
 
     def update_VPR(self):

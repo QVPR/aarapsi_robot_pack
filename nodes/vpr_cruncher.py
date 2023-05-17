@@ -13,6 +13,7 @@ import rospkg
 import argparse as ap
 import os
 import sys
+import copy
 
 from rospy_message_converter import message_converter
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse, DoExtraction, DoExtractionRequest
@@ -48,6 +49,10 @@ class mrc: # main ROS class
         self.IMG_TOPIC       = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,                   check_string,                                   force=False)
         self.ODOM_TOPIC      = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,                   check_string,                                   force=False)
         
+        self.PATH_BAG        = self.ROS_HOME.params.add(self.namespace + "/path/bag_name",       None,                   check_string,                                   force=False)
+        self.PATH_ODOM       = self.ROS_HOME.params.add(self.namespace + "/path/odom_topic",     None,                   check_string,                                   force=False)
+        self.PATH_IMG        = self.ROS_HOME.params.add(self.namespace + "/path/img_topic",      None,                   check_string,                                   force=False)
+
         self.REF_BAG_NAME    = self.ROS_HOME.params.add(self.namespace + "/ref/bag_name",        None,                   check_string,                                   force=False)
         self.REF_FILTERS     = self.ROS_HOME.params.add(self.namespace + "/ref/filters",         None,                   check_string,                                   force=False)
         self.REF_SAMPLE_RATE = self.ROS_HOME.params.add(self.namespace + "/ref/sample_rate",     None,                   check_positive_float,                           force=False) # Hz
@@ -79,6 +84,9 @@ class mrc: # main ROS class
         self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
         self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
 
+        self.path_msg               = None
+        self.ref_path_msg           = None
+
         # flags to denest main loop:
         self.new_query              = False # new query odom+image
         self.main_ready             = False # make sure everything commences together, safely
@@ -90,18 +98,29 @@ class mrc: # main ROS class
         self.time_history           = []
 
         # Process reference data
-        dataset_dict                = self.make_dataset_dict()
+        path_dataset_dict           = self.make_dataset_dict(path=True)
+        ref_dataset_dict            = self.make_dataset_dict(path=False)
         try:
-            self.image_processor    = VPRDatasetProcessor(dataset_dict, try_gen=False, ros=True)
+            self.image_processor    = VPRDatasetProcessor(path_dataset_dict, try_gen=False, ros=True)
+            self.path_dataset       = copy.deepcopy(self.image_processor.dataset)
+            self.image_processor.load_dataset(ref_dataset_dict)
         except:
             self.print(formatException(), LogType.ERROR)
             self.exit()
 
-        self.generate_path(self.image_processor.dataset['dataset']['px'], self.image_processor.dataset['dataset']['py'], self.image_processor.dataset['dataset']['pw'], self.image_processor.dataset['dataset']['time'])
+        self.generate_path(path=True, ref=True)
 
-    def make_dataset_dict(self):
-        return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                    odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.REF_SAMPLE_RATE.get(), \
+    def make_dataset_dict(self, path=False):
+        if path:
+            bag_name    = self.PATH_BAG.get()
+            odom_topic  = self.PATH_ODOM.get()
+            img_topics  = [self.PATH_IMG.get()]
+        else:
+            bag_name = self.REF_BAG_NAME.get()
+            odom_topic  = self.ODOM_TOPIC.get()
+            img_topics  = [self.IMG_TOPIC.get()]
+        return dict(bag_name=bag_name, npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                    odom_topic=odom_topic, img_topics=img_topics, sample_rate=self.REF_SAMPLE_RATE.get(), \
                     ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
 
     def init_rospy(self):
@@ -112,6 +131,7 @@ class mrc: # main ROS class
 
         self.odom_estimate_pub      = self.ROS_HOME.add_pub(self.namespace + "/vpr_odom",                   Odometry,           queue_size=1)
         self.path_pub               = self.ROS_HOME.add_pub(self.namespace + '/path',                       Path,               queue_size=1, subscriber_listener=self.sublis)
+        self.ref_path_pub           = self.ROS_HOME.add_pub(self.namespace + '/ref/path',                   Path,               queue_size=1, subscriber_listener=self.sublis)
         self.vpr_label_pub          = self.ROS_HOME.add_pub(self.namespace + "/label",                      ImageLabelDetails,  queue_size=1)
         self.dataset_request_pub    = self.ROS_HOME.add_pub(self.namespace + "/requests/dataset/request",   RequestDataset,     queue_size=1)
         self.dataset_request_sub    = rospy.Subscriber(     self.namespace + '/requests/dataset/ready',     ResponseDataset,    self.dataset_request_callback,  queue_size=1)
@@ -120,15 +140,25 @@ class mrc: # main ROS class
         self.send_path_plan         = rospy.Service(        self.namespace + '/path',                       GenerateObj,        self.handle_GetPathPlan)
         self.srv_extraction         = rospy.ServiceProxy(   self.namespace + '/do_extraction',              DoExtraction)
 
-        self.sublis.add_operation(self.namespace + '/path', method_sub=self.path_peer_subscribe)
+        self.sublis.add_operation(self.namespace + '/path',     method_sub=self.path_peer_subscribe)
+        self.sublis.add_operation(self.namespace + '/ref/path', method_sub=self.path_peer_subscribe)
 
     def dataset_request_callback(self, msg):
         pass # TODO
 
-    def path_peer_subscribe(self, data=None):
+    def path_peer_subscribe(self, topic_name):
+        path = False
+        ref = False
+        if topic_name == self.namespace + '/path':
+            path = True
+        elif topic_name == self.namespace + '/ref/path':
+            ref = True
         if not self.main_ready:
-            self.generate_path(self.image_processor.dataset['dataset']['px'], self.image_processor.dataset['dataset']['py'], self.image_processor.dataset['dataset']['pw'], self.image_processor.dataset['dataset']['time'])
-        self.path_pub.publish(self.path_msg)
+            self.generate_path(path=path, ref=ref)
+        if path:
+            self.path_pub.publish(self.path_msg)
+        if ref:
+            self.ref_path_pub.publish(self.ref_path_msg)
 
     def debug_cb(self, msg):
         if msg.node_name == self.node_name:
@@ -146,7 +176,7 @@ class mrc: # main ROS class
 
         try:
             if req.generate == True:
-                self.generate_path(self.image_processor.dataset['dataset']['px'], self.image_processor.dataset['dataset']['py'], self.image_processor.dataset['dataset']['pw'], self.image_processor.dataset['dataset']['time'])
+                self.generate_path(path=True)
             self.path_pub.publish(self.path_msg)
         except:
             success = False
@@ -156,16 +186,31 @@ class mrc: # main ROS class
         self.print("Service requested [Gen=%s], Success=%s" % (str(req.generate), str(success)), LogType.DEBUG)
         return ans
 
-    def generate_path(self, px, py, pw, time):
-        self.path_msg = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
-        for (c, (x, y, w, t)) in enumerate(zip(px, py, pw, time)):
-            if not c % 3 == 0:
-                continue
-            new_pose = PoseStamped(header=Header(stamp=rospy.Time.from_sec(t), frame_id="map", seq=c))
-            new_pose.pose.position = Point(x=x, y=y, z=0)
-            new_pose.pose.orientation = q_from_yaw(w)
-            self.path_msg.poses.append(new_pose)
-            del new_pose
+    def generate_path(self, path=False, ref=False):
+        datasets = []
+        if path:
+            datasets.append((self.path_dataset['dataset'], 'path'))
+        if ref:
+            datasets.append((self.image_processor.dataset['dataset'], 'ref'))
+        
+        for i in datasets:
+            px      = i[0]['px']
+            py      = i[0]['py']
+            pw      = i[0]['pw']
+            time    = i[0]['time']
+            new_msg = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
+            for (c, (x, y, w, t)) in enumerate(zip(px, py, pw, time)):
+                if not c % 3 == 0:
+                    continue
+                new_pose = PoseStamped(header=Header(stamp=rospy.Time.from_sec(t), frame_id="map", seq=c))
+                new_pose.pose.position = Point(x=x, y=y, z=0)
+                new_pose.pose.orientation = q_from_yaw(w)
+                new_msg.poses.append(new_pose)
+                del new_pose
+            if i[1] == 'path':
+                self.path_msg = new_msg
+            elif i[1] == 'ref':
+                self.ref_path_msg = new_msg
 
     def update_VPR(self):
         dataset_dict = self.make_dataset_dict()
