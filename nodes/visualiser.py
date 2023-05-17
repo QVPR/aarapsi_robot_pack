@@ -4,11 +4,14 @@ import rospy
 import argparse as ap
 import numpy as np
 import sys
-from std_msgs.msg import String
+
+from std_msgs.msg           import String, ColorRGBA, Header
+from geometry_msgs.msg      import Point, Vector3
+from visualization_msgs.msg import MarkerArray, Marker
 from aarapsi_robot_pack.msg import ControllerStateInfo
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum
-from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node
+from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node, q_from_yaw
 from pyaarapsi.core.helper_tools            import formatException, angle_wrap
 from pyaarapsi.core.enum_tools              import enum_name
 from pyaarapsi.vpr_simple.vpr_helpers       import FeatureType
@@ -56,6 +59,7 @@ class mrc():
     def init_vars(self):
         self.control_msg     = None
         self.new_control_msg = False
+        self.markers         = MarkerArray()
         
         try:
             # Process reference data
@@ -67,8 +71,9 @@ class mrc():
 
     def init_rospy(self):
         self.rate_obj        = rospy.Rate(self.RATE_NUM.get())
-        self.param_sub       = rospy.Subscriber(self.namespace + "/params_update", String,              self.param_callback,   queue_size=100)
-        self.control_sub     = rospy.Subscriber(self.namespace + "/follower/info", ControllerStateInfo, self.control_callback, queue_size=1)
+        self.param_sub       = rospy.Subscriber(self.namespace + "/params_update",   String,              self.param_callback,   queue_size=100)
+        self.control_sub     = rospy.Subscriber(self.namespace + "/follower/info",   ControllerStateInfo, self.control_callback, queue_size=1)
+        self.confidence_pub  = self.ROS_HOME.add_pub(self.namespace + '/confidence', MarkerArray,                                queue_size=1)
 
     def make_dataset_dict(self):
         return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
@@ -144,8 +149,26 @@ class mrc():
         current_yaw         = self.control_msg.group.current_yaw
         err_yaw             = angle_wrap(gt_ego[2] - current_yaw)
 
+        scale               = np.sqrt(np.sum(np.square(np.array(err_ego)))) / 8.0
+
+        new_marker                      = Marker()
+        new_marker.header               = Header(stamp=rospy.Time.now(), frame_id='map')
+        new_marker.type                 = new_marker.SPHERE
+        new_marker.action               = new_marker.ADD
+        new_marker.id                   = gt_ind
+        new_marker.color                = ColorRGBA(r=1.0, g=0.2, b=0.1, a=0.2)
+        new_marker.scale                = Vector3(x=scale, y=scale, z=scale)
+
+        new_marker.pose.position        = Point(x=gt_ego[0], y=gt_ego[1])
+        new_marker.pose.orientation     = q_from_yaw(gt_ego[2])
+        self.markers.markers.append(new_marker)
+
+        self.confidence_pub.publish(self.markers)
+
+
     def loop_contents(self):
         if not (self.new_control_msg):
+            self.print("Waiting.", LogType.DEBUG, throttle=60) # print every 60 seconds
             rospy.sleep(0.005)
             return # denest
         self.rate_obj.sleep()
@@ -153,6 +176,7 @@ class mrc():
         if self.new_control_msg:
             self.make_control_visualisation()
 
+        self.new_control_msg = False
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:
@@ -186,6 +210,7 @@ if __name__ == '__main__':
     try:
         args = do_args()
         nmrc = mrc(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
+        nmrc.print("Initialisation complete. Generating visualisations...")
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
