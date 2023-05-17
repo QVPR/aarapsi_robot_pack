@@ -23,7 +23,7 @@ from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
 
 from pyaarapsi.core.enum_tools                   import enum_name
 from pyaarapsi.core.argparse_tools               import check_bounded_float, check_positive_float, check_positive_two_int_list, check_positive_int, check_bool, check_enum, check_string
-from pyaarapsi.core.ros_tools                    import yaw_from_q, q_from_yaw, roslogger, set_rospy_log_lvl, init_node, LogType, NodeState
+from pyaarapsi.core.ros_tools                    import yaw_from_q, q_from_yaw, roslogger, set_rospy_log_lvl, init_node, LogType, NodeState, SubscribeListener
 from pyaarapsi.core.helper_tools                 import formatException, np_ndarray_to_uint8_list, uint8_list_to_np_ndarray, vis_dict
 
 class mrc: # main ROS class
@@ -108,8 +108,10 @@ class mrc: # main ROS class
         self.last_time              = rospy.Time.now()
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
+        self.sublis                 = SubscribeListener()
+
         self.odom_estimate_pub      = self.ROS_HOME.add_pub(self.namespace + "/vpr_odom",                   Odometry,           queue_size=1)
-        self.path_pub               = self.ROS_HOME.add_pub(self.namespace + '/path',                       Path,               queue_size=1)
+        self.path_pub               = self.ROS_HOME.add_pub(self.namespace + '/path',                       Path,               queue_size=1, subscriber_listener=self.sublis)
         self.vpr_label_pub          = self.ROS_HOME.add_pub(self.namespace + "/label",                      ImageLabelDetails,  queue_size=1)
         self.dataset_request_pub    = self.ROS_HOME.add_pub(self.namespace + "/requests/dataset/request",   RequestDataset,     queue_size=1)
         self.dataset_request_sub    = rospy.Subscriber(     self.namespace + '/requests/dataset/ready',     ResponseDataset,    self.dataset_request_callback,  queue_size=1)
@@ -118,8 +120,15 @@ class mrc: # main ROS class
         self.send_path_plan         = rospy.Service(        self.namespace + '/path',                       GenerateObj,        self.handle_GetPathPlan)
         self.srv_extraction         = rospy.ServiceProxy(   self.namespace + '/do_extraction',              DoExtraction)
 
+        self.sublis.add_operation(self.namespace + '/path', method_sub=self.path_peer_subscribe)
+
     def dataset_request_callback(self, msg):
         pass # TODO
+
+    def path_peer_subscribe(self, data=None):
+        if not self.main_ready:
+            self.generate_path(self.image_processor.dataset['dataset']['px'], self.image_processor.dataset['dataset']['py'], self.image_processor.dataset['dataset']['pw'], self.image_processor.dataset['dataset']['time'])
+        self.path_pub.publish(self.path_msg)
 
     def debug_cb(self, msg):
         if msg.node_name == self.node_name:
