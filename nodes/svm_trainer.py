@@ -195,6 +195,7 @@ if __name__ == '__main__':
     args        = do_args()
     try:
         nmrc = mrc(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
+        nmrc.print("Initialisation complete. Listening for queries...", LogType.INFO)
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
