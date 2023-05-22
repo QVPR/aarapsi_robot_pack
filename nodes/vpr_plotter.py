@@ -8,7 +8,7 @@ import argparse as ap
 import os
 import sys
 
-from aarapsi_robot_pack.srv import GenerateObj, GenerateObjRequest
+from aarapsi_robot_pack.srv import GenerateImageDetails, GenerateImageDetailsRequest
 from aarapsi_robot_pack.msg import MonitorDetails, ImageDetails
 
 from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
@@ -66,10 +66,10 @@ class mrc: # main ROS class
     def init_vars(self):
         # flags to denest main loop:
         self.new_state              = False # new SVM state message received
-        self.new_field              = False # new SVM field message received
-        self.field_exists           = False # first SVM field message hasn't been received
         self.main_ready             = False
-        self.srv_GetSVMField_once   = False
+        self.parameters_ready       = True
+        self.svm_field_msg          = None
+        self.update_contour         = False
         
         try:
             # Process reference data
@@ -82,11 +82,10 @@ class mrc: # main ROS class
     def init_rospy(self):
         self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
-        self.param_checker_sub      = rospy.Subscriber(self.namespace + "/params_update",   String,         self.param_callback,        queue_size=100)
-        self.svm_state_sub          = rospy.Subscriber(self.namespace + "/state",           MonitorDetails, self.state_callback,        queue_size=1)
-        self.svm_field_sub          = rospy.Subscriber(self.namespace + "/field",           ImageDetails,   self.field_callback,        queue_size=1)
-        self.srv_GetSVMField        = rospy.ServiceProxy(self.namespace + '/GetSVMField',   GenerateObj)
-        self.timer_check_if_dead    = rospy.Timer(rospy.Duration(secs=2),                                   self.timer_check_if_dead)
+        self.param_checker_sub      = rospy.Subscriber(self.namespace + "/params_update",        String,         self.param_callback,        queue_size=100)
+        self.svm_state_sub          = rospy.Subscriber(self.namespace + "/state",                MonitorDetails, self.state_callback,        queue_size=1)
+        self.field_sub              = rospy.Subscriber(self.namespace + "/field",                ImageDetails,   self.field_callback,        queue_size=1)
+        self.timer_check_if_dead    = rospy.Timer(rospy.Duration(secs=2),                                        self.timer_check_if_dead)
 
     def timer_check_if_dead(self, event):
         if rospy.is_shutdown():
@@ -134,29 +133,15 @@ class mrc: # main ROS class
         return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
                     odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.REF_SAMPLE_RATE.get(), \
                     ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-    
-    def _timer_srv_GetSVMField(self, generate=False):
-        if not self.main_ready:
-            return
-        requ = GenerateObjRequest()
-        requ.generate = generate
-        resp = self.srv_GetSVMField(requ)
-        if resp.success == False:
-            self.print('[timer_srv_GetSVMField] Service executed, success=False!', LogType.ERROR)
-        self.srv_GetSVMField_once = True
-
-    def timer_srv_GetSVMField(self):
-        self._timer_srv_GetSVMField(generate=True)
 
     def field_callback(self, msg):
-    # /vpr_nodes/field(/compressed) (aarapsi_robot_pack/(Compressed)ImageDetails)
+    # /vpr_nodes/field (aarapsi_robot_pack/ImageDetails)
     # Store new SVM field
         self.svm_field_msg  = msg
-        self.new_field      = True
-        self.field_exists   = True
+        self.update_contour = self.svm_field_msg.data.update
 
     def state_callback(self, msg):
-    # /vpr_nodes/state(/compressed) (aarapsi_robot_pack/(Compressed)MonitorDetails)
+    # /vpr_nodes/state (aarapsi_robot_pack/MonitorDetails)
     # Store new label message and act as drop-in replacement for odom_callback + img_callback
         self.state              = msg
         self.new_state          = True
@@ -194,11 +179,6 @@ class Doc_Frame:
         self.num_points       = len(nmrc.image_processor.dataset['dataset']['px'])
         self.sim_mtrx_img     = np.zeros((self.num_points, self.num_points)) # Make similarity matrix figure
         
-        printer('[Bokeh Server] Waiting for services ...')
-        rospy.wait_for_service(nmrc.namespace + '/GetSVMField')
-        printer('[Bokeh Server] Services ready.')
-        
-        
         self.fig_cntr_handles = doCntrFigBokeh() # Make contour figure
         self.fig_xywv_handles = doXYWVFigBokeh(self.num_points) # Make linear&angular metrics figure
         self.fig_dvec_handles = doDVecFigBokeh(self.num_points) # Make distance vector figure
@@ -209,8 +189,6 @@ class Doc_Frame:
 
 def main_loop(nmrc, doc_frame):
     # Main loop process
-    if not nmrc.srv_GetSVMField_once:
-        nmrc._timer_srv_GetSVMField(generate=True)
 
     if not (nmrc.new_state and nmrc.main_ready): # denest
         return
@@ -227,11 +205,11 @@ def main_loop(nmrc, doc_frame):
     updateDVecFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
     updateFDVCFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
     updateOdomFigBokeh(doc_frame, matchInd, trueInd, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
-    if not nmrc.field_exists:
+    if (nmrc.svm_field_msg is None):
         return
-    updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.new_field)
+    updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.update_contour)
     updateSVMMFigBokeh(doc_frame, nmrc.state)
-    nmrc.new_field = False
+    nmrc.update_contour = False
 
 def ros_spin(nmrc, doc_frame):
     try:
@@ -263,7 +241,7 @@ def main(doc, nmrc):
         doc.theme = Theme(filename=rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/cfg/theme.yaml")
 
         doc.add_periodic_callback(partial(ros_spin, nmrc=nmrc, doc_frame=doc_frame), int(1000 * (1/nmrc.RATE_NUM.get())))
-        nmrc.print("[Bokeh Server] Initialisation complete. Listening for queries...")
+        nmrc.print("[Bokeh Server] Ready.")
     except Exception:
         nmrc.print(formatException(), LogType.ERROR)
         nmrc.exit()
@@ -293,10 +271,9 @@ if __name__ == '__main__':
     args = do_args()
     nmrc = mrc(compress_in=args['compress_in'], rate_num=args['rate'], namespace=args['namespace'], \
                     node_name=args['node_name'], anon=args['anon'], log_level=args['log_level'], reset=args['reset'], order_id=args['order_id'])
-    
+    nmrc.print("[ROS Base] Ready.")
     server = Server({'/': lambda doc: main(doc, nmrc)}, num_procs=1, address=args['address'], port=args['port'])
     server.start()
-    nmrc.print("Ready for user connections.")
     server.io_loop.start()
 
 ## Useful

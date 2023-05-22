@@ -7,11 +7,11 @@ import numpy as np
 import argparse as ap
 import sys
 import cv2
+import copy
 
 from rospy_message_converter import message_converter
 
-from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, ImageLabelDetails, MonitorDetails, ImageDetails # Our custom structures
-from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse
+from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, ImageLabelDetails, MonitorDetails, ImageDetails, ImageStructure # Our custom structures
 
 from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
 from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
@@ -20,7 +20,7 @@ from pyaarapsi.vpred                import *
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_list, check_bool, check_enum, check_string, check_positive_int
 from pyaarapsi.core.helper_tools    import formatException, np_ndarray_to_uint8_list
-from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, LogType, NodeState
+from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, LogType, NodeState, SubscribeListener
 from pyaarapsi.core.enum_tools      import enum_name
 
 class mrc: # main ROS class
@@ -67,6 +67,10 @@ class mrc: # main ROS class
         self.time_history           = []
 
         self.states                 = [0,0,0]
+        self.contour_lims           = None
+        self.last_contour_lims      = None
+        self.contour_msg            = None
+        self.contour_feat           = None
 
         # Set up SVM
         self.svm                    = SVMModelProcessor(ros=True)
@@ -79,6 +83,22 @@ class mrc: # main ROS class
         self.main_ready             = False # ensure pubs and subs don't go off early
         self.svm_swap_pending       = False
         self.parameters_ready       = True
+        self.generate_contour       = True
+
+    def init_rospy(self):
+
+        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
+        self.last_time              = rospy.Time.now()
+        self.sublis                 = SubscribeListener()
+
+        self.param_checker_sub      = rospy.Subscriber(     self.namespace + "/params_update",          String,              self.param_callback,           queue_size=100)
+        self.vpr_label_sub          = rospy.Subscriber(     self.namespace + "/label",                  ImageLabelDetails,   self.label_callback,           queue_size=1)
+        self.svm_request_sub        = rospy.Subscriber(     self.namespace + "/requests/svm/ready",     ResponseSVM,         self.svm_request_callback,     queue_size=1)
+        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + "/requests/svm/request",   RequestSVM,                                         queue_size=1)
+        self.field_pub              = self.ROS_HOME.add_pub(self.namespace + "/field",                  ImageDetails,                                       queue_size=1, subscriber_listener=self.sublis)
+        self.svm_state_pub          = self.ROS_HOME.add_pub(self.namespace + "/state",                  MonitorDetails,                                     queue_size=1)
+
+        self.sublis.add_operation(self.namespace + "/field", method_sub=self.field_peer_subscribe)
 
     def make_svm_model_params(self):
         qry_dict = dict(bag_name=self.CAL_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
@@ -88,19 +108,6 @@ class mrc: # main ROS class
                         odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
                         ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
         return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
-
-    def init_rospy(self):
-
-        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
-        self.last_time              = rospy.Time.now()
-
-        self.param_checker_sub      = rospy.Subscriber(     self.namespace + "/params_update",          String,             self.param_callback,        queue_size=100)
-        self.vpr_label_sub          = rospy.Subscriber(     self.namespace + "/label",                  ImageLabelDetails,  self.label_callback,        queue_size=1)
-        self.svm_request_sub        = rospy.Subscriber(     self.namespace + '/requests/svm/ready',     ResponseSVM,        self.svm_request_callback,  queue_size=1)
-        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/request',   RequestSVM,                                     queue_size=1)
-        self.svm_state_pub          = self.ROS_HOME.add_pub(self.namespace + "/state",                  MonitorDetails,                                 queue_size=1)
-        self.svm_field_pub          = self.ROS_HOME.add_pub(self.namespace + "/field",                  ImageDetails,                                   queue_size=1)
-        self.svm_field_srv          = rospy.Service(        self.namespace + '/GetSVMField',            GenerateObj,        self.handle_GetSVMField)
 
     def debug_cb(self, msg):
         if msg.node_name == self.node_name:
@@ -120,9 +127,12 @@ class mrc: # main ROS class
             return False
         else:
             self.print("SVM model swapped.")
-            self.publish_svm_mat(True)
+            self.update_svm_mat()
             self.svm_swap_pending = False
             return True
+        
+    def field_request_callback(self, msg):
+        pass
 
     def svm_request_callback(self, msg):
         pass
@@ -152,26 +162,6 @@ class mrc: # main ROS class
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
         self.parameters_ready = True
 
-    def publish_svm_mat(self, generate):
-        if generate:
-            self.generate_svm_mat()
-        self.svm_field_pub.publish(self.SVM_FIELD_MSG)      
-
-    def handle_GetSVMField(self, req):
-    # /vpr_nodes/GetSVMField service
-        ans = GenerateObjResponse()
-        success = True
-
-        try:
-            self.publish_svm_mat(req.generate)
-        except:
-            success = False
-
-        ans.success = success
-        ans.topic = self.namespace + "/monitor/field"
-        self.print("Service requested [Gen=%s], Success=%s" % (str(req.generate), str(success)), LogType.DEBUG)
-        return ans
-
     def label_callback(self, msg):
     # /vpr_nodes/label (aarapsi_robot_pack/ImageLabelDetails)
     # Store new label message and act as drop-in replacement for odom_callback + img_callback
@@ -182,7 +172,7 @@ class mrc: # main ROS class
     def generate_svm_mat(self):
         # Generate decision function matrix for ros:
         array_dim = 1000
-        (img_np_raw, (x_lim, y_lim)) = self.svm.generate_svm_mat(array_dim)
+        (img_np_raw, (x_lim, y_lim)) = self.svm.generate_svm_mat(lims=self.contour_lims, array_dim=array_dim)
         img_np = np.flip(img_np_raw, axis=2) # to bgr format, for ROS
 
         # extract only plot region; ditch padded borders; resize to 1000x1000
@@ -192,15 +182,34 @@ class mrc: # main ROS class
                              min(indices_cols) : max(indices_cols)+1]
         img_np_crop_resize = cv2.resize(img_np_crop, (array_dim, array_dim), interpolation = cv2.INTER_AREA)
 
-        self.SVM_FIELD_MSG                          = ImageDetails()
-        self.SVM_FIELD_MSG.image                    = np_ndarray_to_uint8_list(img_np_crop_resize)
-        self.SVM_FIELD_MSG.data.xlim                = x_lim
-        self.SVM_FIELD_MSG.data.ylim                = y_lim
-        self.SVM_FIELD_MSG.data.xlab                = 'VA ratio'
-        self.SVM_FIELD_MSG.data.ylab                = 'Average Gradient'
-        self.SVM_FIELD_MSG.data.title               = 'SVM Decision Function'
-        self.SVM_FIELD_MSG.header.frame_id          = 'map'
-        self.SVM_FIELD_MSG.header.stamp             = rospy.Time.now()
+        self.contour_msg                          = ImageDetails()
+        self.contour_msg.image                    = np_ndarray_to_uint8_list(img_np_crop_resize)
+
+        self.contour_msg.header.frame_id          = 'map'
+        self.contour_msg.header.stamp             = rospy.Time.now()
+
+        self.contour_msg.data.x_min               = x_lim[0]
+        self.contour_msg.data.x_max               = x_lim[1]
+        self.contour_msg.data.y_min               = y_lim[0]
+        self.contour_msg.data.y_max               = y_lim[1]
+        self.contour_msg.data.feat_type           = enum_name(self.FEAT_TYPE.get())
+        self.contour_msg.data.update              = True
+        self.contour_msg.data.xlab                = 'VA ratio'
+        self.contour_msg.data.ylab                = 'Average Gradient'
+        self.contour_msg.data.title               = 'SVM Decision Function'
+
+        self.contour_lims      = {'x': x_lim, 'y': y_lim}
+        self.contour_feat      = enum_name(self.FEAT_TYPE.get())
+        self.last_contour_lims = copy.deepcopy(self.contour_lims)
+        self.generate_contour  = False
+
+    def update_svm_mat(self):
+        self.generate_svm_mat()
+        self.field_pub.publish(self.contour_msg)
+
+    def field_peer_subscribe(self, topic_name):
+        # wrapper to avoid lambdas bc of args
+        self.update_svm_mat()
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:
@@ -212,6 +221,7 @@ class mrc: # main ROS class
         roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
 
     def main(self):
+        self.update_svm_mat()
         self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
@@ -221,6 +231,14 @@ class mrc: # main ROS class
 
         if self.svm_swap_pending:
             self.update_SVM()
+
+        if not (self.contour_feat == enum_name(self.FEAT_TYPE.get())):
+            self.generate_contour = True
+        elif not (self.last_contour_lims == self.contour_lims):
+            self.generate_contour = True
+
+        if self.generate_contour:
+            self.update_svm_mat()
 
         if not (self.new_label and self.main_ready): # denest
             self.print("Waiting for a new label.", LogType.DEBUG, throttle=60) # print every 60 seconds
@@ -238,6 +256,16 @@ class mrc: # main ROS class
             except:
                 self.print("Predict failed. Trying again ...", LogType.WARN, throttle=1)
                 rospy.sleep(0.005)
+
+        if factor1_qry > self.contour_lims['x'][1]:
+            self.contour_lims['x'][1] = factor1_qry
+        elif factor1_qry < self.contour_lims['x'][0]:
+            self.contour_lims['x'][0] = factor1_qry
+
+        if factor2_qry > self.contour_lims['y'][1]:
+            self.contour_lims['y'][1] = factor2_qry
+        elif factor2_qry < self.contour_lims['y'][0]:
+            self.contour_lims['y'][0] = factor2_qry
 
         if self.PRINT_PREDICTION.get():
             if self.label.data.state == 0:
