@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!-- 
+    Plotter launch file
+ -->
+<launch>
+
+    <arg name="offline"                 default="false"/>
+    
+    <arg name="main_rate"               default="12.0"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="reset"                   default="True"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <arg name="plotter_port"            default="5006"/>
+    <arg name="plotter_address"         default="0.0.0.0"/>
+
+    <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
+
+    <group if="$(arg offline)">
+        <!-- Load in params; must be done outside of a namespace -->
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/>
+    </group>
+    
+    <group ns="$(arg namespace)">
+
+        <!-- Plotter Node: -->
+        <node pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
+            args="-P $(arg plotter_port) -A $(arg plotter_address) -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
+        </node>
+
+    </group>
+
+</launch>

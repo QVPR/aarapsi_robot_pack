@@ -100,7 +100,7 @@
 
         <!-- Visualisation Node: -->
         <node if="$(arg launch_visualiser)" pkg="aarapsi_robot_pack" type="visualiser.py" name="visualiser" output="screen" 
-            args="-r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 8">
+            args="-r $(arg main_rate) -N visualiser -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 8">
         </node>
     
         <!-- Twist2Joy Node: -->
