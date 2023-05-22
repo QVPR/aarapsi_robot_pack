@@ -231,7 +231,6 @@ class mrc:
         else:
             new_twist.linear.x  = 0.2
             self.ego_bad_pub.publish(current_ego)
-            rospy.loginfo('Poor datapoint; low confidence. Reducing top speed... Score: %s' % (str(msg.group.mState)))
 
         self.twist_pub.publish(new_twist)
         
