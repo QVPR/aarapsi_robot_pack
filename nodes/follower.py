@@ -47,9 +47,7 @@ class mrc:
         self.target_yaw     = 0.0
         self.true_yaw       = 0.0
         self.delta_yaw      = 0.0
-        self.old_sensor_cmd = None
 
-        self.target_update  = False
         self.lookahead_inds = 5
         self.vpr_ego        = [0.0, 0.0, 0.0] # x y w
         self.vpr_ego_hist   = []
@@ -57,7 +55,12 @@ class mrc:
         self.ready          = True
         self.path_received  = False
         self.path_processed = False
-        self.svm_details    = None
+        self.new_sensor_msg = False
+        self.new_state_msg  = False
+
+        self.state_msg      = None
+        self.sensor_msg     = None
+        self.old_sensor_msg = None
 
         self.jackal_odom    = '/jackal_velocity_controller/odom'
 
@@ -131,20 +134,21 @@ class mrc:
         if not self.ready:
             return
         
-        self.svm_details    = msg
+        self.state_msg      = msg
         self.vpr_ego        = [msg.data.vpr_ego.x, msg.data.vpr_ego.y, msg.data.vpr_ego.w]
         self.vpr_ego_hist.append(self.vpr_ego)
+        self.new_state_msg  = True
     
     def sensors_cb(self, msg):
         if not self.ready:
             return
-        if self.old_sensor_cmd is None:
-            self.old_sensor_cmd = msg
-            return
-        
-        self.delta_yaw      = angle_wrap(yaw_from_q(msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_cmd.pose.pose.orientation))
-        self.current_yaw    = angle_wrap(0.5 * angle_wrap(self.current_yaw + self.vpr_ego[2]) + self.delta_yaw)
-        self.old_sensor_cmd = msg
+        if self.sensor_msg is None:
+            self.old_sensor_msg = msg
+        else:
+            self.old_sensor_msg = msg
+        self.sensor_msg     = msg
+        self.new_sensor_msg = True
+
 
     def update_target(self):
         spd                 = fastdist.matrix_to_matrix_distance(self.path_array[:,0:2], \
@@ -168,37 +172,29 @@ class mrc:
         self.print("Path processed. Entering main loop.")
 
         while not rospy.is_shutdown():
-            self.rate_obj.sleep()
             self.loop_contents()
         
         self.exit()
-    
-    def loop_contents(self):
-        self.update_target()
 
-        #self.print("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw))
-        #self.print("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, angle_wrap(self.true_yaw - self.current_yaw)))
+    def publish_controller_info(self):
+        msg                         = ControllerStateInfo()
+
+        msg.query_image             = self.state_msg.queryImage
+        # Extract Label Details:
+        msg.dvc                     = self.state_msg.data.dvc
+        msg.group.gt_ego            = self.state_msg.data.gt_ego
+        msg.group.vpr_ego           = self.state_msg.data.vpr_ego
+        msg.group.matchId           = self.state_msg.data.matchId
+        msg.group.trueId            = self.state_msg.data.trueId
+        msg.group.gt_state          = self.state_msg.data.gt_state
+        msg.group.gt_error          = self.state_msg.data.gt_error
+        # Extract Monitor Details:
+        msg.group.mState            = self.state_msg.mState
+        msg.group.prob              = self.state_msg.prob
+        msg.group.mStateBin         = self.state_msg.mStateBin
+        msg.group.factors           = self.state_msg.factors
 
         safety_states_srv           = self.srv_safety(GetSafetyStatesRequest())
-
-        msg                         = ControllerStateInfo()
-        try:
-            msg.query_image         = self.svm_details.queryImage
-            # Extract Label Details:
-            msg.dvc                 = self.svm_details.data.dvc
-            msg.group.gt_ego        = self.svm_details.data.gt_ego
-            msg.group.vpr_ego       = self.svm_details.data.vpr_ego
-            msg.group.matchId       = self.svm_details.data.matchId
-            msg.group.trueId        = self.svm_details.data.trueId
-            msg.group.gt_state      = self.svm_details.data.gt_state
-            msg.group.gt_error      = self.svm_details.data.gt_error
-            # Extract Monitor Details:
-            msg.group.mState        = self.svm_details.mState
-            msg.group.prob          = self.svm_details.prob
-            msg.group.mStateBin     = self.svm_details.mStateBin
-            msg.group.factors       = self.svm_details.factors
-        except:
-            pass
         msg.group.safety_states     = safety_states_srv.states
 
         msg.group.current_yaw       = self.current_yaw
@@ -214,6 +210,19 @@ class mrc:
         msg.group.groundtruth_topic = self.ODOM_TOPIC.get()
 
         self.info_pub.publish(msg)
+    
+    def loop_contents(self):
+        
+        if not (self.new_sensor_msg and self.new_state_msg):
+            self.print("Waiting.", LogType.DEBUG, throttle=60) # print every 60 seconds
+            rospy.sleep(0.005)
+            return # denest
+        self.rate_obj.sleep()
+
+        self.new_sensor_msg = False
+        self.new_state_msg  = False
+
+        self.update_target()
         
         current_ego                       = Odometry()
         current_ego.header.stamp          = rospy.Time.now()
@@ -223,9 +232,16 @@ class mrc:
         current_ego.pose.pose.orientation = q_from_yaw(self.vpr_ego[2])
 
         new_twist           = Twist()
+        self.delta_yaw      = angle_wrap(yaw_from_q(self.sensor_msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_msg.pose.pose.orientation))
+        self.current_yaw    = angle_wrap(0.5 * angle_wrap(self.current_yaw + self.vpr_ego[2]) + self.delta_yaw)
         new_twist.angular.z = -1 * angle_wrap(self.target_yaw - self.current_yaw)
 
-        if msg.group.mStateBin == True or self.SVM_OVERRIDE.get():
+        #self.print("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw))
+        #self.print("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, angle_wrap(self.true_yaw - self.current_yaw)))
+
+        self.publish_controller_info() # requires self.state_msg
+
+        if self.state_msg.mStateBin == True or self.SVM_OVERRIDE.get():
             new_twist.linear.x  = 0.5
             self.ego_good_pub.publish(current_ego)
         else:
@@ -233,7 +249,6 @@ class mrc:
             self.ego_bad_pub.publish(current_ego)
 
         self.twist_pub.publish(new_twist)
-        
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:
