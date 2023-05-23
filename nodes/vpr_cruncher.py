@@ -71,15 +71,6 @@ class mrc: # main ROS class
         self.REF_DATA_NAMES  = [i.name for i in self.REF_DATA_PARAMS]
 
     def init_vars(self):
-        self.ICON_SIZE              = 50
-        self.ICON_DIST              = 20
-        self.ICON_PATH              = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/media"
-        self.ICON_DICT              = {'size': self.ICON_SIZE, 'dist': self.ICON_DIST, 'icon': [], 'good': [], 'poor': []}
-
-        good_icon                   = cv2.imread(self.ICON_PATH + "/tick.png", cv2.IMREAD_UNCHANGED)
-        poor_icon                   = cv2.imread(self.ICON_PATH + "/cross.png", cv2.IMREAD_UNCHANGED)
-        self.ICON_DICT['good']      = cv2.resize(good_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
-        self.ICON_DICT['poor']      = cv2.resize(poor_icon, (self.ICON_SIZE, self.ICON_SIZE), interpolation = cv2.INTER_AREA)
 
         self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
         self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
@@ -389,10 +380,8 @@ class mrc: # main ROS class
             else:
                 raise Exception("Error: Unknown tolerance mode.")
             if tolError < self.TOL_THRES.get():
-                self.ICON_DICT['icon'] = self.ICON_DICT['good']
                 tolState = 1
             else:
-                self.ICON_DICT['icon'] = self.ICON_DICT['poor']
                 tolState = 0
         
         # Make ROS messages
