@@ -1,21 +1,35 @@
 #!/usr/bin/env python3
 
 import rospy
+import rospkg
 import argparse as ap
 import numpy as np
 import sys
+import os
+import cv2
+from cv_bridge import CvBridge
 
 from std_msgs.msg           import String, ColorRGBA, Header
 from geometry_msgs.msg      import Point, Vector3
 from visualization_msgs.msg import MarkerArray, Marker
 from aarapsi_robot_pack.msg import ControllerStateInfo
+from sensor_msgs.msg        import CompressedImage
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum
 from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node, q_from_yaw
-from pyaarapsi.core.helper_tools            import formatException, angle_wrap
+from pyaarapsi.core.helper_tools            import formatException, angle_wrap, uint8_list_to_np_ndarray
 from pyaarapsi.core.enum_tools              import enum_name
 from pyaarapsi.vpr_simple.vpr_helpers       import FeatureType
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
+from pyaarapsi.vpr_simple.vpr_image_methods import convert_img_to_uint8, label_image, apply_icon
+
+import matplotlib
+matplotlib.use('Agg')
+matplotlib.rcParams['font.sans-serif'] = "monospace"
+matplotlib.rc('font',family='monospace')
+import matplotlib.pyplot as plt
+plt.style.use('dark_background')
+matplotlib.rcParams['axes.linewidth'] = 0.0 #set the value globally
 
 '''
 Visualiser
@@ -36,7 +50,6 @@ class mrc():
         self.init_rospy()
 
         self.main_ready      = True
-        self.last_ego        = [0.0, 0.0, 0.0]
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_params(self, rate_num, log_level, reset):
@@ -60,14 +73,28 @@ class mrc():
         self.REF_DATA_NAMES  = [i.name for i in self.REF_DATA_PARAMS]
 
     def init_vars(self):
+        self.icon_size       = 50
+        self.icon_path       = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/media"
+
+        self.good_icon       = cv2.resize(cv2.imread(self.icon_path + "/tick.png", cv2.IMREAD_UNCHANGED),  (self.icon_size,)*2, interpolation = cv2.INTER_AREA)
+        self.poor_icon       = cv2.resize(cv2.imread(self.icon_path + "/cross.png", cv2.IMREAD_UNCHANGED), (self.icon_size,)*2, interpolation = cv2.INTER_AREA)
+
         self.control_msg     = None
         self.new_control_msg = False
+
+        self.last_ego        = [0.0, 0.0, 0.0]
+
         self.markers         = MarkerArray()
         self.marker_id       = 0
+
         self.colour_good     = ColorRGBA(r=0.1, g=0.9, b=0.2, a=0.80)
         self.colour_svm_good = ColorRGBA(r=0.1, g=0.9, b=0.2, a=0.20)
         self.colour_bad      = ColorRGBA(r=0.9, g=0.2, b=0.1, a=0.20)
         self.colour_lost     = ColorRGBA(r=0.1, g=0.1, b=0.1, a=0.08)
+
+        self.bridge          = CvBridge()
+
+        self.tol_hist        = np.zeros((100, 8))
         
         try:
             # Process reference data
@@ -79,9 +106,10 @@ class mrc():
 
     def init_rospy(self):
         self.rate_obj        = rospy.Rate(self.RATE_NUM.get())
-        self.param_sub       = rospy.Subscriber(self.namespace + "/params_update",   String,              self.param_callback,   queue_size=100)
-        self.control_sub     = rospy.Subscriber(self.namespace + "/follower/info",   ControllerStateInfo, self.control_callback, queue_size=1)
-        self.confidence_pub  = self.ROS_HOME.add_pub(self.namespace + '/confidence', MarkerArray,                                queue_size=1)
+        self.param_sub       = rospy.Subscriber(self.namespace + "/params_update",              String,              self.param_callback,   queue_size=100)
+        self.control_sub     = rospy.Subscriber(self.namespace + "/follower/info",              ControllerStateInfo, self.control_callback, queue_size=1)
+        self.confidence_pub  = self.ROS_HOME.add_pub(self.namespace + '/confidence',            MarkerArray,                                queue_size=1)
+        self.display_pub     = self.ROS_HOME.add_pub(self.namespace + '/display/compressed',    CompressedImage,                            queue_size=1)
 
     def make_dataset_dict(self):
         return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
@@ -91,6 +119,27 @@ class mrc():
     def control_callback(self, msg):
         self.control_msg     = msg
         self.new_control_msg = True
+
+        # Generate / record statistics:
+        self.gt_ego             = [self.control_msg.group.gt_ego.x,  self.control_msg.group.gt_ego.y,  self.control_msg.group.gt_ego.w]
+        self.vpr_ego            = [self.control_msg.group.vpr_ego.x, self.control_msg.group.vpr_ego.y, self.control_msg.group.vpr_ego.w]
+        self.err_ego            = [self.gt_ego[0] - self.vpr_ego[0], self.gt_ego[1] - self.vpr_ego[1], angle_wrap(self.gt_ego[2] - self.vpr_ego[2], 'RAD')]
+
+        self.gt_ind             = self.control_msg.group.trueId
+        self.vpr_ind            = self.control_msg.group.matchId
+        self.err_ind            = abs(self.gt_ind - self.vpr_ind)
+
+        self.in_gt_tolerance    = self.control_msg.group.gt_state > 0
+        self.gt_error           = self.control_msg.group.gt_error
+        self.in_svm_tolerance   = self.control_msg.group.mStateBin
+        self.auto_mode          = self.control_msg.group.safety_states.autonomous
+
+        self.svm_prob           = self.control_msg.group.prob
+        self.svm_zvalue         = self.control_msg.group.mState
+
+        self.target_yaw         = self.control_msg.group.target_yaw
+        self.current_yaw        = self.control_msg.group.current_yaw
+        self.err_yaw            = angle_wrap(self.gt_ego[2] - self.current_yaw)
 
     def update_VPR(self):
         dataset_dict = self.make_dataset_dict()
@@ -138,44 +187,27 @@ class mrc():
             self.loop_contents()
 
     def make_control_visualisation(self):
-        # Generate / record statistics:
-        gt_ego              = self.last_ego
-        vpr_ego             = [self.control_msg.group.vpr_ego.x, self.control_msg.group.vpr_ego.y, self.control_msg.group.vpr_ego.w]
-        err_ego             = [gt_ego[0] - vpr_ego[0], gt_ego[1] - vpr_ego[1], angle_wrap(gt_ego[2] - vpr_ego[2], 'RAD')]
-
-        gt_ind              = self.control_msg.group.trueId
-        vpr_ind             = self.control_msg.group.matchId
-        err_id              = abs(gt_ind - vpr_ind)
-
-        in_gt_tolerance     = self.control_msg.group.gt_state > 0
-        gt_error            = self.control_msg.group.gt_error
-        in_svm_tolerance    = self.control_msg.group.mStateBin
-        auto_mode           = self.control_msg.group.safety_states.autonomous
-
-        svm_prob            = self.control_msg.group.prob
-        svm_zvalue          = self.control_msg.group.mState
-
-        target_yaw          = self.control_msg.group.target_yaw
-        current_yaw         = self.control_msg.group.current_yaw
-        err_yaw             = angle_wrap(gt_ego[2] - current_yaw)
-
+        if not np.sqrt(np.sum(np.square(np.array(self.gt_ego) - np.array(self.last_ego)))) > 0.02:
+            return
+        
+        self.last_ego           = self.gt_ego
+        
         if self.SVM_MODE.get():
-            if in_svm_tolerance:
+            if self.in_svm_tolerance:
                 colour = self.colour_svm_good
             else:
                 colour = self.colour_bad
-            scale = abs(svm_zvalue)
+            scale = abs(self.svm_zvalue)
         else:
-            if in_gt_tolerance:
+            if self.in_gt_tolerance:
                 colour = self.colour_good
                 scale  = 0.2
-            elif gt_error < 2:
+            elif self.gt_error < 2:
                 colour = self.colour_bad
-                scale = gt_error + 0.01
+                scale = self.gt_error + 0.01
             else:
                 colour = self.colour_lost
                 scale = 2
-
 
         new_marker                      = Marker()
         new_marker.header               = Header(stamp=rospy.Time.now(), frame_id='map')
@@ -185,8 +217,8 @@ class mrc():
         new_marker.color                = colour
         new_marker.scale                = Vector3(x=scale, y=scale, z=0.01)
 
-        new_marker.pose.position        = Point(x=gt_ego[0], y=gt_ego[1])
-        new_marker.pose.orientation     = q_from_yaw(gt_ego[2])
+        new_marker.pose.position        = Point(x=self.gt_ego[0], y=self.gt_ego[1])
+        new_marker.pose.orientation     = q_from_yaw(self.gt_ego[2])
         self.markers.markers.append(new_marker)
 
         self.marker_id = (self.marker_id + 1) % self.NUM_MARKERS.get()
@@ -195,6 +227,94 @@ class mrc():
 
         self.confidence_pub.publish(self.markers)
 
+    def make_display_feed(self):
+        if self.in_gt_tolerance:
+            tol_icon = self.good_icon
+        else:
+            tol_icon = self.poor_icon
+
+        if self.in_svm_tolerance:
+            svm_icon = self.good_icon
+        else:
+            svm_icon = self.poor_icon
+
+        self.tol_hist           = np.roll(self.tol_hist, -1, 0)
+        self.tol_hist[-1, :]    = 0
+        # 0: TN - No Gt No SVM
+        # 1: FN - Yes Gt No SVM
+        # 2: FP - No Gt Yes SVM
+        # 3: TP - Yes Gt Yes SVM
+        self.tol_hist[-1, self.in_gt_tolerance + self.in_svm_tolerance * 2] = 1
+        col_sum                 = np.sum(self.tol_hist[:,0:4], 0)
+        all_sum                 = np.sum(col_sum)
+        self.tol_hist[-1, 4:]   = col_sum / all_sum
+
+        feed_piece      = np.zeros((250, 250, 3), dtype=np.uint8)
+        icon_piece      = np.zeros((250, 250, 3), dtype=np.uint8)
+        apply_icon(icon_piece, position=(180,120), icon=svm_icon, make_copy=False)
+        apply_icon(icon_piece, position=(180,180), icon=tol_icon, make_copy=False)
+
+        label_image(icon_piece, 'SVM:', (100,120+35), colour=(255,255,255), border=None, make_copy=False)
+        label_image(icon_piece, 'TOL:', (100,180+35), colour=(255,255,255), border=None, make_copy=False)
+
+        label_image(icon_piece, 'REF',  (10,30),      colour=(100,255,100), border=None, make_copy=False, scale=0.8)
+        label_image(icon_piece, 'QRY',  (10,70),      colour=(100,255,100), border=None, make_copy=False, scale=0.8)
+        label_image(icon_piece, 'TRU',  (70,30),      colour=(100,255,100), border=None, make_copy=False, scale=0.8)
+        cv2.line(icon_piece, ( 65,  10), ( 65,  80), (200,100,100), 2)
+        cv2.line(icon_piece, ( 10,  42), (120,  42), (200,100,100), 2)
+
+        ref_match_raw   = self.image_processor.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.vpr_ind]
+        ref_true_raw    = self.image_processor.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.gt_ind]
+        qry_raw         = uint8_list_to_np_ndarray(self.control_msg.query_image)
+        ref_match       = convert_img_to_uint8(ref_match_raw,   resize=(250,250), dstack=(not len(ref_match_raw.shape) == 3))
+        ref_true        = convert_img_to_uint8(ref_true_raw,    resize=(250,250), dstack=(not len(ref_true_raw.shape) == 3))
+        qry             = convert_img_to_uint8(qry_raw,         resize=(250,250), dstack=(not len(qry_raw.shape) == 3))
+        
+        fig, ax = plt.subplots(figsize=(5,2.5))
+        ax.plot(self.tol_hist[:, 4], 'r', linewidth=3, label='TN: % 4d%%' % int(100*self.tol_hist[-1, 4]))
+        ax.plot(self.tol_hist[:, 5], 'y', linewidth=3, label='FN: % 4d%%' % int(100*self.tol_hist[-1, 5]))
+        ax.plot(self.tol_hist[:, 6], 'b', linewidth=3, label='FP: % 4d%%' % int(100*self.tol_hist[-1, 6]))
+        ax.plot(self.tol_hist[:, 7], 'g', linewidth=3, label='TP: % 4d%%' % int(100*self.tol_hist[-1, 7]))
+        ax.get_xaxis().set_visible(False)
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.75, box.height])
+        L = ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), frameon=False)
+        plt.setp(L.texts, family='monospace')
+        fig.canvas.draw()
+
+        plot_raw_flat   = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        plot_raw_pad    = plot_raw_flat.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        plot_raw        = plot_raw_pad[20:-20, 20:]
+        plot            = convert_img_to_uint8(plot_raw, resize=(500, 250), dstack=(not len(qry_raw.shape) == 3))[:,:,::-1]
+        plt.close('all') # close matplotlib
+
+        feed            = np.concatenate([  np.concatenate([feed_piece, feed_piece, ref_match,  ref_true    ], axis=1),
+                                            np.concatenate([plot,                   qry,        icon_piece  ], axis=1)   ])
+        
+        cv2.line(feed, (500,  0), (500,500), (200,100,100), 2)
+        cv2.line(feed, (750,  0), (750,500), (200,100,100), 2)
+        cv2.line(feed, (500,250), (999,250), (200,100,100), 2)
+
+        label_image(feed, 'Error Index:', ( 10, 35), colour=(255,255,255), border=None, make_copy=False)
+        label_image(feed, ' %4d'         % self.err_ind,      (250,  35), colour=(255,255,255), border=None, make_copy=False)
+
+        label_image(feed, 'Error X:',     ( 10, 70), colour=(255,255,255), border=None, make_copy=False)
+        label_image(feed, '% 6.2f [m]'   % (self.err_ego[0]), (250,  70), colour=(255,255,255), border=None, make_copy=False)
+
+        label_image(feed, 'Error Y:',     ( 10, 105), colour=(255,255,255), border=None, make_copy=False)
+        label_image(feed, '% 6.2f [m]'   % (self.err_ego[1]), (250, 105), colour=(255,255,255), border=None, make_copy=False)
+
+        label_image(feed, 'Error W:',     ( 10, 140), colour=(255,255,255), border=None, make_copy=False)
+        label_image(feed, '% 6.2f [rad]' % (self.err_ego[2]), (250, 140), colour=(255,255,255), border=None, make_copy=False)
+
+        label_image(feed, 'SVM Z:',       ( 10, 175), colour=(255,255,255), border=None, make_copy=False)
+        label_image(feed, '% 6.2f'       % (self.svm_zvalue), (250, 175), colour=(255,255,255), border=None, make_copy=False)
+
+        ros_msg                 = self.bridge.cv2_to_compressed_imgmsg(feed, 'jpeg')
+        ros_msg.header.stamp    = rospy.Time.now()
+        ros_msg.header.frame_id = 'map'
+
+        self.display_pub.publish(ros_msg)
 
     def loop_contents(self):
         if not (self.new_control_msg):
@@ -202,14 +322,10 @@ class mrc():
             rospy.sleep(0.005)
             return # denest
         self.rate_obj.sleep()
-
-        if self.new_control_msg:
-            new_ego = [self.control_msg.group.gt_ego.x,  self.control_msg.group.gt_ego.y,  self.control_msg.group.gt_ego.w]
-            if np.sqrt(np.sum(np.square(np.array(new_ego) - np.array(self.last_ego)))) > 0.02:
-                self.make_control_visualisation()
-            self.last_ego = new_ego
-
         self.new_control_msg = False
+
+        self.make_control_visualisation()
+        self.make_display_feed()
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:
