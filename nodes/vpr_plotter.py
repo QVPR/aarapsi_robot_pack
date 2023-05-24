@@ -8,7 +8,6 @@ import argparse as ap
 import os
 import sys
 
-from aarapsi_robot_pack.srv import GenerateImageDetails, GenerateImageDetailsRequest
 from aarapsi_robot_pack.msg import MonitorDetails, ImageDetails
 
 from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
