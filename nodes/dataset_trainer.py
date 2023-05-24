@@ -178,6 +178,10 @@ class mrc():
             no_stamp = self.ROS_HOME.logstamp
         roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
 
+    def exit(self):
+        self.print("Quit received")
+        sys.exit()
+
 def do_args():
     parser = ap.ArgumentParser(prog="dataset_trainer.py", 
                             description="ROS Dataset Trainer Node",

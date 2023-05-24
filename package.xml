@@ -54,7 +54,7 @@
   <exec_depend>python3-rospkg</exec_depend>
   <exec_depend>python3-cv_bridge</exec_depend>	
   <exec_depend>python3-cv2</exec_depend>
-  <exec_depend>python3-numpy</exec_depend>              <!-- pip install numpy==1.21.0 -->
+  <exec_depend>python3-numpy</exec_depend>              <!-- pip install numpy==1.23.0 -->
   <exec_depend>python3-stitching</exec_depend> 
   <exec_depend>python3-pathlib</exec_depend> 
   <exec_depend>python3-time</exec_depend> 
@@ -71,9 +71,9 @@
   <exec_depend>python3-bokeh</exec_depend>              <!-- pip install bokeh -->
   <exec_depend>python3-numexpr</exec_depend>            <!-- pip install numexpr==2.7.3 -->
   <exec_depend>python3-fastdist</exec_depend>           <!-- pip install fastdist -->
-  <exec_depend>python3-torch</exec_depend>              <!-- pip3 install torch==1.13.1 -->
-  <exec_depend>python3-torchvision</exec_depend>        <!-- pip3 install torchvision==0.14.1  -->
-  <exec_depend>python3-torchaudio</exec_depend>         <!-- pip3 install torchaudio==0.13.1 -->
+  <exec_depend>python3-torch</exec_depend>              <!-- pip3 install torch==2.0.1 -->
+  <exec_depend>python3-torchvision</exec_depend>        <!-- pip3 install torchvision==0.15.2  -->
+  <exec_depend>python3-torchaudio</exec_depend>         <!-- pip3 install torchaudio==2.0.2 -->
  
   <export>
   </export>
