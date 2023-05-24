@@ -1,9 +1,9 @@
 # Feat type options:
-string RAW		    = 'RAW
+string RAW		    = 'RAW'
 string PATCHNORM	= 'PATCHNORM'
 string NETVLAD		= 'NETVLAD'
 string HYBRIDNET	= 'HYBRIDNET'
-string ROLLNORM		= 'ROLLNORM
+string ROLLNORM		= 'ROLLNORM'
 string UNKNOWN		= ''
 
 bool update

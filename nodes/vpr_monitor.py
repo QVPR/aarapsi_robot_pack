@@ -67,10 +67,7 @@ class mrc: # main ROS class
         self.time_history           = []
 
         self.states                 = [0,0,0]
-        self.contour_lims           = None
-        self.last_contour_lims      = None
         self.contour_msg            = None
-        self.contour_feat           = None
 
         # Set up SVM
         self.svm                    = SVMModelProcessor(ros=True)
@@ -83,7 +80,6 @@ class mrc: # main ROS class
         self.main_ready             = False # ensure pubs and subs don't go off early
         self.svm_swap_pending       = False
         self.parameters_ready       = True
-        self.generate_contour       = True
 
     def init_rospy(self):
 
@@ -172,7 +168,7 @@ class mrc: # main ROS class
     def generate_svm_mat(self):
         # Generate decision function matrix for ros:
         array_dim = 1000
-        (img_np_raw, (x_lim, y_lim)) = self.svm.generate_svm_mat(lims=self.contour_lims, array_dim=array_dim)
+        (img_np_raw, (x_lim, y_lim)) = self.svm.generate_svm_mat(array_dim=array_dim)
         img_np = np.flip(img_np_raw, axis=2) # to bgr format, for ROS
 
         # extract only plot region; ditch padded borders; resize to 1000x1000
@@ -180,7 +176,7 @@ class mrc: # main ROS class
         indices_rows = np.arange(img_np.shape[0])[np.sum(np.sum(img_np,2),1) != 255*3*img_np.shape[1]]
         img_np_crop = img_np[min(indices_rows) : max(indices_rows)+1, \
                              min(indices_cols) : max(indices_cols)+1]
-        img_np_crop_resize = cv2.resize(img_np_crop, (array_dim, array_dim), interpolation = cv2.INTER_AREA)
+        img_np_crop_resize = np.array(cv2.resize(img_np_crop, (array_dim, array_dim), interpolation = cv2.INTER_AREA), dtype=np.uint8)
 
         self.contour_msg                          = ImageDetails()
         self.contour_msg.image                    = np_ndarray_to_uint8_list(img_np_crop_resize)
@@ -197,11 +193,6 @@ class mrc: # main ROS class
         self.contour_msg.data.xlab                = 'VA ratio'
         self.contour_msg.data.ylab                = 'Average Gradient'
         self.contour_msg.data.title               = 'SVM Decision Function'
-
-        self.contour_lims      = {'x': x_lim, 'y': y_lim}
-        self.contour_feat      = enum_name(self.FEAT_TYPE.get())
-        self.last_contour_lims = copy.deepcopy(self.contour_lims)
-        self.generate_contour  = False
 
     def update_svm_mat(self):
         self.generate_svm_mat()
@@ -232,14 +223,6 @@ class mrc: # main ROS class
         if self.svm_swap_pending:
             self.update_SVM()
 
-        if not (self.contour_feat == enum_name(self.FEAT_TYPE.get())):
-            self.generate_contour = True
-        elif not (self.last_contour_lims == self.contour_lims):
-            self.generate_contour = True
-
-        if self.generate_contour:
-            self.update_svm_mat()
-
         if not (self.new_label and self.main_ready): # denest
             self.print("Waiting for a new label.", LogType.DEBUG, throttle=60) # print every 60 seconds
             rospy.sleep(0.005)
@@ -256,16 +239,6 @@ class mrc: # main ROS class
             except:
                 self.print("Predict failed. Trying again ...", LogType.WARN, throttle=1)
                 rospy.sleep(0.005)
-
-        if factor1_qry > self.contour_lims['x'][1]:
-            self.contour_lims['x'][1] = factor1_qry
-        elif factor1_qry < self.contour_lims['x'][0]:
-            self.contour_lims['x'][0] = factor1_qry
-
-        if factor2_qry > self.contour_lims['y'][1]:
-            self.contour_lims['y'][1] = factor2_qry
-        elif factor2_qry < self.contour_lims['y'][0]:
-            self.contour_lims['y'][0] = factor2_qry
 
         if self.PRINT_PREDICTION.get():
             if self.label.data.state == 0:

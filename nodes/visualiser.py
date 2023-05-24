@@ -17,7 +17,7 @@ from sensor_msgs.msg        import CompressedImage
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum
 from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node, q_from_yaw
-from pyaarapsi.core.helper_tools            import formatException, angle_wrap, uint8_list_to_np_ndarray
+from pyaarapsi.core.helper_tools            import formatException, angle_wrap, uint8_list_to_np_ndarray, vis_dict
 from pyaarapsi.core.enum_tools              import enum_name
 from pyaarapsi.vpr_simple.vpr_helpers       import FeatureType
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
@@ -73,28 +73,29 @@ class mrc():
         self.REF_DATA_NAMES  = [i.name for i in self.REF_DATA_PARAMS]
 
     def init_vars(self):
-        self.icon_size       = 50
-        self.icon_path       = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/media"
+        self.icon_size          = 50
+        self.icon_path          = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/media"
 
-        self.good_icon       = cv2.resize(cv2.imread(self.icon_path + "/tick.png", cv2.IMREAD_UNCHANGED),  (self.icon_size,)*2, interpolation = cv2.INTER_AREA)
-        self.poor_icon       = cv2.resize(cv2.imread(self.icon_path + "/cross.png", cv2.IMREAD_UNCHANGED), (self.icon_size,)*2, interpolation = cv2.INTER_AREA)
+        self.good_icon          = cv2.resize(cv2.imread(self.icon_path + "/tick.png", cv2.IMREAD_UNCHANGED),  (self.icon_size,)*2, interpolation = cv2.INTER_AREA)
+        self.poor_icon          = cv2.resize(cv2.imread(self.icon_path + "/cross.png", cv2.IMREAD_UNCHANGED), (self.icon_size,)*2, interpolation = cv2.INTER_AREA)
 
-        self.control_msg     = None
-        self.new_control_msg = False
+        self.control_msg        = None
+        self.new_control_msg    = False
+        self.parameters_ready   = True
 
-        self.last_ego        = [0.0, 0.0, 0.0]
+        self.last_ego           = [0.0, 0.0, 0.0]
 
-        self.markers         = MarkerArray()
-        self.marker_id       = 0
+        self.markers            = MarkerArray()
+        self.marker_id          = 0
 
-        self.colour_good     = ColorRGBA(r=0.1, g=0.9, b=0.2, a=0.80)
-        self.colour_svm_good = ColorRGBA(r=0.1, g=0.9, b=0.2, a=0.20)
-        self.colour_bad      = ColorRGBA(r=0.9, g=0.2, b=0.1, a=0.20)
-        self.colour_lost     = ColorRGBA(r=0.1, g=0.1, b=0.1, a=0.08)
+        self.colour_good        = ColorRGBA(r=0.1, g=0.9, b=0.2, a=0.80)
+        self.colour_svm_good    = ColorRGBA(r=0.1, g=0.9, b=0.2, a=0.20)
+        self.colour_bad         = ColorRGBA(r=0.9, g=0.2, b=0.1, a=0.20)
+        self.colour_lost        = ColorRGBA(r=0.1, g=0.1, b=0.1, a=0.08)
 
-        self.bridge          = CvBridge()
+        self.bridge             = CvBridge()
 
-        self.tol_hist        = np.zeros((100, 8))
+        self.tol_hist           = np.zeros((100, 8))
         
         try:
             # Process reference data
@@ -184,7 +185,18 @@ class mrc():
         self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            self.loop_contents()
+            try:
+                self.loop_contents()
+            except Exception as e:
+                if nmrc.parameters_ready:
+                    nmrc.print(vis_dict(nmrc.image_processor.dataset), LogType.DEBUG)
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    nmrc.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
+
+                if rospy.is_shutdown():
+                    nmrc.exit()
 
     def make_control_visualisation(self):
         if not np.sqrt(np.sum(np.square(np.array(self.gt_ego) - np.array(self.last_ego)))) > 0.02:

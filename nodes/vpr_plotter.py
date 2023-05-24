@@ -68,7 +68,7 @@ class mrc: # main ROS class
         self.main_ready             = False
         self.parameters_ready       = True
         self.svm_field_msg          = None
-        self.update_contour         = False
+        self.update_contour         = True
         
         try:
             # Process reference data
@@ -206,9 +206,9 @@ def main_loop(nmrc, doc_frame):
     updateOdomFigBokeh(doc_frame, matchInd, trueInd, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
     if (nmrc.svm_field_msg is None):
         return
-    updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.update_contour)
+    if updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.update_contour):
+        nmrc.update_contour = False
     updateSVMMFigBokeh(doc_frame, nmrc.state)
-    nmrc.update_contour = False
 
 def ros_spin(nmrc, doc_frame):
     try:
@@ -217,7 +217,7 @@ def ros_spin(nmrc, doc_frame):
             main_loop(nmrc, doc_frame)
         except Exception as e:
             if nmrc.parameters_ready:
-                nmrc.print(vis_dict(nmrc.image_processor.dataset))
+                nmrc.print(vis_dict(nmrc.image_processor.dataset), LogType.DEBUG)
                 raise Exception('Critical failure. ' + formatException()) from e
             else:
                 nmrc.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
