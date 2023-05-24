@@ -2,7 +2,3 @@
 	path = src/pyaarapsi
 	url = git@github.com:QVPR/pyaarapsi.git
 	branch = main
-[submodule "src/Patch-NetVLAD"]
-	path = src/Patch-NetVLAD
-	url = https://github.com/QVPR/Patch-NetVLAD
-	branch = main
