@@ -7,6 +7,7 @@
     - pip install fastdist
     - pip install bokeh
     - pip install gdown
+    - pip install nvidia-ml-py3
 - Weird things:
   - Error: libgomp-d22c30c5.so.1.0.0: cannot allocate memory in static TLS block
     - FIX: export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1  
