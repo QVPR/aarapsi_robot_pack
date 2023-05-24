@@ -71,7 +71,9 @@
   <exec_depend>python3-bokeh</exec_depend>              <!-- pip install bokeh -->
   <exec_depend>python3-numexpr</exec_depend>            <!-- pip install numexpr==2.7.3 -->
   <exec_depend>python3-fastdist</exec_depend>           <!-- pip install fastdist -->
-  
+  <exec_depend>python3-torch</exec_depend>              <!-- pip3 install torch torchvision torchaudio -->
+  <exec_depend>python3-torchvision</exec_depend>
+  <exec_depend>python3-torchaudio</exec_depend>
  
   <export>
   </export>

@@ -22,16 +22,16 @@
 
 from setuptools import setup
 from catkin_pkg.python_setup import generate_distutils_setup
-import subprocess
+#import subprocess
 import os
 
 aarapsi_setup_location      = os.path.abspath(os.path.dirname(__file__))
-patchnetvlad_setup_location = os.path.join(aarapsi_setup_location, 'src/Patch-NetVLAD')
+#patchnetvlad_setup_location = os.path.join(aarapsi_setup_location, 'src/Patch-NetVLAD')
 pyaarapsi_setup_location    = os.path.join(aarapsi_setup_location, 'src/pyaarapsi')
 
-subprocess.call(
-            "pip3 install --no-deps -e %s" % str(patchnetvlad_setup_location), shell=True
-        )
+# subprocess.call(
+#             "pip3 install --no-deps -e %s" % str(patchnetvlad_setup_location), shell=True
+#         )
 
 # This 'equivalent' is handled below in setup()
 # subprocess.call(
