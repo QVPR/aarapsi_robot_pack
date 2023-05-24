@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 import rospy
-import cv2
 import sys
 import argparse as ap
+import cv2
 from cv_bridge import CvBridge
 from std_msgs.msg import Header, String
 from sensor_msgs.msg import Image, CompressedImage

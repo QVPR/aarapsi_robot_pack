@@ -4,6 +4,7 @@ import rospy
 import sys
 import argparse as ap
 
+import cv2
 from cv_bridge import CvBridge
 
 from std_msgs.msg import String

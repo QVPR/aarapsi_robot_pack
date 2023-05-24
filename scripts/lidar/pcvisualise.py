@@ -7,9 +7,9 @@ from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2, CompressedImage, PointField
 
 import numpy as np
+import cv2
 from cv_bridge import CvBridge
 import math
-import cv2
 import sys
 import os
 import time

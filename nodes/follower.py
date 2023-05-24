@@ -5,6 +5,7 @@ import sys
 
 import numpy as np
 import argparse as ap
+import cv2
 from cv_bridge import CvBridge
 
 from nav_msgs.msg import Odometry, Path

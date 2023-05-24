@@ -3,10 +3,10 @@
 import rospy
 import sys
 import argparse as ap
-import cv2 
 import numpy as np
 import rospkg
 import os
+import cv2 
 from cv_bridge import CvBridge
 
 from sensor_msgs.msg import CompressedImage
