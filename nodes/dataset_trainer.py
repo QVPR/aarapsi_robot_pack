@@ -81,7 +81,7 @@ class mrc():
             self.vpr.load_dataset(ref_dataset_dict, try_gen=True)
         except Exception as e:
             self.print(formatException(), LogType.ERROR)
-            self.print(e, LogType.DEBUG)
+            self.print(formatException(dump=True), LogType.DEBUG)
             self.exit()
         self.dataset_queue      = []
         
