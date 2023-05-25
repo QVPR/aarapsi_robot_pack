@@ -79,8 +79,9 @@ class mrc():
                                                         autosave=True, use_tqdm=True, ros=True)
             self.path_odom          = copy.deepcopy(self.vpr.dataset)
             self.vpr.load_dataset(ref_dataset_dict, try_gen=True)
-        except:
+        except Exception as e:
             self.print(formatException(), LogType.ERROR)
+            self.print(e, LogType.DEBUG)
             self.exit()
         self.dataset_queue      = []
         
