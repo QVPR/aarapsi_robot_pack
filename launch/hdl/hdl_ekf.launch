@@ -4,5 +4,6 @@
       <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/hdl_ekf.yaml"/>
       <remap from="odometry/filtered" to="/odom/filtered"/>
       <remap from="/diagnostics" to="/diagnostics/slam_ekf"/>
+      <remap from="/cmd_vel" to="/jackal_velocity_controller/cmd_vel"/>
     </node>
 </launch>
