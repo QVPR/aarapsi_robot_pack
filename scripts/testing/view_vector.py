@@ -38,13 +38,19 @@ class Viewer:
         self.new_msg    = False
         self.gtnew_msg  = False
 
+        self.start_time = rospy.Time.now().to_sec()
+        self.topic_time = None
+        self.gt_time    = None
+
     def topic_cb(self, msg):
         self.msg        = msg
         self.new_msg    = True
+        self.topic_time = rospy.Time.now().to_sec()
 
     def gt_topic_cb(self, msg):
         self.gtmsg      = msg
         self.gtnew_msg  = True
+        self.gt_time    = rospy.Time.now().to_sec()
 
     def main(self):
         if self.mode == "odom":
@@ -73,11 +79,13 @@ class Viewer:
         self.new_msg    = False
 
         data_dict   = {'yaw': [], 'vyaw': []}
+        times = []
         _MIN = 10000
         _MAX = -10000
         mins_dict = {'yaw': _MIN, 'vyaw': _MIN}
         maxs_dict = {'yaw': _MAX, 'vyaw': _MAX}
         hist_len    = 100
+
         while not rospy.is_shutdown():
             self.rate_obj.sleep() # reduce cpu load
             if not self.new_msg:
@@ -95,6 +103,7 @@ class Viewer:
             # store new data:
             data_dict['yaw'].append(new__yaw)
             data_dict['vyaw'].append(new_vyaw)
+            times.append(self.topic_time - self.start_time)
 
             # crunch plot limits:
             mins_dict = {key: data_dict[key][-1] if data_dict[key][-1] < mins_dict[key] else mins_dict[key] for key in list(mins_dict.keys())}
@@ -104,16 +113,16 @@ class Viewer:
             length_arr = len(data_dict['yaw'])
             while length_arr > hist_len:
                 [data_dict[key].pop(0) for key in list(data_dict.keys())]
+                times.pop(0)
                 length_arr -= 1
-            spacing = np.arange(length_arr)
             [[j.clear() for j in i] for i in self.axes_twins] # clear old data from axes
 
             if length_arr < 10:
                 continue
 
             # plot data:
-            self.axes_twins[0][0].plot(spacing, data_dict['yaw'], 'r')
-            self.axes_twins[0][1].plot(spacing, data_dict['vyaw'], 'b')
+            self.axes_twins[0][0].plot(times, data_dict['yaw'], 'r.')
+            self.axes_twins[0][1].plot(times, data_dict['vyaw'], 'b.')
 
             # update plot limits:
             self.axes_twins[0][0].set_ylim(mins_dict['yaw'],    maxs_dict['yaw'])
@@ -146,6 +155,7 @@ class Viewer:
         _MAX = -10000
         mins_dict = {'x': _MIN, 'y': _MIN, 'yaw': _MIN, 'vx': _MIN, 'vy': _MIN, 'vyaw': _MIN}
         maxs_dict = {'x': _MAX, 'y': _MAX, 'yaw': _MAX, 'vx': _MAX, 'vy': _MAX, 'vyaw': _MAX}
+        times       = []
         hist_len    = 100
 
         while not rospy.is_shutdown():
@@ -174,6 +184,7 @@ class Viewer:
             data_dict['vx'].append(new___vx)
             data_dict['vy'].append(new___vy)
             data_dict['vyaw'].append(new_vyaw)
+            times.append(self.topic_time - self.start_time)
 
             # crunch plot limits:
             mins_dict = {key: data_dict[key][-1] if data_dict[key][-1] < mins_dict[key] else mins_dict[key] for key in list(mins_dict.keys())}
@@ -183,20 +194,20 @@ class Viewer:
             length_arr = len(data_dict['x'])
             while length_arr > hist_len:
                 [data_dict[key].pop(0) for key in list(data_dict.keys())]
+                times.pop(0)
                 length_arr -= 1
-            spacing = np.arange(length_arr)
             [[j.clear() for j in i] for i in self.axes_twins] # clear old data from axes
 
             if length_arr < 10:
                 continue
 
             # plot data:
-            self.axes_twins[0][0].plot(spacing, data_dict['x'], 'r')
-            self.axes_twins[0][1].plot(spacing, data_dict['vx'], 'b')
-            self.axes_twins[1][0].plot(spacing, data_dict['y'], 'r')
-            self.axes_twins[1][1].plot(spacing, data_dict['vy'], 'b')
-            self.axes_twins[2][0].plot(spacing, data_dict['yaw'], 'r')
-            self.axes_twins[2][1].plot(spacing, data_dict['vyaw'], 'b')
+            self.axes_twins[0][0].plot(times, data_dict['x'], 'r.')
+            self.axes_twins[0][1].plot(times, data_dict['vx'], 'b.')
+            self.axes_twins[1][0].plot(times, data_dict['y'], 'r.')
+            self.axes_twins[1][1].plot(times, data_dict['vy'], 'b.')
+            self.axes_twins[2][0].plot(times, data_dict['yaw'], 'r.')
+            self.axes_twins[2][1].plot(times, data_dict['vyaw'], 'b.')
 
             # update plot limits:
             E = 0.2
@@ -251,6 +262,7 @@ class Viewer:
         self.new_msg    = False
 
         data_dict   = {'x': [], 'y': [], 'yaw': [], 'vx': [], 'vy': [], 'vyaw': []}
+        times = []
         _MIN = 10000
         _MAX = -10000
         mins_dict = {'x': _MIN, 'y': _MIN, 'yaw': _MIN, 'vx': _MIN, 'vy': _MIN, 'vyaw': _MIN}
@@ -281,6 +293,7 @@ class Viewer:
             data_dict['vx'].append(new___vx)
             data_dict['vy'].append(new___vy)
             data_dict['vyaw'].append(new_vyaw)
+            times.append(self.topic_time - self.start_time)
 
             # crunch plot limits:
             mins_dict = {key: data_dict[key][-1] if data_dict[key][-1] < mins_dict[key] else mins_dict[key] for key in list(mins_dict.keys())}
@@ -290,20 +303,20 @@ class Viewer:
             length_arr = len(data_dict['x'])
             while length_arr > hist_len:
                 [data_dict[key].pop(0) for key in list(data_dict.keys())]
+                times.pop(0)
                 length_arr -= 1
-            spacing = np.arange(length_arr)
             [[j.clear() for j in i] for i in self.axes_twins] # clear old data from axes
 
             if length_arr < 10:
                 continue
 
             # plot data:
-            self.axes_twins[0][0].plot(spacing, data_dict['x'], 'r')
-            self.axes_twins[0][1].plot(spacing, data_dict['vx'], 'b')
-            self.axes_twins[1][0].plot(spacing, data_dict['y'], 'r')
-            self.axes_twins[1][1].plot(spacing, data_dict['vy'], 'b')
-            self.axes_twins[2][0].plot(spacing, data_dict['yaw'], 'r')
-            self.axes_twins[2][1].plot(spacing, data_dict['vyaw'], 'b')
+            self.axes_twins[0][0].plot(times, data_dict['x'], 'r.')
+            self.axes_twins[0][1].plot(times, data_dict['vx'], 'b.')
+            self.axes_twins[1][0].plot(times, data_dict['y'], 'r.')
+            self.axes_twins[1][1].plot(times, data_dict['vy'], 'b.')
+            self.axes_twins[2][0].plot(times, data_dict['yaw'], 'r.')
+            self.axes_twins[2][1].plot(times, data_dict['vyaw'], 'b.')
 
             # update plot limits:
             E = 0.2
@@ -329,11 +342,11 @@ class Viewer:
             self.axes_twins[1][1].set_xticks([])
             self.axes_twins[1][1].set_xticklabels([])
             self.axes_twins[1][1].set_ylabel('   vy', rotation=0)
-            self.axes_twins[2][0].set_xticks([])
-            self.axes_twins[2][0].set_xticklabels([])
+            #self.axes_twins[2][0].set_xticks([])
+            #self.axes_twins[2][0].set_xticklabels([])
             self.axes_twins[2][0].set_ylabel('w   ', rotation=0)
-            self.axes_twins[2][1].set_xticks([])
-            self.axes_twins[2][1].set_xticklabels([])
+            #self.axes_twins[2][1].set_xticks([])
+            #self.axes_twins[2][1].set_xticklabels([])
             self.axes_twins[2][1].set_ylabel('   vw', rotation=0)
             self.fig.subplots_adjust(left=0.15, right=0.85)
 
@@ -355,6 +368,7 @@ class Viewer:
         self.fig.show()
 
         data_dict   = {'x': [], 'y': [], 'z': [], 'w': [], 'gtw': []}
+        times = []
         _MIN = 10000
         _MAX = -10000
         mins_dict = {'x': _MIN, 'y': _MIN, 'z': _MIN, 'w': _MIN, 'gtw': _MIN}
@@ -381,6 +395,7 @@ class Viewer:
             data_dict['z'].append(new____z)
             data_dict['w'].append(new____w)
             data_dict['gtw'].append(new__gtw)
+            times.append(self.topic_time - self.start_time)
 
             # crunch plot limits:
             mins_dict = {key: data_dict[key][-1] if data_dict[key][-1] < mins_dict[key] else mins_dict[key] for key in list(mins_dict.keys())}
@@ -390,6 +405,7 @@ class Viewer:
             length_arr = len(data_dict['x'])
             while length_arr > hist_len:
                 [data_dict[key].pop(0) for key in list(data_dict.keys())]
+                times.pop(0)
                 length_arr -= 1
             spacing = np.arange(length_arr)
             [i.clear() for i in self.axes] # clear old data from axes
@@ -398,11 +414,11 @@ class Viewer:
                 continue
 
             # plot data:
-            self.axes[0].plot(spacing, data_dict['x'], 'r')
-            self.axes[0].plot(spacing, data_dict['y'], 'g')
-            self.axes[0].plot(spacing, data_dict['z'], 'b')
-            self.axes[1].plot(spacing, data_dict['w'], 'r')
-            self.axes[1].plot(spacing, data_dict['gtw'], 'b')
+            self.axes[0].plot(times, data_dict['x'], 'r.')
+            self.axes[0].plot(times, data_dict['y'], 'g.')
+            self.axes[0].plot(times, data_dict['z'], 'b.')
+            self.axes[1].plot(times, data_dict['w'], 'r.')
+            self.axes[1].plot(times, data_dict['gtw'], 'b.')
 
             # draw:
             self.fig.canvas.draw_idle()
