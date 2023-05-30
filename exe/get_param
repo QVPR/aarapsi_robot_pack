@@ -1,0 +1,9 @@
+#!/bin/bash
+
+ROOT="$(rospack find aarapsi_robot_pack)"
+FILE="$ROOT/cfg/pipeline_config.yaml"
+MAPS="$ROOT/data/maps/"
+FILE_LINE="$(cat $FILE | grep $1 | xargs)"
+PARAM_RAW=${FILE_LINE#"$1:"}
+PARAM="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'<<<"${PARAM_RAW}")"
+printf "$MAPS$PARAM"
