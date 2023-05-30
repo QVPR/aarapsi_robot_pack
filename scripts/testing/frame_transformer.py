@@ -2,21 +2,20 @@
 
 import rospy
 import argparse as ap
-import numpy as np
 import sys
 import tf
-import copy
-from std_msgs.msg import String, Header
+from std_msgs.msg import String
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped, Pose
+from geometry_msgs.msg import PoseStamped
+from aarapsi_robot_pack.msg import PosVel
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string
 from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node
 from pyaarapsi.core.helper_tools import formatException
 
 '''
-Node Name
+Frame Transformer
 
-Node description.
+Republishes geometric messages in a new frame of reference.
 
 '''
 
@@ -39,19 +38,18 @@ class mrc():
 
     def init_vars(self):
         self.tf_listener     = tf.TransformListener()
-        self.ekf_msg         = None
-        self.new_ekf_msg     = False
 
     def init_rospy(self):
         self.rate_obj        = rospy.Rate(self.RATE_NUM.get())
         self.param_sub       = rospy.Subscriber(self.namespace + "/params_update",  String,     self.param_callback, queue_size=100)
         self.ekf_sub         = rospy.Subscriber("/odom/filtered",                   Odometry,   self.ekf_callback,   queue_size=1)
-        self.gt_odom_pub     = self.ROS_HOME.add_pub("/odom/smooth",                Odometry,                        queue_size=1)
-        self.gt_pose_pub     = self.ROS_HOME.add_pub("/pose/smooth",                PoseStamped,                     queue_size=1)
+        self.gt_posvel_pub   = self.ROS_HOME.add_pub("/odom/posvel",                PosVel,                          queue_size=1)
 
     def ekf_callback(self, msg):
-        self.ekf_msg         = msg
-        self.new_ekf_msg     = True
+        odom_pose            = PoseStamped(pose=msg.pose.pose, header=msg.header)
+        map_pose             = self.tf_listener.transformPose("map", ps=odom_pose)
+        gt_posvel_msg        = PosVel(pos=map_pose, twist=msg.twist.twist) # grab covariances and velocity information from here
+        self.gt_posvel_pub.publish(gt_posvel_msg)
 
     def param_callback(self, msg):
         self.parameters_ready = False
@@ -74,32 +72,7 @@ class mrc():
         self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            self.loop_contents()
-
-    def loop_contents(self):
-        if not self.new_ekf_msg:
-            self.print("Waiting.", LogType.DEBUG, throttle=60) # print every 60 seconds
-            rospy.sleep(0.005)
-            return
-        
-        self.rate_obj.sleep()
-
-        odom_pose                           = PoseStamped(pose=self.ekf_msg.pose.pose, header=self.ekf_msg.header)
-        map_pose                            = self.tf_listener.transformPose("map", ps=odom_pose)
-        gt_odom_msg                         = Odometry() # grab covariances and velocity information from here
-        gt_odom_msg.twist                   = self.ekf_msg.twist
-        gt_odom_msg.pose.covariance         = self.ekf_msg.pose.covariance
-        gt_odom_msg.pose.pose.position.x    = map_pose.pose.position.x
-        gt_odom_msg.pose.pose.position.y    = map_pose.pose.position.y
-        gt_odom_msg.pose.pose.orientation.x = map_pose.pose.orientation.x
-        gt_odom_msg.pose.pose.orientation.y = map_pose.pose.orientation.y
-        gt_odom_msg.pose.pose.orientation.z = map_pose.pose.orientation.z
-        gt_odom_msg.pose.pose.orientation.w = map_pose.pose.orientation.w
-        gt_odom_msg.header.stamp            = map_pose.header.stamp
-        gt_odom_msg.child_frame_id          = "base_link"
-        gt_odom_msg.header.frame_id         = "map"
-        self.gt_odom_pub.publish(gt_odom_msg)
-        self.gt_pose_pub.publish(map_pose)
+            self.rate_obj.sleep()
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:
@@ -115,16 +88,16 @@ class mrc():
         sys.exit()
 
 def do_args():
-    parser = ap.ArgumentParser(prog="odom2map.py", 
-                            description="Odom2Map Transformer",
+    parser = ap.ArgumentParser(prog="frame_transformer.py", 
+                            description="Frame Transformer",
                             epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-    parser.add_argument('--node-name',        '-N',  type=check_string,                 default="odom2map",       help="Specify node name (default: %(default)s).")
-    parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=30.0,              help='Specify node rate (default: %(default)s).')
-    parser.add_argument('--anon',             '-a',  type=check_bool,                   default=False,            help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
-    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16],    default=2,                help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--reset',            '-R',  type=check_bool,                   default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
-    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
+    parser.add_argument('--node-name',        '-N',  type=check_string,                 default="frame_transformer",  help="Specify node name (default: %(default)s).")
+    parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=30.0,                 help='Specify node rate (default: %(default)s).')
+    parser.add_argument('--anon',             '-a',  type=check_bool,                   default=False,                help="Specify whether node should be anonymous (default: %(default)s).")
+    parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",         help="Specify ROS namespace (default: %(default)s).")
+    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16],    default=2,                    help="Specify ROS log level (default: %(default)s).")
+    parser.add_argument('--reset',            '-R',  type=check_bool,                   default=False,                help='Force reset of parameters to specified ones (default: %(default)s)')
+    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                    help='Specify boot order of pipeline nodes (default: %(default)s).')
 
     raw_args = parser.parse_known_args()
     return vars(raw_args[0])
