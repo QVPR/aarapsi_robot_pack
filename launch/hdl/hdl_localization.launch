@@ -25,7 +25,7 @@
 
   <!-- globalmap_server_nodelet -->
   <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="$(arg nodelet_style) hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
-    <param name="globalmap_pcd" value="$(find aarapsi_robot_pack)/data/s11_center_map.pcd" />
+    <param name="globalmap_pcd" command="$(find aarapsi_robot_pack)/exe/get_param slam_map"/>
     <param name="convert_utm_to_local" value="true" />
     <param name="downsample_resolution" value="0.1" />
   </node>
