@@ -24,14 +24,14 @@
   <node if="$(arg offline)" pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
 
   <!-- globalmap_server_nodelet -->
-  <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="$(arg nodelet_style) hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
+  <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="$(arg nodelet_style) hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)" output="screen">
     <param name="globalmap_pcd" command="$(find aarapsi_robot_pack)/exe/get_param slam_map"/>
     <param name="convert_utm_to_local" value="true" />
     <param name="downsample_resolution" value="0.1" />
   </node>
 
   <!-- hdl_localization_nodelet -->
-  <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" args="$(arg nodelet_style) hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
+  <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" args="$(arg nodelet_style) hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)" output="screen">
     <remap from="/velodyne_points" to="$(arg points_topic)" />
     <remap from="/status" to="/scan_matching_status" />
     <remap from="/gpsimu_driver/imu_data" to="$(arg imu_topic)" />
@@ -68,5 +68,5 @@
     <param name="use_global_localization" value="$(arg use_global_localization)" />
   </node>
 
-  <node pkg="hdl_localization" type="plot_status.py" name="plot_estimation_errors" if="$(arg plot_estimation_errors)" />
+  <node pkg="hdl_localization" type="plot_status.py" name="plot_estimation_errors" if="$(arg plot_estimation_errors)" output="screen"/>
 </launch>
