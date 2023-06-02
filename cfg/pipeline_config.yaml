@@ -8,29 +8,29 @@ vpr_nodes:
   svm_dbp: /cfg/svm_models
   bag_dbp: /data/rosbags
 
-  odom_topic: /odom
+  odom_topic: /odom/true
   img_topic: /ros_indigosdk_occam/stitched_image0/compressed
 
   slam_map: loop_0_10res.pcd
 
   groundtruth: true
   path: 
-    bag_name: run1
-    odom_topic: /odom
+    bag_name: run1_fix
+    odom_topic: /odom/true
     img_topic: /ros_indigosdk_occam/stitched_image0/compressed
 
   cal:
     qry:
-      bag_name: run2
+      bag_name: run2_fix
       filters: '{}'
       sample_rate: 10.0
     ref:
-      bag_name: run3
+      bag_name: run3_fix
       filters: '{}'
       sample_rate: 10.0
 
   ref:
-    bag_name: run4
+    bag_name: run4_fix
     filters: '{}'
     sample_rate: 10.0
 
