@@ -2,7 +2,7 @@
 <launch>
     <node pkg="robot_localization" type="ekf_localization_node" name="slam_ekf" clear_params="true" output="screen">
       <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/hdl_ekf.yaml"/>
-      <remap from="odometry/filtered" to="/odom/filtered"/>
+      <remap from="odometry/filtered" to="/odom/slam_ekf"/>
       <remap from="/diagnostics" to="/diagnostics/slam_ekf"/>
       <remap from="/cmd_vel" to="/jackal_velocity_controller/cmd_vel"/>
     </node>

@@ -2,12 +2,12 @@
 
 import rospy
 import argparse as ap
+import numpy as np
 import sys
 import tf
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped
-from aarapsi_robot_pack.msg import PosVel
+from geometry_msgs.msg import PoseStamped, Twist, Vector3
 from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string
 from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node
 from pyaarapsi.core.helper_tools import formatException
@@ -42,14 +42,24 @@ class mrc():
     def init_rospy(self):
         self.rate_obj        = rospy.Rate(self.RATE_NUM.get())
         self.param_sub       = rospy.Subscriber(self.namespace + "/params_update",  String,     self.param_callback, queue_size=100)
-        self.ekf_sub         = rospy.Subscriber("/odom/filtered",                   Odometry,   self.ekf_callback,   queue_size=1)
-        self.gt_posvel_pub   = self.ROS_HOME.add_pub("/odom/posvel",                PosVel,                          queue_size=1)
+        self.ekf_sub         = rospy.Subscriber("/odom/slam_ekf",                   Odometry,   self.ekf_callback,   queue_size=1)
+        self.gt_odom_pub     = self.ROS_HOME.add_pub("/odom/true",                  Odometry,                        queue_size=1)
+        self.gt_pose_pub     = self.ROS_HOME.add_pub("/odom/pose",                  PoseStamped,                     queue_size=1)
 
     def ekf_callback(self, msg):
-        odom_pose            = PoseStamped(pose=msg.pose.pose, header=msg.header)
-        map_pose             = self.tf_listener.transformPose("map", ps=odom_pose)
-        gt_posvel_msg        = PosVel(pos=map_pose, twist=msg.twist.twist) # grab covariances and velocity information from here
-        self.gt_posvel_pub.publish(gt_posvel_msg)
+        odom_pose                   = PoseStamped(pose=msg.pose.pose, header=msg.header)
+        map_pose                    = self.tf_listener.transformPose("map", ps=odom_pose)
+        rotation_matrix             = self.tf_listener.asMatrix("map", odom_pose.header)[0:3, 0:3]
+        vel_3x3                     = np.diag([msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z])
+        vel_3x3_rotated             = np.dot(rotation_matrix, vel_3x3)
+        vel_frame                   = Twist(angular=msg.twist.twist.angular, linear=Vector3(x=vel_3x3_rotated[0,0], y=vel_3x3_rotated[1,1], z=vel_3x3_rotated[2,2]))
+        gt_odom_msg                 = Odometry() # grab covariances and velocity information from here
+        gt_odom_msg.pose.pose       = map_pose.pose
+        gt_odom_msg.twist.twist     = vel_frame
+        gt_odom_msg.header.frame_id = "map"
+        gt_odom_msg.header.stamp    = rospy.Time.now()
+        self.gt_odom_pub.publish(gt_odom_msg)
+        self.gt_pose_pub.publish(map_pose)
 
     def param_callback(self, msg):
         self.parameters_ready = False
@@ -106,6 +116,7 @@ if __name__ == '__main__':
     try:
         args = do_args()
         nmrc = mrc(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
+        nmrc.print("Initialisation complete. Listening for transformable data...", LogType.INFO)
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()

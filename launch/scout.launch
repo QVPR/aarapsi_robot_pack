@@ -8,6 +8,6 @@
         <remap from="/rslidar_points" to="/velodyne_points"/>
     </node>
 
-    <node pkg="ros_indigosdk" type="ros_indigosdk_node" name="ros_indigosdk_occam"/>
+    <node pkg="ros_indigosdk" type="ros_indigosdk_node" name="ros_indigosdk_occam" output="screen"/>
 
 </launch>

@@ -9,6 +9,8 @@
     <arg name="launch_core"             default="false"/> <!-- Typically we do this offboard, but for onboard solutions set to true -->
     <arg name="launch_auto"             default="false"/>
 
+    <arg name="use_gpu"                 default="False"/>
+
     <arg name="namespace"               default="/vpr_nodes"/>
 
     <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
@@ -30,6 +32,7 @@
                 <!-- Autonomous Nodes: -->
                 <arg name="launch_twist2joy"    value="$(arg launch_auto)"/>
                 <arg name="launch_follower"     value="$(arg launch_auto)"/>
+                <arg name="use_gpu"             value="$(arg use_gpu)"/>
             </include>
         </group>
     </group>

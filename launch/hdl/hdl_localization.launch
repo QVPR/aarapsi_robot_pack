@@ -5,6 +5,7 @@
   <arg name="nodelet_style" default="standalone"/>
   <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
   <arg name="points_topic" default="/velodyne_points" />
+  <arg name="odom_topic" default="/odom/slam" />
   <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
   <!-- this is useful to match the LIDAR and IMU coodinate systems -->
   <arg name="odom_child_frame_id" default="velodyne" />
@@ -33,6 +34,7 @@
   <!-- hdl_localization_nodelet -->
   <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" args="$(arg nodelet_style) hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)" output="screen">
     <remap from="/velodyne_points" to="$(arg points_topic)" />
+    <remap from="/odom" to="$(arg odom_topic)"/>
     <remap from="/status" to="/scan_matching_status" />
     <remap from="/gpsimu_driver/imu_data" to="$(arg imu_topic)" />
     <!-- odometry frame_id -->
