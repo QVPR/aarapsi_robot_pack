@@ -10,10 +10,10 @@
     <arg name="launch_auto"             default="false"/>
 
     <arg name="use_gpu"                 default="False"/>
-
+    <arg name="param_file"              default="pipeline_config_robot.yaml"/>
     <arg name="namespace"               default="/vpr_nodes"/>
 
-    <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
+    <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
 
     <group ns="$(arg namespace)">
         <!-- SLAM Nodes: -->
