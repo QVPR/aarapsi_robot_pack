@@ -8,16 +8,16 @@ vpr_nodes:
   svm_dbp: /cfg/svm_models
   bag_dbp: /data/rosbags
 
-  odom_topic: /odom/true
-  img_topic: /ros_indigosdk_occam/stitched_image0/compressed
+  odom_topic: /odom/filtered
+  img_topic: /ros_indigosdk_occam/image0/compressed
 
   slam_map: s11_center_map.pcd
 
   groundtruth: true
   path: 
     bag_name: s1_ccw_o0_e0_a0
-    odom_topic: /odom/true
-    img_topic: /ros_indigosdk_occam/stitched_image0/compressed
+    odom_topic: /odom/filtered
+    img_topic: /ros_indigosdk_occam/image0/compressed
 
   cal:
     qry:
