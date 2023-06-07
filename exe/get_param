@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ROOT="$(rospack find aarapsi_robot_pack)"
-FILE="$ROOT/cfg/$1.yaml"
+FILE="$ROOT/cfg/$1"
 MAPS="$ROOT/data/maps/"
 FILE_LINE="$(cat $FILE | grep $2 | xargs)"
 PARAM_RAW=${FILE_LINE#"$2:"}
