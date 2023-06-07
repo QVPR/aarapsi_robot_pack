@@ -18,7 +18,10 @@
     <group ns="$(arg namespace)">
         <!-- SLAM Nodes: -->
         <group if="$(arg launch_slam)">
-            <include file="$(find aarapsi_robot_pack)/launch/slam.launch"/>
+            <include file="$(find aarapsi_robot_pack)/launch/slam.launch">
+                <arg name="load_params" value="false"/>
+                <arg name="param_file"  value="$(arg param_file)"/>
+            </include>
         </group>
 
         <!-- Web Server, Parameter Watcher, Image+Odom Aggregator, Image Throttle Nodes: -->
