@@ -9,7 +9,7 @@
     <arg name="launch_slam_ekf"         default="true"/>
     <arg name="launch_transformer"      default="true"/>
     <arg name="load_params"             default="false"/>
-    <arg name="param_file"              default="pipeline_config_robot.yaml"/>
+    <arg name="param_file"              default="robot_cfg.yaml"/>
 
     <arg name="namespace"               default="/vpr_nodes"/>
     
@@ -20,7 +20,9 @@
     <group ns="$(arg namespace)">
         <!-- SLAM Localization Nodes: -->
         <group if="$(arg launch_slam_node)">
-            <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_localization.launch"/>
+            <include file="$(find aarapsi_robot_pack)/launch/hdl/hdl_localization.launch">
+                <arg name="param_file"  value="$(arg param_file)"/>
+            </include>
         </group>
 
         <!-- SLAM EKF Node: -->
