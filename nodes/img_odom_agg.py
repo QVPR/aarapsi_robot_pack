@@ -53,6 +53,7 @@ class mrc:
         self.odom       = None
         self.new_img    = False
         self.new_odom   = False
+        self.time       = rospy.Time.now().to_sec()
 
         self.bridge     = CvBridge()
 
@@ -85,10 +86,15 @@ class mrc:
             self.loop_contents()
 
     def loop_contents(self):
+
+        if rospy.Time.now().to_sec() - self.time > 1:
+            self.print("Long message delay experienced.", LogType.WARN, throttle=5)
+
         if not (self.new_img and self.new_odom):
             rospy.sleep(0.005)
             return # denest
         self.rate_obj.sleep()
+        self.time       = rospy.Time.now().to_sec()
 
         self.new_img                = False
         self.new_odom               = False
