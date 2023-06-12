@@ -19,7 +19,7 @@ vpr_nodes:
     odom_topic: /odom/filtered
     img_topic: /ros_indigosdk_occam/image0/compressed
 
-  cal:
+  svm:
     qry:
       bag_name: s1_cw_o0_e0_a0
       filters: '{}'

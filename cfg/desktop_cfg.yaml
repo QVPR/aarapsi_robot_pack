@@ -19,7 +19,7 @@ vpr_nodes:
     odom_topic: /odom/true
     img_topic: /ros_indigosdk_occam/stitched_image0/compressed
 
-  cal:
+  svm:
     qry:
       bag_name: run2_fix
       filters: '{}'

@@ -57,13 +57,13 @@ class mrc():
         self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,             check_string,                               force=False)
         self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,             check_string,                               force=False)
         
-        self.CAL_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/cal/qry/bag_name",    None,             check_string,                               force=False)
-        self.CAL_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/cal/qry/filters",     None,             check_string,                               force=False)
-        self.CAL_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/cal/qry/sample_rate", None,             check_positive_float,                       force=False)
+        self.CAL_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",    None,             check_string,                               force=False)
+        self.CAL_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",     None,             check_string,                               force=False)
+        self.CAL_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate", None,             check_positive_float,                       force=False)
 
-        self.CAL_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/cal/ref/bag_name",    None,             check_string,                               force=False)
-        self.CAL_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/cal/ref/filters",     None,             check_string,                               force=False)
-        self.CAL_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/cal/ref/sample_rate", None,             check_positive_float,                       force=False)
+        self.CAL_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",    None,             check_string,                               force=False)
+        self.CAL_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",     None,             check_string,                               force=False)
+        self.CAL_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate", None,             check_positive_float,                       force=False)
         
         self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,         check_positive_float,                       force=reset)
         self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,        check_positive_int,                         force=reset)

@@ -45,13 +45,13 @@ class mrc: # main ROS class
         self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,             check_string,                               force=False)
         self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,             check_string,                               force=False)
         
-        self.CAL_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/cal/qry/bag_name",    None,             check_string,                               force=False)
-        self.CAL_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/cal/qry/filters",     None,             check_string,                               force=False)
-        self.CAL_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/cal/qry/sample_rate", None,             check_positive_float,                       force=False)
+        self.CAL_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",    None,             check_string,                               force=False)
+        self.CAL_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",     None,             check_string,                               force=False)
+        self.CAL_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate", None,             check_positive_float,                       force=False)
 
-        self.CAL_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/cal/ref/bag_name",    None,             check_string,                               force=False)
-        self.CAL_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/cal/ref/filters",     None,             check_string,                               force=False)
-        self.CAL_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/cal/ref/sample_rate", None,             check_positive_float,                       force=False)
+        self.CAL_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",    None,             check_string,                               force=False)
+        self.CAL_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",     None,             check_string,                               force=False)
+        self.CAL_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate", None,             check_positive_float,                       force=False)
         
         self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,         check_positive_float,                       force=reset)
         self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,        check_positive_int,                         force=reset)
@@ -103,6 +103,7 @@ class mrc: # main ROS class
         ref_dict = dict(bag_name=self.CAL_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
                         odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
                         ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
+        svm_dict = dict(factors=[], tolerances=[])
         return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
 
     def debug_cb(self, msg):
