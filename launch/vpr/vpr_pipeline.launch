@@ -46,10 +46,11 @@
     <arg name="fw_rate"                 default="10.0"/>
 
     <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
+    <arg name="param_file"              default="desktop_cfg.yaml"/>
 
     <group if="$(arg offline)">
         <!-- Load in params; must be done outside of a namespace -->
-        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/>
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/>
     </group>
     
     <group ns="$(arg namespace)">
