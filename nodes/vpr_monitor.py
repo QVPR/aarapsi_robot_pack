@@ -18,7 +18,7 @@ from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
 
 from pyaarapsi.vpred                import *
 
-from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_list, check_bool, check_enum, check_string, check_positive_int
+from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_list, check_bool, check_enum, check_string, check_positive_int, check_string_list
 from pyaarapsi.core.helper_tools    import formatException, np_ndarray_to_uint8_list
 from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, LogType, NodeState, SubscribeListener
 from pyaarapsi.core.enum_tools      import enum_name
@@ -45,21 +45,24 @@ class mrc: # main ROS class
         self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,             check_string,                               force=False)
         self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,             check_string,                               force=False)
         
-        self.CAL_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",    None,             check_string,                               force=False)
-        self.CAL_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",     None,             check_string,                               force=False)
-        self.CAL_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate", None,             check_positive_float,                       force=False)
+        self.SVM_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",    None,             check_string,                               force=False)
+        self.SVM_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",     None,             check_string,                               force=False)
+        self.SVM_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate", None,             check_positive_float,                       force=False)
 
-        self.CAL_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",    None,             check_string,                               force=False)
-        self.CAL_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",     None,             check_string,                               force=False)
-        self.CAL_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate", None,             check_positive_float,                       force=False)
+        self.SVM_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",    None,             check_string,                               force=False)
+        self.SVM_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",     None,             check_string,                               force=False)
+        self.SVM_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate", None,             check_positive_float,                       force=False)
         
+        self.SVM_FACTORS            = self.ROS_HOME.params.add(self.namespace + "/svm/factors",         None,             check_string_list,                          force=False)
+
         self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,         check_positive_float,                       force=reset)
         self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,        check_positive_int,                         force=reset)
         self.PRINT_PREDICTION       = self.ROS_HOME.params.add(self.nodespace + "/print_prediction",    print_prediction, check_bool,                                 force=reset)
        
         self.SVM_DATA_PARAMS        = [self.FEAT_TYPE, self.IMG_DIMS, self.NPZ_DBP, self.BAG_DBP, self.SVM_DBP, self.IMG_TOPIC, self.ODOM_TOPIC, \
-                                       self.CAL_QRY_BAG_NAME, self.CAL_QRY_FILTERS, self.CAL_QRY_SAMPLE_RATE, \
-                                       self.CAL_REF_BAG_NAME, self.CAL_REF_FILTERS, self.CAL_REF_SAMPLE_RATE]
+                                       self.SVM_QRY_BAG_NAME, self.SVM_QRY_FILTERS, self.SVM_QRY_SAMPLE_RATE, \
+                                       self.SVM_REF_BAG_NAME, self.SVM_REF_FILTERS, self.SVM_REF_SAMPLE_RATE, \
+                                       self.SVM_FACTORS]
         self.SVM_DATA_NAMES         = [i.name for i in self.SVM_DATA_PARAMS]
 
     def init_vars(self):
@@ -94,17 +97,19 @@ class mrc: # main ROS class
         self.field_pub              = self.ROS_HOME.add_pub(self.namespace + "/field",                  ImageDetails,                                       queue_size=1, subscriber_listener=self.sublis)
         self.svm_state_pub          = self.ROS_HOME.add_pub(self.namespace + "/state",                  MonitorDetails,                                     queue_size=1)
 
+        self.field_timer            = rospy.Timer(rospy.Duration(secs=3), self.update_svm_mat)
+
         self.sublis.add_operation(self.namespace + "/field", method_sub=self.field_peer_subscribe)
 
     def make_svm_model_params(self):
-        qry_dict = dict(bag_name=self.CAL_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
+        qry_dict = dict(bag_name=self.SVM_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.SVM_REF_SAMPLE_RATE.get(), \
                         ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-        ref_dict = dict(bag_name=self.CAL_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
+        ref_dict = dict(bag_name=self.SVM_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.SVM_REF_SAMPLE_RATE.get(), \
                         ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-        svm_dict = dict(factors=[], tolerances=[])
-        return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
+        svm_dict = dict(factors=self.SVM_FACTORS.get())
+        return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), svm=svm_dict, npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
 
     def debug_cb(self, msg):
         if msg.node_name == self.node_name:
@@ -195,8 +200,9 @@ class mrc: # main ROS class
         self.contour_msg.data.ylab                = 'Average Gradient'
         self.contour_msg.data.title               = 'SVM Decision Function'
 
-    def update_svm_mat(self):
-        self.generate_svm_mat()
+    def update_svm_mat(self, event=None):
+        if event is None:
+            self.generate_svm_mat()
         self.field_pub.publish(self.contour_msg)
 
     def field_peer_subscribe(self, topic_name):
@@ -234,24 +240,27 @@ class mrc: # main ROS class
         # Predict model information, but have a try-except to catch if model is transitioning state
         predict_success = False
         while not predict_success:
+            if rospy.is_shutdown():
+                self.exit()
             try:
-                (y_pred_rt, y_zvalues_rt, [factor1_qry, factor2_qry], prob) = self.svm.predict(self.label.data.dvc)
+                (pred, zvalues, [factor1, factor2], prob) = self.svm.predict(self.label.data.dvc, self.label.data.matchId)
                 predict_success = True
             except:
                 self.print("Predict failed. Trying again ...", LogType.WARN, throttle=1)
+                self.print(formatException(), LogType.DEBUG, throttle=10)
                 rospy.sleep(0.005)
 
         if self.PRINT_PREDICTION.get():
             if self.label.data.state == 0:
-                self.print('integrity prediction: %s', y_pred_rt, LogType.INFO)
+                self.print('integrity prediction: %s', pred, LogType.INFO)
             else:
                 gt_state_bool = bool(self.label.data.state - 1)
-                if y_pred_rt == gt_state_bool:
-                    self.print('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool), LogType.INFO)
-                elif y_pred_rt == False and gt_state_bool == True:
-                    self.print('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool), LogType.WARN)
+                if pred == gt_state_bool:
+                    self.print('integrity prediction: %r [gt: %r]' % (pred, gt_state_bool), LogType.INFO)
+                elif pred == False and gt_state_bool == True:
+                    self.print('integrity prediction: %r [gt: %r]' % (pred, gt_state_bool), LogType.WARN)
                 else:
-                    self.print('integrity prediction: %r [gt: %r]' % (y_pred_rt, gt_state_bool), LogType.ERROR)
+                    self.print('integrity prediction: %r [gt: %r]' % (pred, gt_state_bool), LogType.ERROR)
 
         # Populate and publish SVM State details
         ros_msg                 = MonitorDetails()
@@ -259,10 +268,10 @@ class mrc: # main ROS class
         ros_msg.header.stamp    = rospy.Time.now()
         ros_msg.header.frame_id	= 'map'
         ros_msg.data            = self.label.data
-        ros_msg.mState	        = y_zvalues_rt # Continuous monitor state estimate 
+        ros_msg.mState	        = zvalues # Continuous monitor state estimate 
         ros_msg.prob	        = prob # Monitor probability estimate
-        ros_msg.mStateBin       = y_pred_rt# Binary monitor state estimate
-        ros_msg.factors         = [factor1_qry, factor2_qry]
+        ros_msg.mStateBin       = pred# Binary monitor state estimate
+        ros_msg.factors         = [factor1, factor2]
 
         self.svm_state_pub.publish(ros_msg)
         del ros_msg

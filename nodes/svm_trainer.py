@@ -5,7 +5,7 @@ import argparse as ap
 import sys
 from rospy_message_converter import message_converter
 from std_msgs.msg import String
-from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum
+from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum, check_string_list
 from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node
 from pyaarapsi.core.helper_tools import formatException
 from pyaarapsi.core.enum_tools import enum_name
@@ -57,14 +57,16 @@ class mrc():
         self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,             check_string,                               force=False)
         self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,             check_string,                               force=False)
         
-        self.CAL_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",    None,             check_string,                               force=False)
-        self.CAL_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",     None,             check_string,                               force=False)
-        self.CAL_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate", None,             check_positive_float,                       force=False)
+        self.SVM_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",    None,             check_string,                               force=False)
+        self.SVM_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",     None,             check_string,                               force=False)
+        self.SVM_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate", None,             check_positive_float,                       force=False)
 
-        self.CAL_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",    None,             check_string,                               force=False)
-        self.CAL_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",     None,             check_string,                               force=False)
-        self.CAL_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate", None,             check_positive_float,                       force=False)
+        self.SVM_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",    None,             check_string,                               force=False)
+        self.SVM_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",     None,             check_string,                               force=False)
+        self.SVM_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate", None,             check_positive_float,                       force=False)
         
+        self.SVM_FACTORS            = self.ROS_HOME.params.add(self.namespace + "/svm/factors",         None,             check_string_list,                          force=False)
+
         self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,         check_positive_float,                       force=reset)
         self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,        check_positive_int,                         force=reset)
         
@@ -89,13 +91,14 @@ class mrc():
         self.svm_queue.append(msg)
 
     def make_svm_model_params(self):
-        qry_dict = dict(bag_name=self.CAL_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
+        qry_dict = dict(bag_name=self.SVM_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.SVM_REF_SAMPLE_RATE.get(), \
                         ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-        ref_dict = dict(bag_name=self.CAL_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.CAL_REF_SAMPLE_RATE.get(), \
+        ref_dict = dict(bag_name=self.SVM_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.SVM_REF_SAMPLE_RATE.get(), \
                         ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-        return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
+        svm_dict = dict(factors=self.SVM_FACTORS.get())
+        return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), svm=svm_dict, npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
 
     def update_SVM(self):
         if not len(self.svm_queue):

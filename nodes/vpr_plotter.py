@@ -16,7 +16,7 @@ from pyaarapsi.vpr_simple.vpr_plots              import doDVecFigBokeh, doOdomFi
                                                         updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_two_int_list, check_positive_int, check_valid_ip, check_enum, check_string
-from pyaarapsi.core.helper_tools    import formatException, vis_dict
+from pyaarapsi.core.helper_tools    import formatException, vis_dict, Timer
 from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, NodeState, LogType
 from pyaarapsi.core.enum_tools      import enum_name
 
@@ -31,7 +31,7 @@ import logging
 class mrc: # main ROS class
     def __init__(self, compress_in, rate_num, namespace, node_name, anon, log_level, reset, order_id=0):
         
-        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
+        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30, disable_signals=True):
             sys.exit()
 
         self.init_params(rate_num, log_level, compress_in, reset)
@@ -84,11 +84,6 @@ class mrc: # main ROS class
         self.param_checker_sub      = rospy.Subscriber(self.namespace + "/params_update",        String,         self.param_callback,        queue_size=100)
         self.svm_state_sub          = rospy.Subscriber(self.namespace + "/state",                MonitorDetails, self.state_callback,        queue_size=1)
         self.field_sub              = rospy.Subscriber(self.namespace + "/field",                ImageDetails,   self.field_callback,        queue_size=1)
-        self.timer_check_if_dead    = rospy.Timer(rospy.Duration(secs=2),                                        self.timer_check_if_dead)
-
-    def timer_check_if_dead(self, event):
-        if rospy.is_shutdown():
-            self.exit()
 
     def update_VPR(self):
         dataset_dict = self.make_dataset_dict()
@@ -211,6 +206,8 @@ def main_loop(nmrc, doc_frame):
     updateSVMMFigBokeh(doc_frame, nmrc.state)
 
 def ros_spin(nmrc, doc_frame):
+    t = Timer()
+    t.add()
     try:
         nmrc.rate_obj.sleep()
         try:
@@ -228,6 +225,8 @@ def ros_spin(nmrc, doc_frame):
     except:
         nmrc.print(formatException(), LogType.ERROR)
         nmrc.exit()
+    t.add()
+    t.show()
 
 def main(doc, nmrc):
     try:
@@ -258,14 +257,14 @@ def do_args():
     parser.add_argument('--namespace',        '-n',  type=check_string,              default="/vpr_nodes",     help="Specify namespace for topics (default: %(default)s).")
     parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16], default=2,                help="Specify ROS log level (default: %(default)s).")
     parser.add_argument('--reset',            '-R',  type=check_bool,                default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
-    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
+    parser.add_argument('--order-id',         '-ID', type=int,                       default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
     # Parse args...
     raw_args = parser.parse_known_args()
     return vars(raw_args[0])
 
 if __name__ == '__main__':
     os.environ['BOKEH_ALLOW_WS_ORIGIN'] = '0.0.0.0,131.181.33.60'
-    logging.getLogger('bokeh').setLevel(logging.CRITICAL) # hide bokeh superfluous messages
+    logging.getLogger('bokeh').setLevel(logging.ERROR) # hide bokeh superfluous messages
 
     args = do_args()
     nmrc = mrc(compress_in=args['compress_in'], rate_num=args['rate'], namespace=args['namespace'], \

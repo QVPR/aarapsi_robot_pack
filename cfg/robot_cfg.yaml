@@ -28,6 +28,9 @@ vpr_nodes:
       bag_name: s2_cw_o0_e1_a0
       filters: '{}'
       sample_rate: 10.0
+    factors:
+    - va
+    - grad
 
   ref:
     bag_name: s1_ccw_o0_e0_a0
