@@ -1,5 +1,5 @@
 vpr_nodes:
-  launch_step: 0
+  launch_step: 1
   feature_type: RAW
   img_dims:
   - 64

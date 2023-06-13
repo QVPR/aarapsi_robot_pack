@@ -9,7 +9,7 @@ import cv2
 from cv_bridge import CvBridge
 
 from nav_msgs.msg import Odometry, Path
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import TwistStamped
 from std_msgs.msg import String
 from fastdist import fastdist
 
@@ -77,7 +77,7 @@ class mrc:
         self.state_sub      = rospy.Subscriber(self.namespace + '/state',          MonitorDetails,      self.state_cb,       queue_size=1)
         self.param_sub      = rospy.Subscriber(self.namespace + "/params_update",  String,              self.param_callback, queue_size=100)
         self.info_pub       = self.ROS_HOME.add_pub(self.nodespace + '/info',      ControllerStateInfo,                      queue_size=1)
-        self.twist_pub      = self.ROS_HOME.add_pub('/twist2joy/in',               Twist,                                    queue_size=1)
+        self.twist_pub      = self.ROS_HOME.add_pub('/twist2joy/in',               TwistStamped,                             queue_size=1)
         self.ego_good_pub   = self.ROS_HOME.add_pub(self.nodespace + '/odom/good', Odometry,                                 queue_size=1)
         self.ego_bad_pub    = self.ROS_HOME.add_pub(self.nodespace + '/odom/bad',  Odometry,                                 queue_size=1)
         self.srv_path       = rospy.ServiceProxy(self.namespace + '/path',         GenerateObj)
@@ -232,10 +232,12 @@ class mrc:
         current_ego.pose.pose.position.y  = self.vpr_ego[1]
         current_ego.pose.pose.orientation = q_from_yaw(self.vpr_ego[2])
 
-        new_twist           = Twist()
+        new_twist           = TwistStamped()
+        new_twist.header.stamp = rospy.Time.now()
+        new_twist.header.frame_id = "odom"
         self.delta_yaw      = angle_wrap(yaw_from_q(self.sensor_msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_msg.pose.pose.orientation))
         self.current_yaw    = angle_wrap(0.5 * angle_wrap(self.current_yaw + self.vpr_ego[2]) + self.delta_yaw)
-        new_twist.angular.z = -1 * angle_wrap(self.target_yaw - self.current_yaw)
+        new_twist.twist.angular.z = -1 * angle_wrap(self.target_yaw - self.current_yaw)
 
         #self.print("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw))
         #self.print("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, angle_wrap(self.true_yaw - self.current_yaw)))
@@ -243,10 +245,10 @@ class mrc:
         self.publish_controller_info() # requires self.state_msg
 
         if self.state_msg.mStateBin == True or self.SVM_OVERRIDE.get():
-            new_twist.linear.x  = 0.5
+            new_twist.twist.linear.x  = 0.5
             self.ego_good_pub.publish(current_ego)
         else:
-            new_twist.linear.x  = 0.2
+            new_twist.twist.linear.x  = 0.2
             self.ego_bad_pub.publish(current_ego)
 
         self.twist_pub.publish(new_twist)
