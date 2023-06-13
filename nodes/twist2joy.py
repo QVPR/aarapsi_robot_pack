@@ -8,7 +8,7 @@ import argparse as ap
 
 from sensor_msgs.msg import Joy
 from std_msgs.msg import String
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Vector3
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool, check_positive_int
 from pyaarapsi.core.ros_tools import roslogger, init_node, LogType, NodeState, set_rospy_log_lvl
@@ -77,6 +77,8 @@ class mrc:
         self.parameters_ready   = True
         self.feature_mode       = FeatureType.RAW
 
+        self.twist_msg          = Twist(linear=Vector3(x=0,y=0,z=0), angular=Vector3(x=0,y=0,z=0))
+
     def init_rospy(self, rate_num, joy_sub_topic, twist_sub_topic, twist_pub_topic):
         self.rate_obj           = rospy.Rate(rate_num)
         self.last_msg_time      = rospy.Time.now().to_sec()
@@ -98,6 +100,8 @@ class mrc:
         
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
+
+            self.twist_pub.pub(self.twist_msg)
     
     def param_callback(self, msg):
         self.parameters_ready = False
@@ -119,8 +123,10 @@ class mrc:
     def joy_cb(self, msg):
         if abs(rospy.Time.now().to_sec() - msg.header.stamp.to_sec()) > 0.5: # if joy message was generated longer ago than half a second:
             self.mode = 0 
+            self.twist_msg = Twist(linear=Vector3(x=0,y=0,z=0), angular=Vector3(x=0,y=0,z=0))
             self.print("Bad joy data.", LogType.WARN)
             return # bad data.
+        
         self.last_msg_time = msg.header.stamp.to_sec()
 
         # Toggle enable:
@@ -131,6 +137,7 @@ class mrc:
         elif msg.buttons[self.disable] > 0:
             if not self.enabled == False:
                 self.enabled = False
+                self.twist_msg = Twist(linear=Vector3(x=0,y=0,z=0), angular=Vector3(x=0,y=0,z=0))
                 rospy.loginfo("Autonomous mode: Disabled")
 
         # Toggle mode:
@@ -170,11 +177,13 @@ class mrc:
         else:
             if not self.mode == 0:
                 self.mode = 0
+                self.twist_msg = Twist(linear=Vector3(x=0,y=0,z=0), angular=Vector3(x=0,y=0,z=0))
                 rospy.loginfo('Safety released.')
 
     def twist_cb(self, msg):
         if abs(rospy.Time.now().to_sec() - self.last_msg_time) > 0.5: # if twist message was generated longer ago than half a second:
             self.print("Bad twist data.", LogType.WARN)
+            self.twist_msg = Twist(linear=Vector3(x=0,y=0,z=0), angular=Vector3(x=0,y=0,z=0))
             return # bad data.
         
         if self.mode == 0 or not self.enabled:
@@ -190,13 +199,10 @@ class mrc:
 
         new_vx              = np.sign(msg.linear.x) * np.min([abs(msg.linear.x), lin_max])
         new_vw              = -1 * np.sign(msg.angular.z)* np.min([abs(msg.angular.z), ang_max])
-        new_twist           = Twist()
-        new_twist.linear.x  = new_vx
-        new_twist.angular.z = new_vw
+        self.twist_msg.linear.x  = new_vx
+        self.twist_msg.angular.z = new_vw
 
-        roslogger("Publishing ... ", logtype=LogType.DEBUG, ros=True, throttle=5)
         roslogger("vx: %s, vw: %s" % (str(new_vx), str(new_vw)), LogType.DEBUG, ros=True)
-        self.twist_pub.publish(new_twist)
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:
