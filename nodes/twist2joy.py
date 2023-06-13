@@ -102,7 +102,7 @@ class mrc:
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
 
-            self.twist_pub.pub(self.twist_msg)
+            self.twist_pub.publish(self.twist_msg)
     
     def param_callback(self, msg):
         self.parameters_ready = False
