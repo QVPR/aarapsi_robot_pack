@@ -119,6 +119,7 @@ class mrc:
     def joy_cb(self, msg):
         if abs(rospy.Time.now().to_sec() - msg.header.stamp.to_sec()) > 0.5: # if joy message was generated longer ago than half a second:
             self.mode = 0 
+            self.print("Bad joy data.", LogType.WARN)
             return # bad data.
         self.last_msg_time = msg.header.stamp.to_sec()
 
@@ -173,6 +174,7 @@ class mrc:
 
     def twist_cb(self, msg):
         if abs(rospy.Time.now().to_sec() - self.last_msg_time) > 0.5: # if twist message was generated longer ago than half a second:
+            self.print("Bad twist data.", LogType.WARN)
             return # bad data.
         
         if self.mode == 0 or not self.enabled:
@@ -193,7 +195,7 @@ class mrc:
         new_twist.angular.z = new_vw
 
         roslogger("Publishing ... ", logtype=LogType.DEBUG, ros=True, throttle=5)
-        roslogger("vx: %s, vw: %s" % (str(new_vx), str(new_vw)), LogType.INFO, ros=True)
+        roslogger("vx: %s, vw: %s" % (str(new_vx), str(new_vw)), LogType.DEBUG, ros=True)
         self.twist_pub.publish(new_twist)
 
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
