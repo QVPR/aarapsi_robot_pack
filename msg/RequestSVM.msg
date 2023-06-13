@@ -1,5 +1,6 @@
 aarapsi_robot_pack/RequestDataset ref
 aarapsi_robot_pack/RequestDataset qry
+aarapsi_robot_pack/ParamsSVM svm
 string bag_dbp
 string npz_dbp
 string svm_dbp

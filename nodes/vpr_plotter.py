@@ -206,8 +206,6 @@ def main_loop(nmrc, doc_frame):
     updateSVMMFigBokeh(doc_frame, nmrc.state)
 
 def ros_spin(nmrc, doc_frame):
-    t = Timer()
-    t.add()
     try:
         nmrc.rate_obj.sleep()
         try:
@@ -225,8 +223,6 @@ def ros_spin(nmrc, doc_frame):
     except:
         nmrc.print(formatException(), LogType.ERROR)
         nmrc.exit()
-    t.add()
-    t.show()
 
 def main(doc, nmrc):
     try:
