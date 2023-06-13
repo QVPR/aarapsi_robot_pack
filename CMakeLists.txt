@@ -67,6 +67,7 @@ add_message_files(
   ImageStructure.msg
   LabelDetails.msg
   MonitorDetails.msg
+  ParamsSVM.msg
   RequestDataset.msg
   RequestSVM.msg
   ResponseDataset.msg
