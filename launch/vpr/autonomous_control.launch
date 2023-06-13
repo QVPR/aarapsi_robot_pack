@@ -15,7 +15,7 @@
         <arg name="tj_rate"         default="50.0"/>
 
         <arg name="tj_twist_sub"  default="/twist2joy/in"/>
-        <arg name="tj_twist_pub"  default="/jackal_velocity_controller/cmd_vel"/>
+        <arg name="tj_twist_pub"  default="/cmd_vel"/>
         <arg name="tj_joy_sub"    default="/bluetooth_teleop/joy"/>
 
         <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)" output="screen"
