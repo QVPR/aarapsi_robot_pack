@@ -13,6 +13,7 @@ from geometry_msgs.msg import Twist, Vector3
 from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool, check_positive_int
 from pyaarapsi.core.ros_tools import roslogger, init_node, LogType, NodeState, set_rospy_log_lvl
 from pyaarapsi.core.enum_tools import enum_name
+from pyaarapsi.core.helper_tools import formatException
 from pyaarapsi.vpr_simple.vpr_helpers import FeatureType
 
 from aarapsi_robot_pack.srv import GetSafetyStates, GetSafetyStatesResponse
@@ -245,7 +246,12 @@ if __name__ == '__main__':
         nmrc = mrc(args['twist-sub-topic'], args['twist-pub-topic'], args['joy-sub-topic'], args['node_name'], \
                    args['anon'], args['namespace'], args['rate'], args['log_level'], reset=args['reset'], order_id=args['order_id'])
         nmrc.main()
-        roslogger("Operation complete.", LogType.INFO, ros=True)
+        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
+    except SystemExit as e:
+        pass
+    except ConnectionRefusedError as e:
+        roslogger("Error: Is the roscore running and accessible?", LogType.ERROR, ros=False) # False as rosnode likely terminated
     except:
-        roslogger("Error state reached, system exit triggered.", LogType.INFO, ros=True)
+        roslogger("Error state reached, system exit triggered.", LogType.WARN, ros=False) # False as rosnode likely terminated
+        roslogger(formatException(), LogType.ERROR, ros=False)
