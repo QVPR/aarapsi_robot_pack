@@ -20,7 +20,7 @@
 
         <node pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)" output="screen"
                 args="$(arg tj_twist_sub) $(arg tj_twist_pub) $(arg tj_joy_sub) 
-                -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level) -ID 9"/>
+                -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level) -ID 10"/>
     </group>
 
     <!-- Follower Node: -->
@@ -30,7 +30,7 @@
         <arg name="fw_rate"         default="10.0"/>
 
         <node pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)" output="screen"
-                args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level) -ID 10"/>
+                args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level) -ID 11"/>
     </group>
 
 </launch>

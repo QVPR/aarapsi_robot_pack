@@ -63,55 +63,55 @@
 
             <!-- Param Watcher Node: -->
             <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
-                    args="-ID 0"/>
+                    args="-ID 1"/>
 
             <!-- Camera Topic Throttling Node: -->
             <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
-                    args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -ID 1" />
+                    args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -ID 2" />
 
             <!-- Image+Odom Aggregation Node: -->
             <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
-                    args="-N img_odom_agg -r $(arg throttle_rate) -n $(arg namespace) -a $(arg anon) -V $(arg log_level) -R $(arg reset) -ID 2" />
+                    args="-N img_odom_agg -r $(arg throttle_rate) -n $(arg namespace) -a $(arg anon) -V $(arg log_level) -R $(arg reset) -ID 3" />
         </group>
 
         <!-- Cruncher's Trainer Node: -->
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="dataset_trainer.py" name="dataset_trainer" output="screen" 
-            args="-r $(arg main_rate) -N dataset_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -G $(arg use_gpu) -ID 3">
+            args="-r $(arg main_rate) -N dataset_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -G $(arg use_gpu) -ID 4">
         </node>
 
         <!-- Cruncher Node: -->
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
-            args="-r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
+            args="-r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 5">
         </node>
 
         <!-- Monitor's SVM Trainer Node: -->
         <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="svm_trainer.py" name="svm_trainer" output="screen" 
-            args="-r $(arg main_rate) -N svm_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 5">
+            args="-r $(arg main_rate) -N svm_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
         </node>
 
         <!-- Monitor Node: -->
         <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
-            args="-p $(arg monitor_printprediction) -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
+            args="-p $(arg monitor_printprediction) -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
         </node>
 
         <!-- Plotter Node: -->
         <node if="$(arg launch_plotter)" pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
-            args="-P $(arg plotter_port) -A $(arg plotter_address) -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
+            args="-P $(arg plotter_port) -A $(arg plotter_address) -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 8">
         </node>
 
         <!-- Visualisation Node: -->
         <node if="$(arg launch_visualiser)" pkg="aarapsi_robot_pack" type="visualiser.py" name="visualiser" output="screen" 
-            args="-r $(arg main_rate) -N visualiser -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 8">
+            args="-r $(arg main_rate) -N visualiser -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 9">
         </node>
     
         <!-- Twist2Joy Node: -->
         <node if="$(arg launch_twist2joy)" pkg="aarapsi_robot_pack" type="twist2joy.py" name="$(arg tj_node_name)" output="screen"
                 args="$(arg tj_twist_sub) $(arg tj_twist_pub) $(arg tj_joy_sub) 
-                -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level) -ID 9"/>
+                -N $(arg tj_node_name) -r $(arg tj_rate) -a $(arg tj_anon) -V $(arg log_level) -ID 10"/>
 
         <!-- Follower Node: -->
         <node if="$(arg launch_follower)" pkg="aarapsi_robot_pack" type="follower.py" name="$(arg fw_node_name)" output="screen"
-                args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level) -ID 10"/>
+                args="-N $(arg fw_node_name) -r $(arg fw_rate) -a $(arg fw_anon) -V $(arg log_level) -ID 11"/>
 
     </group>
 
