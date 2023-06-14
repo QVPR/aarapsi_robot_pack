@@ -8,24 +8,24 @@ vpr_nodes:
   svm_dbp: /cfg/svm_models
   bag_dbp: /data/rosbags
 
-  odom_topic: /odom/filtered
+  odom_topic: /odom/true
   img_topic: /ros_indigosdk_occam/image0/compressed
 
   slam_map: s11_center_map.pcd
 
   groundtruth: true
   path: 
-    bag_name: s1_ccw_o0_e0_a0
-    odom_topic: /odom/filtered
+    bag_name: s4_ccw_1
+    odom_topic: /odom/true
     img_topic: /ros_indigosdk_occam/image0/compressed
 
   svm:
     qry:
-      bag_name: s1_cw_o0_e0_a0
+      bag_name: s4_cw_1
       filters: '{}'
       sample_rate: 10.0
     ref:
-      bag_name: s2_cw_o0_e1_a0
+      bag_name: s4_cw_2
       filters: '{}'
       sample_rate: 10.0
     factors:
@@ -36,7 +36,7 @@ vpr_nodes:
       threshold: 0.5
 
   ref:
-    bag_name: s1_ccw_o0_e0_a0
+    bag_name: s4_ccw_1
     filters: '{}'
     sample_rate: 10.0
 
