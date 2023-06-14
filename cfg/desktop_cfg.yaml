@@ -31,6 +31,9 @@ vpr_nodes:
     factors:
     - va
     - grad
+    tolerance:
+      mode: DISTANCE
+      threshold: 0.5
 
   ref:
     bag_name: run4_fix

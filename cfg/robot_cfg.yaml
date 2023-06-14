@@ -31,6 +31,9 @@ vpr_nodes:
     factors:
     - va
     - grad
+    tolerance:
+      mode: DISTANCE
+      threshold: 0.5
 
   ref:
     bag_name: s1_ccw_o0_e0_a0

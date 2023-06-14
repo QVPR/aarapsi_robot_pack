@@ -10,7 +10,7 @@ from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, set_rospy_lo
 from pyaarapsi.core.helper_tools import formatException
 from pyaarapsi.core.enum_tools import enum_name
 
-from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
+from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType, SVM_Tolerance_Mode
 from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
 
 from aarapsi_robot_pack.msg import ResponseSVM, RequestSVM, ResponseDataset, RequestDataset
@@ -49,26 +49,28 @@ class mrc():
         self.dataset_request_pub    = self.ROS_HOME.add_pub(self.namespace + "/requests/dataset/request", RequestDataset, queue_size=1)
         
     def init_params(self, rate_num, log_level, reset):
-        self.FEAT_TYPE              = self.ROS_HOME.params.add(self.namespace + "/feature_type",        None,             lambda x: check_enum(x, FeatureType),       force=False)
-        self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,             check_positive_two_int_list,                force=False)
-        self.NPZ_DBP                = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",             None,             check_string,                               force=False)
-        self.BAG_DBP                = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",             None,             check_string,                               force=False)
-        self.SVM_DBP                = self.ROS_HOME.params.add(self.namespace + "/svm_dbp",             None,             check_string,                               force=False)
-        self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,             check_string,                               force=False)
-        self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,             check_string,                               force=False)
+        self.FEAT_TYPE              = self.ROS_HOME.params.add(self.namespace + "/feature_type",            None,             lambda x: check_enum(x, FeatureType),         force=False)
+        self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",                None,             check_positive_two_int_list,                  force=False)
+        self.NPZ_DBP                = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",                 None,             check_string,                                 force=False)
+        self.BAG_DBP                = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",                 None,             check_string,                                 force=False)
+        self.SVM_DBP                = self.ROS_HOME.params.add(self.namespace + "/svm_dbp",                 None,             check_string,                                 force=False)
+        self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",               None,             check_string,                                 force=False)
+        self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",              None,             check_string,                                 force=False)
         
-        self.SVM_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",    None,             check_string,                               force=False)
-        self.SVM_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",     None,             check_string,                               force=False)
-        self.SVM_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate", None,             check_positive_float,                       force=False)
+        self.SVM_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",        None,             check_string,                                 force=False)
+        self.SVM_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",         None,             check_string,                                 force=False)
+        self.SVM_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate",     None,             check_positive_float,                         force=False)
 
-        self.SVM_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",    None,             check_string,                               force=False)
-        self.SVM_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",     None,             check_string,                               force=False)
-        self.SVM_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate", None,             check_positive_float,                       force=False)
+        self.SVM_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",        None,             check_string,                                 force=False)
+        self.SVM_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",         None,             check_string,                                 force=False)
+        self.SVM_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate",     None,             check_positive_float,                         force=False)
         
-        self.SVM_FACTORS            = self.ROS_HOME.params.add(self.namespace + "/svm/factors",         None,             check_string_list,                          force=False)
+        self.SVM_FACTORS            = self.ROS_HOME.params.add(self.namespace + "/svm/factors",             None,             check_string_list,                            force=False)
+        self.SVM_TOL_MODE           = self.ROS_HOME.params.add(self.namespace + "/svm/tolerance/mode",      None,             lambda x: check_enum(x, SVM_Tolerance_Mode),  force=False)
+        self.SVM_TOL_THRES          = self.ROS_HOME.params.add(self.namespace + "/svm/tolerance/threshold", None,             check_positive_float,                         force=False)
 
-        self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,         check_positive_float,                       force=reset)
-        self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,        check_positive_int,                         force=reset)
+        self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                    rate_num,         check_positive_float,                         force=reset)
+        self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",               log_level,        check_positive_int,                           force=reset)
         
     def init_vars(self):
         # Set up SVM
@@ -97,8 +99,8 @@ class mrc():
         ref_dict = dict(bag_name=self.SVM_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
                         odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.SVM_REF_SAMPLE_RATE.get(), \
                         ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-        svm_dict = dict(factors=self.SVM_FACTORS.get())
-        return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), svm=svm_dict, npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
+        svm_dict = dict(factors=self.SVM_FACTORS.get(), tol_thres=self.SVM_TOL_THRES.get(), tol_mode=enum_name(self.SVM_TOL_MODE.get()))
+        return dict(ref=ref_dict, qry=qry_dict, svm=svm_dict, npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), svm_dbp=self.SVM_DBP.get())
 
     def update_SVM(self):
         if not len(self.svm_queue):

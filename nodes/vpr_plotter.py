@@ -73,7 +73,7 @@ class mrc: # main ROS class
         try:
             # Process reference data
             dataset_dict            = self.make_dataset_dict()
-            self.image_processor    = VPRDatasetProcessor(dataset_dict, try_gen=False, ros=True)
+            self.ip                 = VPRDatasetProcessor(dataset_dict, try_gen=False, ros=True)
         except:
             self.print(formatException(), LogType.ERROR)
             self.exit()
@@ -87,7 +87,7 @@ class mrc: # main ROS class
 
     def update_VPR(self):
         dataset_dict = self.make_dataset_dict()
-        if not self.image_processor.swap(dataset_dict, generate=False, allow_false=True):
+        if not self.ip.swap(dataset_dict, generate=False, allow_false=True):
             self.print("VPR reference data swap failed. Previous set will be retained (changed ROS parameter will revert)", LogType.WARN)
             return False
         else:
@@ -170,14 +170,14 @@ class Doc_Frame:
         #iframe_end_even       = """&type=ros_compressed" width=510 height=510 style="border: 0; transform: scale(0.49); transform-origin: 0 0;"/>"""
         #self.fig_iframe_feed_ = Div(text=iframe_start + nmrc.namespace + "/image" + iframe_end_rect, width=500, height=250)
         #self.fig_iframe_mtrx_ = Div(text=iframe_start + nmrc.namespace + "/similiarity_matrix" + iframe_end_even, width=250, height=250)
-        self.num_points       = len(nmrc.image_processor.dataset['dataset']['px'])
+        self.num_points       = len(nmrc.ip.dataset['dataset']['px'])
         self.sim_mtrx_img     = np.zeros((self.num_points, self.num_points)) # Make similarity matrix figure
         
         self.fig_cntr_handles = doCntrFigBokeh() # Make contour figure
         self.fig_xywv_handles = doXYWVFigBokeh(self.num_points) # Make linear&angular metrics figure
         self.fig_dvec_handles = doDVecFigBokeh(self.num_points) # Make distance vector figure
         self.fig_fdvc_handles = doFDVCFigBokeh(self.num_points) # Make filtered dvc figure
-        self.fig_odom_handles = doOdomFigBokeh(nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py']) # Make odometry figure
+        self.fig_odom_handles = doOdomFigBokeh(nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py']) # Make odometry figure
         self.fig_svmm_handles = doSVMMFigBokeh(self.num_points) # Make SVM metrics figure
         
 
@@ -186,6 +186,8 @@ def main_loop(nmrc, doc_frame):
 
     if not (nmrc.new_state and nmrc.main_ready): # denest
         return
+    
+    _timer = Timer()
 
     # Clear flags:
     nmrc.new_state  = False
@@ -194,16 +196,28 @@ def main_loop(nmrc, doc_frame):
     matchInd        = nmrc.state.data.matchId
     trueInd         = nmrc.state.data.trueId
 
+    _timer.add()
+
     # Update odometry visualisation:
-    updateXYWVFigBokeh(doc_frame, matchInd, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'], nmrc.image_processor.dataset['dataset']['pw'])
-    updateDVecFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
-    updateFDVCFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
-    updateOdomFigBokeh(doc_frame, matchInd, trueInd, nmrc.image_processor.dataset['dataset']['px'], nmrc.image_processor.dataset['dataset']['py'])
+    updateXYWVFigBokeh(doc_frame, matchInd, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'], nmrc.ip.dataset['dataset']['pw'])
+    _timer.add()
+    updateDVecFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'])
+    _timer.add()
+    updateFDVCFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'])
+    _timer.add()
+    updateOdomFigBokeh(doc_frame, matchInd, trueInd, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'])
+    _timer.add()
     if (nmrc.svm_field_msg is None):
+        _timer.addb()
+        _timer.show()
         return
     if updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.update_contour):
         nmrc.update_contour = False
+    _timer.add()
     updateSVMMFigBokeh(doc_frame, nmrc.state)
+    _timer.add()
+    _timer.addb()
+    _timer.show()
 
 def ros_spin(nmrc, doc_frame):
     try:
@@ -212,7 +226,7 @@ def ros_spin(nmrc, doc_frame):
             main_loop(nmrc, doc_frame)
         except Exception as e:
             if nmrc.parameters_ready:
-                nmrc.print(vis_dict(nmrc.image_processor.dataset), LogType.DEBUG)
+                nmrc.print(vis_dict(nmrc.ip.dataset), LogType.DEBUG)
                 raise Exception('Critical failure. ' + formatException()) from e
             else:
                 nmrc.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)

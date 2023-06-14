@@ -13,8 +13,9 @@ from rospy_message_converter import message_converter
 
 from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, ImageLabelDetails, MonitorDetails, ImageDetails, ImageStructure # Our custom structures
 
-from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
-from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
+from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
+from pyaarapsi.vpr_simple.svm_model_tool    import SVMModelProcessor
+from pyaarapsi.vpr_simple.vpr_helpers       import FeatureType, SVM_Tolerance_Mode
 
 from pyaarapsi.vpred                import *
 
@@ -37,45 +38,53 @@ class mrc: # main ROS class
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
         
     def init_params(self, rate_num, log_level, print_prediction, reset):
-        self.FEAT_TYPE              = self.ROS_HOME.params.add(self.namespace + "/feature_type",        None,             lambda x: check_enum(x, FeatureType),       force=False)
-        self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,             check_positive_two_int_list,                force=False)
-        self.NPZ_DBP                = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",             None,             check_string,                               force=False)
-        self.BAG_DBP                = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",             None,             check_string,                               force=False)
-        self.SVM_DBP                = self.ROS_HOME.params.add(self.namespace + "/svm_dbp",             None,             check_string,                               force=False)
-        self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,             check_string,                               force=False)
-        self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,             check_string,                               force=False)
+        self.FEAT_TYPE              = self.ROS_HOME.params.add(self.namespace + "/feature_type",            None,             lambda x: check_enum(x, FeatureType),         force=False)
+        self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",                None,             check_positive_two_int_list,                  force=False)
+        self.NPZ_DBP                = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",                 None,             check_string,                                 force=False)
+        self.BAG_DBP                = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",                 None,             check_string,                                 force=False)
+        self.SVM_DBP                = self.ROS_HOME.params.add(self.namespace + "/svm_dbp",                 None,             check_string,                                 force=False)
+        self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",               None,             check_string,                                 force=False)
+        self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",              None,             check_string,                                 force=False)
         
-        self.SVM_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",    None,             check_string,                               force=False)
-        self.SVM_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",     None,             check_string,                               force=False)
-        self.SVM_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate", None,             check_positive_float,                       force=False)
+        self.REF_BAG_NAME           = self.ROS_HOME.params.add(self.namespace + "/ref/bag_name",            None,             check_string,                                 force=False)
+        self.REF_FILTERS            = self.ROS_HOME.params.add(self.namespace + "/ref/filters",             None,             check_string,                                 force=False)
+        self.REF_SAMPLE_RATE        = self.ROS_HOME.params.add(self.namespace + "/ref/sample_rate",         None,             check_positive_float,                         force=False) # Hz
 
-        self.SVM_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",    None,             check_string,                               force=False)
-        self.SVM_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",     None,             check_string,                               force=False)
-        self.SVM_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate", None,             check_positive_float,                       force=False)
+        self.SVM_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",        None,             check_string,                                 force=False)
+        self.SVM_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",         None,             check_string,                                 force=False)
+        self.SVM_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate",     None,             check_positive_float,                         force=False)
+
+        self.SVM_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",        None,             check_string,                                 force=False)
+        self.SVM_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",         None,             check_string,                                 force=False)
+        self.SVM_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate",     None,             check_positive_float,                         force=False)
         
-        self.SVM_FACTORS            = self.ROS_HOME.params.add(self.namespace + "/svm/factors",         None,             check_string_list,                          force=False)
-
-        self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,         check_positive_float,                       force=reset)
-        self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,        check_positive_int,                         force=reset)
-        self.PRINT_PREDICTION       = self.ROS_HOME.params.add(self.nodespace + "/print_prediction",    print_prediction, check_bool,                                 force=reset)
+        self.SVM_FACTORS            = self.ROS_HOME.params.add(self.namespace + "/svm/factors",             None,             check_string_list,                            force=False)
+        self.SVM_TOL_MODE           = self.ROS_HOME.params.add(self.namespace + "/svm/tolerance/mode",      None,             lambda x: check_enum(x, SVM_Tolerance_Mode),  force=False)
+        self.SVM_TOL_THRES          = self.ROS_HOME.params.add(self.namespace + "/svm/tolerance/threshold", None,             check_positive_float,                         force=False)
+        
+        self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                    rate_num,         check_positive_float,                         force=reset)
+        self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",               log_level,        check_positive_int,                           force=reset)
+        self.PRINT_PREDICTION       = self.ROS_HOME.params.add(self.nodespace + "/print_prediction",        print_prediction, check_bool,                                   force=reset)
        
         self.SVM_DATA_PARAMS        = [self.FEAT_TYPE, self.IMG_DIMS, self.NPZ_DBP, self.BAG_DBP, self.SVM_DBP, self.IMG_TOPIC, self.ODOM_TOPIC, \
                                        self.SVM_QRY_BAG_NAME, self.SVM_QRY_FILTERS, self.SVM_QRY_SAMPLE_RATE, \
                                        self.SVM_REF_BAG_NAME, self.SVM_REF_FILTERS, self.SVM_REF_SAMPLE_RATE, \
-                                       self.SVM_FACTORS]
+                                       self.SVM_FACTORS, self.SVM_TOL_MODE, self.SVM_TOL_THRES]
         self.SVM_DATA_NAMES         = [i.name for i in self.SVM_DATA_PARAMS]
 
-    def init_vars(self):
-        
-        self.time_history           = []
+        self.REF_DATA_PARAMS        = [self.NPZ_DBP, self.BAG_DBP, self.REF_BAG_NAME, self.REF_FILTERS, self.REF_SAMPLE_RATE, self.IMG_TOPIC, self.ODOM_TOPIC, self.FEAT_TYPE, self.IMG_DIMS]
+        self.REF_DATA_NAMES         = [i.name for i in self.REF_DATA_PARAMS]
 
-        self.states                 = [0,0,0]
+    def init_vars(self):
         self.contour_msg            = None
+
+        self.state_hist             = np.zeros((10,3)) # x, y, w
+        self.state_size             = 0
 
         # Set up SVM
         self.svm                    = SVMModelProcessor(ros=True)
         if not self.svm.load_model(self.make_svm_model_params()):
-            raise Exception()
+            raise Exception("Failed to find file with parameters matching: \n%s" % str(self.make_svm_model_params()))
         self.svm_requests           = []
 
         # flags to denest main loop:
@@ -83,6 +92,12 @@ class mrc: # main ROS class
         self.main_ready             = False # ensure pubs and subs don't go off early
         self.svm_swap_pending       = False
         self.parameters_ready       = True
+        ref_dataset_dict            = self.make_dataset_dict()
+        try:
+            self.ip                 = VPRDatasetProcessor(ref_dataset_dict, try_gen=False, ros=True)
+        except:
+            self.print(formatException(), LogType.ERROR)
+            self.exit()
 
     def init_rospy(self):
 
@@ -108,15 +123,13 @@ class mrc: # main ROS class
         ref_dict = dict(bag_name=self.SVM_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
                         odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.SVM_REF_SAMPLE_RATE.get(), \
                         ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-        svm_dict = dict(factors=self.SVM_FACTORS.get())
-        return dict(ref=ref_dict, qry=qry_dict, bag_dbp=self.BAG_DBP.get(), svm=svm_dict, npz_dbp=self.NPZ_DBP.get(), svm_dbp=self.SVM_DBP.get())
+        svm_dict = dict(factors=self.SVM_FACTORS.get(), tol_thres=self.SVM_TOL_THRES.get(), tol_mode=enum_name(self.SVM_TOL_MODE.get()))
+        return dict(ref=ref_dict, qry=qry_dict, svm=svm_dict, npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), svm_dbp=self.SVM_DBP.get())
 
-    def debug_cb(self, msg):
-        if msg.node_name == self.node_name:
-            if msg.instruction == 0:
-                self.print(self.make_svm_model_params(), LogType.DEBUG)
-            else:
-                self.print(msg.instruction, LogType.DEBUG)
+    def make_dataset_dict(self):
+        return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
+                    odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.REF_SAMPLE_RATE.get(), \
+                    ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
 
     def update_SVM(self):
         svm_model_params       = self.make_svm_model_params()
@@ -132,12 +145,38 @@ class mrc: # main ROS class
             self.update_svm_mat()
             self.svm_swap_pending = False
             return True
-        
-    def field_request_callback(self, msg):
-        pass
+
+    def update_VPR(self):
+        dataset_dict = self.make_dataset_dict()
+        if not self.ip.swap(dataset_dict, generate=False, allow_false=True):
+            self.print("VPR reference data swap failed. Previous set will be retained (changed ROS parameter will revert)", LogType.WARN)
+            return False
+        else:
+            self.print("VPR reference data swapped.", LogType.INFO)
+            return True
+
+    def debug_cb(self, msg):
+        if msg.node_name == self.node_name:
+            if msg.instruction == 0:
+                self.print(self.make_svm_model_params(), LogType.DEBUG)
+            else:
+                self.print(msg.instruction, LogType.DEBUG)
 
     def svm_request_callback(self, msg):
         pass
+
+    def label_callback(self, msg):
+    # /vpr_nodes/label (aarapsi_robot_pack/ImageLabelDetails)
+    # Store new label message and act as drop-in replacement for odom_callback + img_callback
+
+        self.label            = msg
+
+        self.state_hist       = np.roll(self.state_hist, 1, 0)
+        self.state_hist[0,:]  = [msg.data.vpr_ego.x, msg.data.vpr_ego.y, msg.data.vpr_ego.w]
+        self.state_size       = np.min([self.state_size + 1, self.state_hist.shape[0]])
+
+        self.new_label        = True
+
 
     def param_callback(self, msg):
         self.parameters_ready = False
@@ -160,16 +199,21 @@ class mrc: # main ROS class
                 pass
             except:
                 self.print(formatException(), LogType.DEBUG)
+
+            ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
+            try:
+                param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
+                self.print("Change to VPR reference data parameters detected.", LogType.WARN)
+                if not self.update_VPR():
+                    param.revert()
+            except IndexError:
+                pass
+            except:
+                param.revert()
+                self.print(formatException(), LogType.ERROR)
         else:
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
         self.parameters_ready = True
-
-    def label_callback(self, msg):
-    # /vpr_nodes/label (aarapsi_robot_pack/ImageLabelDetails)
-    # Store new label message and act as drop-in replacement for odom_callback + img_callback
-
-        self.label            = msg
-        self.new_label        = True
 
     def generate_svm_mat(self):
         # Generate decision function matrix for ros:
@@ -243,11 +287,12 @@ class mrc: # main ROS class
             if rospy.is_shutdown():
                 self.exit()
             try:
-                (pred, zvalues, [factor1, factor2], prob) = self.svm.predict(self.label.data.dvc, self.label.data.matchId)
+                rXY = np.stack([self.ip.dataset['dataset']['px'], self.ip.dataset['dataset']['py']], 1)
+                (pred, zvalues, [factor1, factor2], prob) = self.svm.predict(self.label.data.dvc, self.label.data.matchId, rXY, init_pos=self.state_hist[1, 0:2])
                 predict_success = True
             except:
                 self.print("Predict failed. Trying again ...", LogType.WARN, throttle=1)
-                self.print(formatException(), LogType.DEBUG, throttle=10)
+                self.print(formatException(), LogType.DEBUG, throttle=1)
                 rospy.sleep(0.005)
 
         if self.PRINT_PREDICTION.get():

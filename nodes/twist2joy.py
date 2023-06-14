@@ -125,7 +125,7 @@ class mrc:
         if abs(rospy.Time.now().to_sec() - msg.header.stamp.to_sec()) > 0.5: # if joy message was generated longer ago than half a second:
             self.mode = 0 
             self.twist_msg = Twist()
-            self.print("Bad joy data.", LogType.WARN)
+            self.print("Bad joy data.", LogType.WARN, throttle=5)
             return # bad data.
 
         # Toggle enable:
@@ -181,7 +181,7 @@ class mrc:
 
     def twist_cb(self, msg):
         if abs(rospy.Time.now().to_sec() - msg.header.stamp.to_sec()) > 0.5: # if twist message was generated longer ago than half a second:
-            self.print("Bad twist data.", LogType.WARN)
+            self.print("Bad twist data.", LogType.WARN, throttle=5)
             self.twist_msg = Twist()
             return # bad data.
         

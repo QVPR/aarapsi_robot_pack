@@ -19,7 +19,7 @@ from rospy_message_converter import message_converter
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse, DoExtraction, DoExtractionRequest
 from aarapsi_robot_pack.msg import RequestDataset, ResponseDataset, xyw, ImageOdom, ImageLabelDetails
 
-from pyaarapsi.vpr_simple.vpr_helpers            import Tolerance_Mode, FeatureType
+from pyaarapsi.vpr_simple.vpr_helpers            import VPR_Tolerance_Mode, FeatureType
 from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
 
 from pyaarapsi.core.enum_tools                   import enum_name
@@ -57,7 +57,7 @@ class mrc: # main ROS class
         self.REF_FILTERS     = self.ROS_HOME.params.add(self.namespace + "/ref/filters",         None,                   check_string,                                   force=False)
         self.REF_SAMPLE_RATE = self.ROS_HOME.params.add(self.namespace + "/ref/sample_rate",     None,                   check_positive_float,                           force=False) # Hz
         
-        self.TOL_MODE        = self.ROS_HOME.params.add(self.namespace + "/tolerance/mode",      None,                   lambda x: check_enum(x, Tolerance_Mode),        force=False)
+        self.TOL_MODE        = self.ROS_HOME.params.add(self.namespace + "/tolerance/mode",      None,                   lambda x: check_enum(x, VPR_Tolerance_Mode),        force=False)
         self.TOL_THRES       = self.ROS_HOME.params.add(self.namespace + "/tolerance/threshold", None,                   check_positive_float,                           force=False)
         
         self.GROUND_TRUTH    = self.ROS_HOME.params.add(self.namespace + "/groundtruth",         do_groundtruth,         check_bool,                                     force=False)
@@ -92,9 +92,9 @@ class mrc: # main ROS class
         path_dataset_dict           = self.make_dataset_dict(path=True)
         ref_dataset_dict            = self.make_dataset_dict(path=False)
         try:
-            self.image_processor    = VPRDatasetProcessor(path_dataset_dict, try_gen=False, ros=True)
-            self.path_dataset       = copy.deepcopy(self.image_processor.dataset)
-            self.image_processor.load_dataset(ref_dataset_dict)
+            self.ip                 = VPRDatasetProcessor(path_dataset_dict, try_gen=False, ros=True)
+            self.path_dataset       = copy.deepcopy(self.ip.dataset)
+            self.ip.load_dataset(ref_dataset_dict)
         except:
             self.print(formatException(), LogType.ERROR)
             self.exit()
@@ -156,7 +156,7 @@ class mrc: # main ROS class
             if msg.instruction == 0:
                 self.print(self.make_dataset_dict(), LogType.DEBUG)
             elif msg.instruction == 1:
-                self.print(vis_dict(self.image_processor.dataset), LogType.DEBUG)
+                self.print(vis_dict(self.ip.dataset), LogType.DEBUG)
             else:
                 self.print(msg.instruction, LogType.DEBUG)
 
@@ -182,7 +182,7 @@ class mrc: # main ROS class
         if path:
             datasets.append((self.path_dataset['dataset'], 'path'))
         if ref:
-            datasets.append((self.image_processor.dataset['dataset'], 'ref'))
+            datasets.append((self.ip.dataset['dataset'], 'ref'))
         
         for i in datasets:
             px      = i[0]['px']
@@ -205,7 +205,7 @@ class mrc: # main ROS class
 
     def update_VPR(self):
         dataset_dict = self.make_dataset_dict()
-        if not self.image_processor.swap(dataset_dict, generate=False, allow_false=True):
+        if not self.ip.swap(dataset_dict, generate=False, allow_false=True):
             self.print("VPR reference data swap failed. Previous set will be retained (changed ROS parameter will revert)", LogType.WARN)
             self.dataset_swap_pending = True
             self.dataset_requests.append(dataset_dict)
@@ -256,12 +256,12 @@ class mrc: # main ROS class
     def getMatchInd(self, ft_qry):
     # top matching reference index for query
 
-        dvc = fastdist.matrix_to_matrix_distance(self.image_processor.dataset['dataset'][enum_name(self.FEAT_TYPE.get())], \
+        dvc = fastdist.matrix_to_matrix_distance(self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())], \
                                                  np.matrix(ft_qry),\
                                                  fastdist.euclidean, "euclidean") # metric: 'euclidean' or 'cosine'
 
         if self.ego_known and self.DVC_WEIGHT.get() < 1: # then perform biasing via distance:
-            spd = fastdist.matrix_to_matrix_distance(np.transpose(np.matrix([self.image_processor.dataset['dataset']['px'], self.image_processor.dataset['dataset']['py']])), \
+            spd = fastdist.matrix_to_matrix_distance(np.transpose(np.matrix([self.ip.dataset['dataset']['px'], self.ip.dataset['dataset']['py']])), \
                                                      np.matrix([self.vpr_ego[0], self.vpr_ego[1]]), \
                                                      fastdist.euclidean, "euclidean")
             spd_norm = spd/np.max(spd[:]) 
@@ -276,8 +276,8 @@ class mrc: # main ROS class
     
     def getTrueInd(self):
     # Compare measured odometry to reference odometry and find best match
-        squares = np.square(np.array(self.image_processor.dataset['dataset']['px']) - self.ego[0]) + \
-                            np.square(np.array(self.image_processor.dataset['dataset']['py']) - self.ego[1])  # no point taking the sqrt; proportional
+        squares = np.square(np.array(self.ip.dataset['dataset']['px']) - self.ego[0]) + \
+                            np.square(np.array(self.ip.dataset['dataset']['py']) - self.ego[1])  # no point taking the sqrt; proportional
         trueInd = np.argmin(squares)
 
         return trueInd
@@ -287,7 +287,7 @@ class mrc: # main ROS class
 
         struct_to_pub                   = ImageLabelDetails()
 
-        self.vpr_ego                    = [self.image_processor.dataset['dataset']['px'][mInd], self.image_processor.dataset['dataset']['py'][mInd], self.image_processor.dataset['dataset']['pw'][mInd]]
+        self.vpr_ego                    = [self.ip.dataset['dataset']['px'][mInd], self.ip.dataset['dataset']['py'][mInd], self.ip.dataset['dataset']['pw'][mInd]]
         self.ego_known                  = True
 
         struct_to_pub.queryImage        = np_ndarray_to_uint8_list(self.store_query)
@@ -302,9 +302,9 @@ class mrc: # main ROS class
         struct_to_pub.header.stamp      = rospy.Time.now()
 
         odom_to_pub                         = Odometry()
-        odom_to_pub.pose.pose.position.x    = self.image_processor.dataset['dataset']['px'][mInd]
-        odom_to_pub.pose.pose.position.y    = self.image_processor.dataset['dataset']['py'][mInd]
-        odom_to_pub.pose.pose.orientation   = q_from_yaw(self.image_processor.dataset['dataset']['pw'][mInd])
+        odom_to_pub.pose.pose.position.x    = self.ip.dataset['dataset']['px'][mInd]
+        odom_to_pub.pose.pose.position.y    = self.ip.dataset['dataset']['py'][mInd]
+        odom_to_pub.pose.pose.orientation   = q_from_yaw(self.ip.dataset['dataset']['pw'][mInd])
         odom_to_pub.header.stamp            = rospy.Time.now()
         odom_to_pub.header.frame_id         = 'map'
         
@@ -341,7 +341,7 @@ class mrc: # main ROS class
                 self.loop_contents()
             except Exception as e:
                 if self.parameters_ready:
-                    self.print(vis_dict(self.image_processor.dataset))
+                    self.print(vis_dict(self.ip.dataset))
                     raise Exception('Critical failure. ' + formatException()) from e
                 else:
                     self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
@@ -366,16 +366,16 @@ class mrc: # main ROS class
             trueInd = self.getTrueInd() # find correct match based on shortest difference to measured odometry
             tolMode = self.TOL_MODE.get()
             # Determine if we are within tolerance:
-            if tolMode == Tolerance_Mode.METRE_CROW_TRUE:
-                tolError = np.sqrt(np.square(self.image_processor.dataset['dataset']['px'][trueInd] - self.ego[0]) + \
-                        np.square(self.image_processor.dataset['dataset']['py'][trueInd] - self.ego[1])) 
-            elif tolMode == Tolerance_Mode.METRE_CROW_MATCH:
-                tolError = np.sqrt(np.square(self.image_processor.dataset['dataset']['px'][matchInd] - self.ego[0]) + \
-                        np.square(self.image_processor.dataset['dataset']['py'][matchInd] - self.ego[1])) 
-            elif tolMode == Tolerance_Mode.METRE_LINE:
-                tolError = np.sqrt(np.square(self.image_processor.dataset['dataset']['px'][trueInd] - self.image_processor.dataset['dataset']['px'][matchInd]) + \
-                        np.square(self.image_processor.dataset['dataset']['py'][trueInd] - self.image_processor.dataset['dataset']['py'][matchInd])) 
-            elif tolMode == Tolerance_Mode.FRAME:
+            if tolMode == VPR_Tolerance_Mode.METRE_CROW_TRUE:
+                tolError = np.sqrt(np.square(self.ip.dataset['dataset']['px'][trueInd] - self.ego[0]) + \
+                        np.square(self.ip.dataset['dataset']['py'][trueInd] - self.ego[1])) 
+            elif tolMode == VPR_Tolerance_Mode.METRE_CROW_MATCH:
+                tolError = np.sqrt(np.square(self.ip.dataset['dataset']['px'][matchInd] - self.ego[0]) + \
+                        np.square(self.ip.dataset['dataset']['py'][matchInd] - self.ego[1])) 
+            elif tolMode == VPR_Tolerance_Mode.METRE_LINE:
+                tolError = np.sqrt(np.square(self.ip.dataset['dataset']['px'][trueInd] - self.ip.dataset['dataset']['px'][matchInd]) + \
+                        np.square(self.ip.dataset['dataset']['py'][trueInd] - self.ip.dataset['dataset']['py'][matchInd])) 
+            elif tolMode == VPR_Tolerance_Mode.FRAME:
                 tolError = np.abs(matchInd - trueInd)
             else:
                 raise Exception("Error: Unknown tolerance mode.")
