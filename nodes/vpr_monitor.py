@@ -11,7 +11,7 @@ import copy
 
 from rospy_message_converter import message_converter
 
-from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, ImageLabelDetails, MonitorDetails, ImageDetails, ImageStructure # Our custom structures
+from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, ImageLabelDetails, MonitorDetails  # Our custom structures
 
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.svm_model_tool    import SVMModelProcessor
@@ -20,7 +20,7 @@ from pyaarapsi.vpr_simple.vpr_helpers       import FeatureType, SVM_Tolerance_Mo
 from pyaarapsi.vpred                import *
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_list, check_bool, check_enum, check_string, check_positive_int, check_string_list
-from pyaarapsi.core.helper_tools    import formatException, np_ndarray_to_uint8_list
+from pyaarapsi.core.helper_tools    import formatException
 from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, LogType, NodeState, SubscribeListener
 from pyaarapsi.core.enum_tools      import enum_name
 
@@ -109,12 +109,7 @@ class mrc: # main ROS class
         self.vpr_label_sub          = rospy.Subscriber(     self.namespace + "/label",                  ImageLabelDetails,   self.label_callback,           queue_size=1)
         self.svm_request_sub        = rospy.Subscriber(     self.namespace + "/requests/svm/ready",     ResponseSVM,         self.svm_request_callback,     queue_size=1)
         self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + "/requests/svm/request",   RequestSVM,                                         queue_size=1)
-        self.field_pub              = self.ROS_HOME.add_pub(self.namespace + "/field",                  ImageDetails,                                       queue_size=1, subscriber_listener=self.sublis)
         self.svm_state_pub          = self.ROS_HOME.add_pub(self.namespace + "/state",                  MonitorDetails,                                     queue_size=1)
-
-        self.field_timer            = rospy.Timer(rospy.Duration(secs=3), self.update_svm_mat)
-
-        self.sublis.add_operation(self.namespace + "/field", method_sub=self.field_peer_subscribe)
 
     def make_svm_model_params(self):
         qry_dict = dict(bag_name=self.SVM_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
@@ -142,7 +137,6 @@ class mrc: # main ROS class
             return False
         else:
             self.print("SVM model swapped.")
-            self.update_svm_mat()
             self.svm_swap_pending = False
             return True
 
@@ -215,44 +209,6 @@ class mrc: # main ROS class
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
         self.parameters_ready = True
 
-    def generate_svm_mat(self):
-        # Generate decision function matrix for ros:
-        array_dim = 1000
-        (img_np_raw, (x_lim, y_lim)) = self.svm.generate_svm_mat(array_dim=array_dim)
-        img_np = np.flip(img_np_raw, axis=2) # to bgr format, for ROS
-
-        # extract only plot region; ditch padded borders; resize to 1000x1000
-        indices_cols = np.arange(img_np.shape[1])[np.sum(np.sum(img_np,2),0) != 255*3*img_np.shape[0]]
-        indices_rows = np.arange(img_np.shape[0])[np.sum(np.sum(img_np,2),1) != 255*3*img_np.shape[1]]
-        img_np_crop = img_np[min(indices_rows) : max(indices_rows)+1, \
-                             min(indices_cols) : max(indices_cols)+1]
-        img_np_crop_resize = np.array(cv2.resize(img_np_crop, (array_dim, array_dim), interpolation = cv2.INTER_AREA), dtype=np.uint8)
-
-        self.contour_msg                          = ImageDetails()
-        self.contour_msg.image                    = np_ndarray_to_uint8_list(img_np_crop_resize)
-
-        self.contour_msg.header.frame_id          = 'map'
-        self.contour_msg.header.stamp             = rospy.Time.now()
-
-        self.contour_msg.data.x_min               = x_lim[0]
-        self.contour_msg.data.x_max               = x_lim[1]
-        self.contour_msg.data.y_min               = y_lim[0]
-        self.contour_msg.data.y_max               = y_lim[1]
-        self.contour_msg.data.feat_type           = enum_name(self.FEAT_TYPE.get())
-        self.contour_msg.data.update              = True
-        self.contour_msg.data.xlab                = 'VA ratio'
-        self.contour_msg.data.ylab                = 'Average Gradient'
-        self.contour_msg.data.title               = 'SVM Decision Function'
-
-    def update_svm_mat(self, event=None):
-        if event is None:
-            self.generate_svm_mat()
-        self.field_pub.publish(self.contour_msg)
-
-    def field_peer_subscribe(self, topic_name):
-        # wrapper to avoid lambdas bc of args
-        self.update_svm_mat()
-
     def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
         if ros is None:
             ros = self.ROS_HOME.logros
@@ -263,7 +219,6 @@ class mrc: # main ROS class
         roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
 
     def main(self):
-        self.update_svm_mat()
         self.ROS_HOME.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
