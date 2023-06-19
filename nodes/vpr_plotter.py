@@ -16,7 +16,7 @@ from pyaarapsi.vpr_simple.vpr_plots              import doDVecFigBokeh, doOdomFi
                                                         updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_two_int_list, check_positive_int, check_valid_ip, check_enum, check_string
-from pyaarapsi.core.helper_tools    import formatException, vis_dict, Timer
+from pyaarapsi.core.helper_tools    import formatException, vis_dict
 from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, NodeState, LogType
 from pyaarapsi.core.enum_tools      import enum_name
 
@@ -186,8 +186,6 @@ def main_loop(nmrc, doc_frame):
 
     if not (nmrc.new_state and nmrc.main_ready): # denest
         return
-    
-    _timer = Timer()
 
     # Clear flags:
     nmrc.new_state  = False
@@ -196,28 +194,16 @@ def main_loop(nmrc, doc_frame):
     matchInd        = nmrc.state.data.matchId
     trueInd         = nmrc.state.data.trueId
 
-    _timer.add()
-
     # Update odometry visualisation:
     updateXYWVFigBokeh(doc_frame, matchInd, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'], nmrc.ip.dataset['dataset']['pw'])
-    _timer.add()
     updateDVecFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'])
-    _timer.add()
     updateFDVCFigBokeh(doc_frame, matchInd, trueInd, dvc, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'])
-    _timer.add()
     updateOdomFigBokeh(doc_frame, matchInd, trueInd, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'])
-    _timer.add()
     if (nmrc.svm_field_msg is None):
-        _timer.addb()
-        _timer.show()
         return
     if updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.update_contour):
         nmrc.update_contour = False
-    _timer.add()
     updateSVMMFigBokeh(doc_frame, nmrc.state)
-    _timer.add()
-    _timer.addb()
-    _timer.show()
 
 def ros_spin(nmrc, doc_frame):
     try:
