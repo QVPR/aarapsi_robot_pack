@@ -9,7 +9,7 @@ vpr_nodes:
   bag_dbp: /data/rosbags
 
   odom_topic: /odom/true
-  img_topic: /ros_indigosdk_occam/image0/compressed
+  img_topic: /ros_indigosdk_occam/stitched_image0/compressed
 
   slam_map: s11_center_map.pcd
 
@@ -17,7 +17,7 @@ vpr_nodes:
   path: 
     bag_name: s4_ccw_1
     odom_topic: /odom/true
-    img_topic: /ros_indigosdk_occam/image0/compressed
+    img_topic: /ros_indigosdk_occam/stitched_image0/compressed
 
   svm:
     qry:
@@ -36,7 +36,7 @@ vpr_nodes:
       threshold: 0.5
 
   ref:
-    bag_name: s4_ccw_1
+    bag_name: s4_ccw_2
     filters: '{}'
     sample_rate: 10.0
 
