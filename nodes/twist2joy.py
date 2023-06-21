@@ -8,10 +8,10 @@ import argparse as ap
 
 from sensor_msgs.msg import Joy
 from std_msgs.msg import String
-from geometry_msgs.msg import Twist, TwistStamped, Vector3
+from geometry_msgs.msg import Twist, TwistStamped
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool, check_positive_int
-from pyaarapsi.core.ros_tools import roslogger, init_node, LogType, NodeState, set_rospy_log_lvl
+from pyaarapsi.core.ros_tools import Base_ROS_Class, roslogger, LogType, NodeState, set_rospy_log_lvl
 from pyaarapsi.core.enum_tools import enum_name
 from pyaarapsi.core.helper_tools import formatException
 from pyaarapsi.vpr_simple.vpr_helpers import FeatureType
@@ -26,21 +26,15 @@ Used to interface with bluetooth controller topics
 Configured to keep safety lock-outs from the ps4 controller
 '''
 
-class mrc:
+class Main_ROS_Class(Base_ROS_Class):
     def __init__(self, twist_sub_topic, twist_pub_topic, joy_sub_topic, node_name, anon, namespace, rate_num, log_level, reset=True, order_id=0):
+        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
 
-        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
-            sys.exit()
-
-        self.init_params(log_level, rate_num, reset)
+        self.init_params(rate_num, log_level, reset)
         self.init_vars()
         self.init_rospy(rate_num, joy_sub_topic, twist_sub_topic, twist_pub_topic)
 
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
-
-    def init_params(self, log_level, rate_num, reset):
-        self.LOG_LEVEL          = self.ROS_HOME.params.add(self.nodespace + "/log_level", log_level, check_positive_int,   force=reset)
-        self.RATE_NUM           = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate_num,  check_positive_float, force=reset)
 
     def init_vars(self):
         self.mode               = 0
@@ -87,7 +81,7 @@ class mrc:
         self.joy_sub            = rospy.Subscriber(joy_sub_topic, Joy, self.joy_cb, queue_size=1)
         self.twist_sub          = rospy.Subscriber(twist_sub_topic, TwistStamped, self.twist_cb, queue_size=1)
         self.param_sub          = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
-        self.twist_pub          = self.ROS_HOME.add_pub(twist_pub_topic, Twist, queue_size=1)
+        self.twist_pub          = self.add_pub(twist_pub_topic, Twist, queue_size=1)
         self.srv_safety         = rospy.Service(self.namespace + '/safety', GetSafetyStates, self.handle_GetSafetyStates)
 
     def handle_GetSafetyStates(self, requ):
@@ -97,7 +91,7 @@ class mrc:
         return ans
 
     def main(self):
-        self.ROS_HOME.set_state(NodeState.MAIN)
+        self.set_state(NodeState.MAIN)
         
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
@@ -106,8 +100,8 @@ class mrc:
     
     def param_callback(self, msg):
         self.parameters_ready = False
-        if self.ROS_HOME.params.exists(msg.data):
-            if not self.ROS_HOME.params.update(msg.data):
+        if self.params.exists(msg.data):
+            if not self.params.update(msg.data):
                 self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
         
             else:
@@ -202,19 +196,6 @@ class mrc:
         self.twist_msg.angular.z = new_vw
 
         roslogger("vx: %s, vw: %s" % (str(new_vx), str(new_vw)), LogType.DEBUG, ros=True)
-
-    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
-        if ros is None:
-            ros = self.ROS_HOME.logros
-        if name is None:
-            name = self.ROS_HOME.node_name
-        if no_stamp is None:
-            no_stamp = self.ROS_HOME.logstamp
-        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
-
-    def exit(self):
-        self.print("Quit received.")
-        sys.exit()
         
 def do_args():
     parser = ap.ArgumentParser(prog="twist2joy.py", 
@@ -241,7 +222,7 @@ def do_args():
 if __name__ == '__main__':
     try:
         args = do_args()
-        nmrc = mrc(args['twist-sub-topic'], args['twist-pub-topic'], args['joy-sub-topic'], args['node_name'], \
+        nmrc = Main_ROS_Class(args['twist-sub-topic'], args['twist-pub-topic'], args['joy-sub-topic'], args['node_name'], \
                    args['anon'], args['namespace'], args['rate'], args['log_level'], reset=args['reset'], order_id=args['order_id'])
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated

@@ -7,9 +7,10 @@ import cv2
 from cv_bridge import CvBridge
 from std_msgs.msg import Header, String
 from sensor_msgs.msg import Image, CompressedImage
-from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_two_int_tuple, check_bool, check_string, check_positive_int
-from pyaarapsi.core.ros_tools import imgmsgtrans, NodeState, roslogger, LogType, set_rospy_log_lvl, init_node
-from pyaarapsi.core.helper_tools import formatException
+
+from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_tuple, check_bool, check_string, check_positive_int
+from pyaarapsi.core.ros_tools       import Base_ROS_Class, imgmsgtrans, NodeState, roslogger, LogType, set_rospy_log_lvl
+from pyaarapsi.core.helper_tools    import formatException
 
 '''
 ROS Throttle Tool
@@ -26,7 +27,7 @@ class Throttle_Topic:
     - Wrap subscribers, publishers, and timer into single class 
     - Ease of implementation
     '''
-    def __init__(self, topic_in, topic_out, namespace, exts, types, rate, ROS_HOME, hist_len=3, transform=None, printer=rospy.loginfo):
+    def __init__(self, topic_in, topic_out, namespace, exts, types, rate, mrc, hist_len=3, transform=None, printer=rospy.loginfo):
 
         self.topic_in   = topic_in
         self.topic_out  = topic_out
@@ -35,12 +36,12 @@ class Throttle_Topic:
         self.types      = types
         self.hist_len   = hist_len
         self.transform  = transform
-        self.ROS_HOME   = ROS_HOME
+        self.mrc        = mrc
         if transform is None:
             self.transform = self.empty
         self.subs       = [rospy.Subscriber(self.topic_in + self.exts[i], self.types[i], self.cb, queue_size=1) \
                            for i in range(len(self.exts))]
-        self.pubs       = [self.ROS_HOME.add_pub(self.namespace + self.topic_out + self.exts[i], self.types[i], queue_size=1) \
+        self.pubs       = [self.mrc.add_pub(self.namespace + self.topic_out + self.exts[i], self.types[i], queue_size=1) \
                            for i in range(len(self.exts))]
         self.timer_obj  = rospy.Timer(rospy.Duration(1/rate), self.timer_cb)
         self.msgs       = [[] for i in types]
@@ -64,21 +65,15 @@ class Throttle_Topic:
                 msg_to_pub = self.msgs[i].pop(0)
                 self.pubs[i].publish(self.transform(msg_to_pub))
 
-class mrc:
+class Main_ROS_Class(Base_ROS_Class):
     def __init__(self, node_name, rate_num, namespace, anon, mode, resize_dims, log_level, reset=True, order_id=0):
-        
-        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
-            sys.exit()
+        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
 
         self.init_params(rate_num, log_level, reset)
         self.init_vars(mode, resize_dims)
         self.init_rospy()
 
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
-
-    def init_params(self, rate_num, log_level, reset):
-        self.RATE_NUM       = self.ROS_HOME.params.add(self.nodespace + "/rate",      rate_num,  check_positive_float,   force=reset)
-        self.LOG_LEVEL      = self.ROS_HOME.params.add(self.nodespace + "/log_level", log_level, check_positive_int,     force=reset)
 
     def init_vars(self, mode, resize_dims):
         self.mode           = mode
@@ -105,17 +100,17 @@ class mrc:
         self.param_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_cb, queue_size=100)
 
         # Set up throttles:
-        self.throttles      = [Throttle_Topic(self.cin[i], self.cout[i], self.namespace, self.exts, self.types, self.RATE_NUM.get(), self.ROS_HOME, \
+        self.throttles      = [Throttle_Topic(self.cin[i], self.cout[i], self.namespace, self.exts, self.types, self.RATE_NUM.get(), self, \
                                     transform=lambda x: self.img_resize(x, mode="rectangle"), printer=self.print) \
                                 if 'stitched' in self.cin[i] else \
-                               Throttle_Topic(self.cin[i], self.cout[i], self.namespace, self.exts, self.types, self.RATE_NUM.get(), self.ROS_HOME, \
+                               Throttle_Topic(self.cin[i], self.cout[i], self.namespace, self.exts, self.types, self.RATE_NUM.get(), self, \
                                     transform=lambda x: self.img_resize(x, mode="square"), printer=self.print) \
                                 for i in range(len(self.cin))]
 
     def param_cb(self, msg):
-        if self.ROS_HOME.params.exists(msg.data):
+        if self.params.exists(msg.data):
             self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
-            self.ROS_HOME.params.update(msg.data)
+            self.params.update(msg.data)
 
             if msg.data == self.LOG_LEVEL.name:
                 set_rospy_log_lvl(self.LOG_LEVEL.get())
@@ -152,20 +147,11 @@ class mrc:
         return rmsg
     
     def main(self):
-        self.ROS_HOME.set_state(NodeState.MAIN)
+        self.set_state(NodeState.MAIN)
 
         # loop forever until signal shutdown
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
-
-    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
-        if ros is None:
-            ros = self.ROS_HOME.logros
-        if name is None:
-            name = self.ROS_HOME.node_name
-        if no_stamp is None:
-            no_stamp = self.ROS_HOME.logstamp
-        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
 
 def do_args():
     parser = ap.ArgumentParser(prog="throttle.py", 
@@ -186,7 +172,7 @@ def do_args():
 if __name__ == '__main__':
     try:
         args = do_args()
-        nmrc = mrc(args['node_name'], args['rate'], args['namespace'], args['anon'], args['mode'], \
+        nmrc = Main_ROS_Class(args['node_name'], args['rate'], args['namespace'], args['anon'], args['mode'], \
                    args['img_dims'], args['log_level'], order_id=args['order_id'])
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated

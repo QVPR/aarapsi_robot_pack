@@ -11,14 +11,12 @@ import sys
 from aarapsi_robot_pack.msg import MonitorDetails, ImageDetails
 
 from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
-from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
 from pyaarapsi.vpr_simple.vpr_plots              import doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, doXYWVFigBokeh, \
                                                         updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
 
-from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_two_int_list, check_positive_int, check_valid_ip, check_enum, check_string
+from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_int, check_valid_ip, check_string
 from pyaarapsi.core.helper_tools    import formatException, vis_dict
-from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, init_node, NodeState, LogType
-from pyaarapsi.core.enum_tools      import enum_name
+from pyaarapsi.core.ros_tools       import Base_ROS_Class, set_rospy_log_lvl, NodeState, LogType
 
 from functools import partial
 from bokeh.layouts import column, row
@@ -28,39 +26,18 @@ from bokeh.themes import Theme
 
 import logging
 
-class mrc: # main ROS class
-    def __init__(self, compress_in, rate_num, namespace, node_name, anon, log_level, reset, order_id=0):
-        
-        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30, disable_signals=True):
-            sys.exit()
+class Main_ROS_Class(Base_ROS_Class):
+    def __init__(self, rate_num, namespace, node_name, anon, log_level, reset, order_id=0):
+        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30, disable_signals=True)
 
-        self.init_params(rate_num, log_level, compress_in, reset)
+        self.init_params(rate_num, log_level, reset)
         self.init_vars()
         self.init_rospy()
 
         # Last item as it sets a flag that enables main loop execution.
         self.main_ready = True
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
-        self.ROS_HOME.set_state(NodeState.MAIN)
-
-    def init_params(self, rate_num, log_level, compress_in, reset):
-        self.FEAT_TYPE       = self.ROS_HOME.params.add(self.namespace + "/feature_type",        None,                   lambda x: check_enum(x, FeatureType), force=False)
-        self.IMG_DIMS        = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,                   check_positive_two_int_list,          force=False)
-        self.NPZ_DBP         = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",             None,                   check_string,                         force=False)
-        self.BAG_DBP         = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",             None,                   check_string,                         force=False)
-        self.IMG_TOPIC       = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,                   check_string,                         force=False)
-        self.ODOM_TOPIC      = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,                   check_string,                         force=False)
-        
-        self.REF_BAG_NAME    = self.ROS_HOME.params.add(self.namespace + "/ref/bag_name",        None,                   check_string,                         force=False)
-        self.REF_FILTERS     = self.ROS_HOME.params.add(self.namespace + "/ref/filters",         None,                   check_string,                         force=False)
-        self.REF_SAMPLE_RATE = self.ROS_HOME.params.add(self.namespace + "/ref/sample_rate",     None,                   check_positive_float,                 force=False) # Hz
-        
-        self.COMPRESS_IN     = self.ROS_HOME.params.add(self.nodespace + "/compress/in",         compress_in,            check_bool,                           force=reset)
-        self.RATE_NUM        = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,               check_positive_float,                 force=reset) # Hz
-        self.LOG_LEVEL       = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,              check_positive_int,                   force=reset)
-        
-        self.REF_DATA_PARAMS = [self.NPZ_DBP, self.BAG_DBP, self.REF_BAG_NAME, self.REF_FILTERS, self.REF_SAMPLE_RATE, self.IMG_TOPIC, self.ODOM_TOPIC, self.FEAT_TYPE, self.IMG_DIMS]
-        self.REF_DATA_NAMES  = [i.name for i in self.REF_DATA_PARAMS]
+        self.set_state(NodeState.MAIN)
 
     def init_vars(self):
         # flags to denest main loop:
@@ -96,8 +73,8 @@ class mrc: # main ROS class
 
     def param_callback(self, msg):
         self.parameters_ready = False
-        if self.ROS_HOME.params.exists(msg.data):
-            if not self.ROS_HOME.params.update(msg.data):
+        if self.params.exists(msg.data):
+            if not self.params.update(msg.data):
                 self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
             
             else:
@@ -123,11 +100,6 @@ class mrc: # main ROS class
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
         self.parameters_ready = True
 
-    def make_dataset_dict(self):
-        return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                    odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.REF_SAMPLE_RATE.get(), \
-                    ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-
     def field_callback(self, msg):
     # /vpr_nodes/field (aarapsi_robot_pack/ImageDetails)
     # Store new SVM field
@@ -140,15 +112,6 @@ class mrc: # main ROS class
         self.state              = msg
         self.new_state          = True
 
-    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
-        if ros is None:
-            ros = self.ROS_HOME.logros
-        if name is None:
-            name = self.ROS_HOME.node_name
-        if no_stamp is None:
-            no_stamp = self.ROS_HOME.logstamp
-        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
-
     def exit(self):
         global server
         try:
@@ -159,17 +122,11 @@ class mrc: # main ROS class
             server.stop()
         except:
             print('Server not accessible for forced shutdown, ignoring.')
-        print('Exit state reached.')
-        sys.exit()
+        super().exit()
 
 class Doc_Frame:
     def __init__(self, nmrc, printer=print):
         # Prepare figures:
-        #iframe_start          = """<iframe src="http://131.181.33.60:8080/stream?topic="""
-        #iframe_end_rect       = """&type=ros_compressed" width=2000 height=1000 style="border: 0; transform: scale(0.5); transform-origin: 0 0;"/>"""
-        #iframe_end_even       = """&type=ros_compressed" width=510 height=510 style="border: 0; transform: scale(0.49); transform-origin: 0 0;"/>"""
-        #self.fig_iframe_feed_ = Div(text=iframe_start + nmrc.namespace + "/image" + iframe_end_rect, width=500, height=250)
-        #self.fig_iframe_mtrx_ = Div(text=iframe_start + nmrc.namespace + "/similiarity_matrix" + iframe_end_even, width=250, height=250)
         self.num_points       = len(nmrc.ip.dataset['dataset']['px'])
         self.sim_mtrx_img     = np.zeros((self.num_points, self.num_points)) # Make similarity matrix figure
         
@@ -246,7 +203,6 @@ def do_args():
                                epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
     parser.add_argument('--port',             '-P',  type=check_positive_int,        default=5006,             help='Set bokeh server port  (default: %(default)s).')
     parser.add_argument('--address',          '-A',  type=check_valid_ip,            default='0.0.0.0',        help='Set bokeh server address (default: %(default)s).')
-    parser.add_argument('--compress-in',      '-Ci', type=check_bool,                default=False,            help='Enable image compression on input (default: %(default)s)')
     parser.add_argument('--rate',             '-r',  type=check_positive_float,      default=10.0,             help='Set node rate (default: %(default)s).')
     parser.add_argument('--node-name',        '-N',  type=check_string,              default="vpr_plotter",    help="Specify node name (default: %(default)s).")
     parser.add_argument('--anon',             '-a',  type=check_bool,                default=True,             help="Specify whether node should be anonymous (default: %(default)s).")
@@ -263,7 +219,7 @@ if __name__ == '__main__':
     logging.getLogger('bokeh').setLevel(logging.ERROR) # hide bokeh superfluous messages
 
     args = do_args()
-    nmrc = mrc(compress_in=args['compress_in'], rate_num=args['rate'], namespace=args['namespace'], \
+    nmrc = Main_ROS_Class(rate_num=args['rate'], namespace=args['namespace'], \
                     node_name=args['node_name'], anon=args['anon'], log_level=args['log_level'], reset=args['reset'], order_id=args['order_id'])
     nmrc.print("[ROS Base] Ready.")
     server = Server({'/': lambda doc: main(doc, nmrc)}, num_procs=1, address=args['address'], port=args['port'])

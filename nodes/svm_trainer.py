@@ -5,13 +5,11 @@ import argparse as ap
 import sys
 from rospy_message_converter import message_converter
 from std_msgs.msg import String
-from pyaarapsi.core.argparse_tools import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum, check_string_list
-from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node
-from pyaarapsi.core.helper_tools import formatException
-from pyaarapsi.core.enum_tools import enum_name
 
-from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType, SVM_Tolerance_Mode
-from pyaarapsi.vpr_simple.svm_model_tool         import SVMModelProcessor
+from pyaarapsi.core.argparse_tools              import check_positive_float, check_bool, check_string
+from pyaarapsi.core.ros_tools                   import Base_ROS_Class, NodeState, roslogger, LogType, set_rospy_log_lvl
+from pyaarapsi.core.helper_tools                import formatException
+from pyaarapsi.vpr_simple.svm_model_tool        import SVMModelProcessor
 
 from aarapsi_robot_pack.msg import ResponseSVM, RequestSVM, ResponseDataset, RequestDataset
 
@@ -27,11 +25,9 @@ monitor's performance and activities.
 
 '''
 
-class mrc():
+class Main_ROS_Class(Base_ROS_Class):
     def __init__(self, node_name, rate_num, namespace, anon, log_level, reset, order_id=0):
-
-        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
-            sys.exit()
+        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
 
         self.init_params(rate_num, log_level, reset)
         self.init_vars()
@@ -45,32 +41,8 @@ class mrc():
         self.param_sub              = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
         self.svm_request_sub        = rospy.Subscriber(self.namespace + '/requests/svm/request', RequestSVM, self.svm_request_callback, queue_size=1)
         self.dataset_request_sub    = rospy.Subscriber(self.namespace + '/requests/dataset/ready', ResponseDataset, self.dataset_request_callback, queue_size=1)
-        self.svm_request_pub        = self.ROS_HOME.add_pub(self.namespace + '/requests/svm/ready', ResponseSVM, queue_size=1)
-        self.dataset_request_pub    = self.ROS_HOME.add_pub(self.namespace + "/requests/dataset/request", RequestDataset, queue_size=1)
-        
-    def init_params(self, rate_num, log_level, reset):
-        self.FEAT_TYPE              = self.ROS_HOME.params.add(self.namespace + "/feature_type",            None,             lambda x: check_enum(x, FeatureType),         force=False)
-        self.IMG_DIMS               = self.ROS_HOME.params.add(self.namespace + "/img_dims",                None,             check_positive_two_int_list,                  force=False)
-        self.NPZ_DBP                = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",                 None,             check_string,                                 force=False)
-        self.BAG_DBP                = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",                 None,             check_string,                                 force=False)
-        self.SVM_DBP                = self.ROS_HOME.params.add(self.namespace + "/svm_dbp",                 None,             check_string,                                 force=False)
-        self.IMG_TOPIC              = self.ROS_HOME.params.add(self.namespace + "/img_topic",               None,             check_string,                                 force=False)
-        self.ODOM_TOPIC             = self.ROS_HOME.params.add(self.namespace + "/odom_topic",              None,             check_string,                                 force=False)
-        
-        self.SVM_QRY_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/qry/bag_name",        None,             check_string,                                 force=False)
-        self.SVM_QRY_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/qry/filters",         None,             check_string,                                 force=False)
-        self.SVM_QRY_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/qry/sample_rate",     None,             check_positive_float,                         force=False)
-
-        self.SVM_REF_BAG_NAME       = self.ROS_HOME.params.add(self.namespace + "/svm/ref/bag_name",        None,             check_string,                                 force=False)
-        self.SVM_REF_FILTERS        = self.ROS_HOME.params.add(self.namespace + "/svm/ref/filters",         None,             check_string,                                 force=False)
-        self.SVM_REF_SAMPLE_RATE    = self.ROS_HOME.params.add(self.namespace + "/svm/ref/sample_rate",     None,             check_positive_float,                         force=False)
-        
-        self.SVM_FACTORS            = self.ROS_HOME.params.add(self.namespace + "/svm/factors",             None,             check_string_list,                            force=False)
-        self.SVM_TOL_MODE           = self.ROS_HOME.params.add(self.namespace + "/svm/tolerance/mode",      None,             lambda x: check_enum(x, SVM_Tolerance_Mode),  force=False)
-        self.SVM_TOL_THRES          = self.ROS_HOME.params.add(self.namespace + "/svm/tolerance/threshold", None,             check_positive_float,                         force=False)
-
-        self.RATE_NUM               = self.ROS_HOME.params.add(self.nodespace + "/rate",                    rate_num,         check_positive_float,                         force=reset)
-        self.LOG_LEVEL              = self.ROS_HOME.params.add(self.nodespace + "/log_level",               log_level,        check_positive_int,                           force=reset)
+        self.svm_request_pub        = self.add_pub(self.namespace + '/requests/svm/ready', ResponseSVM, queue_size=1)
+        self.dataset_request_pub    = self.add_pub(self.namespace + "/requests/dataset/request", RequestDataset, queue_size=1)
         
     def init_vars(self):
         # Set up SVM
@@ -92,16 +64,6 @@ class mrc():
     def svm_request_callback(self, msg):
         self.svm_queue.append(msg)
 
-    def make_svm_model_params(self):
-        qry_dict = dict(bag_name=self.SVM_QRY_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.SVM_REF_SAMPLE_RATE.get(), \
-                        ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-        ref_dict = dict(bag_name=self.SVM_REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                        odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.SVM_REF_SAMPLE_RATE.get(), \
-                        ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
-        svm_dict = dict(factors=self.SVM_FACTORS.get(), tol_thres=self.SVM_TOL_THRES.get(), tol_mode=enum_name(self.SVM_TOL_MODE.get()))
-        return dict(ref=ref_dict, qry=qry_dict, svm=svm_dict, npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), svm_dbp=self.SVM_DBP.get())
-
     def update_SVM(self):
         if not len(self.svm_queue):
             return
@@ -116,9 +78,9 @@ class mrc():
             self.svm_request_pub.publish(ResponseSVM(params=params_for_swap, success=True))
 
     def param_callback(self, msg):
-        if self.ROS_HOME.params.exists(msg.data):
+        if self.params.exists(msg.data):
             self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
-            self.ROS_HOME.params.update(msg.data)
+            self.params.update(msg.data)
 
             if msg.data == self.LOG_LEVEL.name:
                 set_rospy_log_lvl(self.LOG_LEVEL.get())
@@ -160,7 +122,7 @@ class mrc():
                     raise Exception('Model generation failed even after new datasets were constructed!')
 
     def main(self):
-        self.ROS_HOME.set_state(NodeState.MAIN)
+        self.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
@@ -168,15 +130,6 @@ class mrc():
     
     def loop_contents(self):
         self.update_SVM()
-
-    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
-        if ros is None:
-            ros = self.ROS_HOME.logros
-        if name is None:
-            name = self.ROS_HOME.node_name
-        if no_stamp is None:
-            no_stamp = self.ROS_HOME.logstamp
-        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
 
 def do_args():
     parser = ap.ArgumentParser(prog="svm_trainer.py", 
@@ -199,7 +152,7 @@ def do_args():
 if __name__ == '__main__':
     args        = do_args()
     try:
-        nmrc = mrc(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
+        nmrc = Main_ROS_Class(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
         nmrc.print("Initialisation complete. Listening for queries...", LogType.INFO)
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated

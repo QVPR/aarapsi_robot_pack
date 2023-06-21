@@ -15,11 +15,10 @@ from visualization_msgs.msg import MarkerArray, Marker
 from aarapsi_robot_pack.msg import ControllerStateInfo
 from sensor_msgs.msg        import CompressedImage
 
-from pyaarapsi.core.argparse_tools          import check_positive_float, check_positive_int, check_bool, check_string, check_positive_two_int_list, check_enum
-from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, set_rospy_log_lvl, init_node, q_from_yaw
+from pyaarapsi.core.argparse_tools          import check_positive_float, check_positive_int, check_bool, check_string
+from pyaarapsi.core.ros_tools               import Base_ROS_Class, NodeState, roslogger, LogType, set_rospy_log_lvl, q_from_yaw
 from pyaarapsi.core.helper_tools            import formatException, angle_wrap, uint8_list_to_np_ndarray, vis_dict
 from pyaarapsi.core.enum_tools              import enum_name
-from pyaarapsi.vpr_simple.vpr_helpers       import FeatureType
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.vpr_image_methods import convert_img_to_uint8, label_image, apply_icon
 
@@ -39,11 +38,9 @@ to reduce interruptions to normal pipeline execution.
 
 '''
 
-class mrc():
+class Main_ROS_Class(Base_ROS_Class):
     def __init__(self, node_name, rate_num, namespace, anon, log_level, reset, order_id=0):
-
-        if not init_node(self, node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30):
-            raise Exception('init_node failed.')
+        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
 
         self.init_params(rate_num, log_level, reset)
         self.init_vars()
@@ -53,24 +50,10 @@ class mrc():
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_params(self, rate_num, log_level, reset):
-        self.FEAT_TYPE       = self.ROS_HOME.params.add(self.namespace + "/feature_type",        None,                   lambda x: check_enum(x, FeatureType), force=False)
-        self.IMG_DIMS        = self.ROS_HOME.params.add(self.namespace + "/img_dims",            None,                   check_positive_two_int_list,          force=False)
-        self.NPZ_DBP         = self.ROS_HOME.params.add(self.namespace + "/npz_dbp",             None,                   check_string,                         force=False)
-        self.BAG_DBP         = self.ROS_HOME.params.add(self.namespace + "/bag_dbp",             None,                   check_string,                         force=False)
-        self.IMG_TOPIC       = self.ROS_HOME.params.add(self.namespace + "/img_topic",           None,                   check_string,                         force=False)
-        self.ODOM_TOPIC      = self.ROS_HOME.params.add(self.namespace + "/odom_topic",          None,                   check_string,                         force=False)
+        super().init_params(rate_num, log_level, reset)
+        self.SVM_MODE        = self.params.add(self.nodespace + "/svm_mode",            False,                  check_bool,                           force=reset)
+        self.NUM_MARKERS     = self.params.add(self.nodespace + "/num_markers",         100,                    check_positive_int,                   force=reset)
         
-        self.REF_BAG_NAME    = self.ROS_HOME.params.add(self.namespace + "/ref/bag_name",        None,                   check_string,                         force=False)
-        self.REF_FILTERS     = self.ROS_HOME.params.add(self.namespace + "/ref/filters",         None,                   check_string,                         force=False)
-        self.REF_SAMPLE_RATE = self.ROS_HOME.params.add(self.namespace + "/ref/sample_rate",     None,                   check_positive_float,                 force=False) # Hz
-        
-        self.SVM_MODE        = self.ROS_HOME.params.add(self.nodespace + "/svm_mode",            False,                  check_bool,                           force=reset)
-        self.NUM_MARKERS     = self.ROS_HOME.params.add(self.nodespace + "/num_markers",         100,                    check_positive_int,                   force=reset)
-        self.LOG_LEVEL       = self.ROS_HOME.params.add(self.nodespace + "/log_level",           log_level,              check_positive_int,                   force=reset)
-        self.RATE_NUM        = self.ROS_HOME.params.add(self.nodespace + "/rate",                rate_num,               check_positive_float,                 force=reset)
-        
-        self.REF_DATA_PARAMS = [self.NPZ_DBP, self.BAG_DBP, self.REF_BAG_NAME, self.REF_FILTERS, self.REF_SAMPLE_RATE, self.IMG_TOPIC, self.ODOM_TOPIC, self.FEAT_TYPE, self.IMG_DIMS]
-        self.REF_DATA_NAMES  = [i.name for i in self.REF_DATA_PARAMS]
 
     def init_vars(self):
         self.icon_size          = 50
@@ -109,13 +92,8 @@ class mrc():
         self.rate_obj        = rospy.Rate(self.RATE_NUM.get())
         self.param_sub       = rospy.Subscriber(self.namespace + "/params_update",              String,              self.param_callback,   queue_size=100)
         self.control_sub     = rospy.Subscriber(self.namespace + "/follower/info",              ControllerStateInfo, self.control_callback, queue_size=1)
-        self.confidence_pub  = self.ROS_HOME.add_pub(self.namespace + '/confidence',            MarkerArray,                                queue_size=1)
-        self.display_pub     = self.ROS_HOME.add_pub(self.namespace + '/display/compressed',    CompressedImage,                            queue_size=1)
-
-    def make_dataset_dict(self):
-        return dict(bag_name=self.REF_BAG_NAME.get(), npz_dbp=self.NPZ_DBP.get(), bag_dbp=self.BAG_DBP.get(), \
-                    odom_topic=self.ODOM_TOPIC.get(), img_topics=[self.IMG_TOPIC.get()], sample_rate=self.REF_SAMPLE_RATE.get(), \
-                    ft_types=enum_name(self.FEAT_TYPE.get(),wrap=True), img_dims=self.IMG_DIMS.get(), filters='{}')
+        self.confidence_pub  = self.add_pub(self.namespace + '/confidence',            MarkerArray,                                queue_size=1)
+        self.display_pub     = self.add_pub(self.namespace + '/display/compressed',    CompressedImage,                            queue_size=1)
 
     def control_callback(self, msg):
         self.control_msg     = msg
@@ -153,8 +131,8 @@ class mrc():
 
     def param_callback(self, msg):
         self.parameters_ready = False
-        if self.ROS_HOME.params.exists(msg.data):
-            if not self.ROS_HOME.params.update(msg.data):
+        if self.params.exists(msg.data):
+            if not self.params.update(msg.data):
                 self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
             
             else:
@@ -182,7 +160,7 @@ class mrc():
         self.parameters_ready = True
 
     def main(self):
-        self.ROS_HOME.set_state(NodeState.MAIN)
+        self.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
             try:
@@ -339,19 +317,6 @@ class mrc():
         self.make_control_visualisation()
         self.make_display_feed()
 
-    def print(self, text, logtype=LogType.INFO, throttle=0, ros=None, name=None, no_stamp=None):
-        if ros is None:
-            ros = self.ROS_HOME.logros
-        if name is None:
-            name = self.ROS_HOME.node_name
-        if no_stamp is None:
-            no_stamp = self.ROS_HOME.logstamp
-        roslogger(text, logtype, throttle=throttle, ros=ros, name=name, no_stamp=no_stamp)
-
-    def exit(self):
-        self.print("Quit received.")
-        sys.exit()
-
 def do_args():
     parser = ap.ArgumentParser(prog="visualiser.py", 
                             description="ROS Visualiser Node",
@@ -370,7 +335,7 @@ def do_args():
 if __name__ == '__main__':
     try:
         args = do_args()
-        nmrc = mrc(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
+        nmrc = Main_ROS_Class(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
         nmrc.print("Initialisation complete. Generating visualisations...")
         nmrc.main()
         roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
