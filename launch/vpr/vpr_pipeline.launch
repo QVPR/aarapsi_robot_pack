@@ -23,8 +23,6 @@
 
     <arg name="namespace"               default="/vpr_nodes"/>
 
-    <arg name="monitor_printprediction" default="False"/>
-
     <arg name="plotter_port"            default="5006"/>
     <arg name="plotter_address"         default="0.0.0.0"/>
 
@@ -91,7 +89,7 @@
 
         <!-- Monitor Node: -->
         <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
-            args="-p $(arg monitor_printprediction) -r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
+            args="-r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
         </node>
 
         <!-- Plotter Node: -->

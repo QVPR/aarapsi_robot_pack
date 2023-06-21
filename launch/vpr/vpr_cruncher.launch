@@ -14,8 +14,6 @@
 
     <arg name="namespace"               default="/vpr_nodes"/>
 
-    <arg name="cruncher_groundtruth"    default="True"/>
-
     <arg name="log_level"               default="2"/>
 
     <group if="$(arg offline)">
@@ -30,7 +28,7 @@
 
         <!-- Cruncher Node: -->
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
-            args="-G $(arg cruncher_groundtruth) -r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 5">
+            args="-r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 5">
         </node>
     </group>
 
