@@ -6,8 +6,6 @@ from std_msgs.msg import String
 import numpy as np
 import argparse as ap
 import sys
-import cv2
-import copy
 
 from rospy_message_converter import message_converter
 
@@ -15,14 +13,12 @@ from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, ImageLabelDetails, M
 
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.svm_model_tool    import SVMModelProcessor
-from pyaarapsi.vpr_simple.vpr_helpers       import FeatureType, SVM_Tolerance_Mode
 
 from pyaarapsi.vpred                import *
 
-from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_list, check_bool, check_enum, check_string, check_positive_int, check_string_list
+from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_string
 from pyaarapsi.core.helper_tools    import formatException
 from pyaarapsi.core.ros_tools       import Base_ROS_Class, roslogger, set_rospy_log_lvl, LogType, NodeState, SubscribeListener
-from pyaarapsi.core.enum_tools      import enum_name
 
 class Main_ROS_Class(Base_ROS_Class): # main ROS class
     def __init__(self, rate_num, namespace, node_name, anon, log_level, reset, order_id=0):
@@ -36,6 +32,8 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
         
     def init_vars(self):
+        super().init_vars()
+
         self.contour_msg            = None
 
         self.state_hist             = np.zeros((10,3)) # x, y, w
@@ -51,7 +49,6 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
         self.new_label              = False # new label received
         self.main_ready             = False # ensure pubs and subs don't go off early
         self.svm_swap_pending       = False
-        self.parameters_ready       = True
         ref_dataset_dict            = self.make_dataset_dict()
         try:
             self.ip                 = VPRDatasetProcessor(ref_dataset_dict, try_gen=False, ros=True)
@@ -60,12 +57,10 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
             self.exit()
 
     def init_rospy(self):
-
-        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
+        super().init_rospy()
+        
         self.last_time              = rospy.Time.now()
-        self.sublis                 = SubscribeListener()
 
-        self.param_checker_sub      = rospy.Subscriber(     self.namespace + "/params_update",          String,              self.param_callback,           queue_size=100)
         self.vpr_label_sub          = rospy.Subscriber(     self.namespace + "/label",                  ImageLabelDetails,   self.label_callback,           queue_size=1)
         self.svm_request_sub        = rospy.Subscriber(     self.namespace + "/requests/svm/ready",     ResponseSVM,         self.svm_request_callback,     queue_size=1)
         self.svm_request_pub        = self.add_pub(self.namespace + "/requests/svm/request",   RequestSVM,                                         queue_size=1)

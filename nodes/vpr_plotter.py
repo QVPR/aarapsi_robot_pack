@@ -40,10 +40,11 @@ class Main_ROS_Class(Base_ROS_Class):
         self.set_state(NodeState.MAIN)
 
     def init_vars(self):
+        super().init_vars()
+
         # flags to denest main loop:
         self.new_state              = False # new SVM state message received
         self.main_ready             = False
-        self.parameters_ready       = True
         self.svm_field_msg          = None
         self.update_contour         = True
         
@@ -56,9 +57,8 @@ class Main_ROS_Class(Base_ROS_Class):
             self.exit()
 
     def init_rospy(self):
-        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
-
-        self.param_checker_sub      = rospy.Subscriber(self.namespace + "/params_update",        String,         self.param_callback,        queue_size=100)
+        super().init_rospy()
+        
         self.svm_state_sub          = rospy.Subscriber(self.namespace + "/state",                MonitorDetails, self.state_callback,        queue_size=1)
         self.field_sub              = rospy.Subscriber(self.namespace + "/field",                ImageDetails,   self.field_callback,        queue_size=1)
 

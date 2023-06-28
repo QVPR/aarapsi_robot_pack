@@ -51,11 +51,14 @@ class Main_ROS_Class(Base_ROS_Class):
 
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
+
         self.SVM_MODE        = self.params.add(self.nodespace + "/svm_mode",            False,                  check_bool,                           force=reset)
         self.NUM_MARKERS     = self.params.add(self.nodespace + "/num_markers",         100,                    check_positive_int,                   force=reset)
         
 
     def init_vars(self):
+        super().init_vars()
+
         self.icon_size          = 50
         self.icon_path          = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + "/media"
 
@@ -64,7 +67,6 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.control_msg        = None
         self.new_control_msg    = False
-        self.parameters_ready   = True
 
         self.last_ego           = [0.0, 0.0, 0.0]
 
@@ -89,8 +91,8 @@ class Main_ROS_Class(Base_ROS_Class):
             self.exit()
 
     def init_rospy(self):
-        self.rate_obj        = rospy.Rate(self.RATE_NUM.get())
-        self.param_sub       = rospy.Subscriber(self.namespace + "/params_update",              String,              self.param_callback,   queue_size=100)
+        super().init_rospy()
+        
         self.control_sub     = rospy.Subscriber(self.namespace + "/follower/info",              ControllerStateInfo, self.control_callback, queue_size=1)
         self.confidence_pub  = self.add_pub(self.namespace + '/confidence',            MarkerArray,                                queue_size=1)
         self.display_pub     = self.add_pub(self.namespace + '/display/compressed',    CompressedImage,                            queue_size=1)

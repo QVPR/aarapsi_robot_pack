@@ -35,20 +35,21 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.generate_new_svm(self.make_svm_model_params())
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
-
-    def init_rospy(self):
-        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
-        self.param_sub              = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
-        self.svm_request_sub        = rospy.Subscriber(self.namespace + '/requests/svm/request', RequestSVM, self.svm_request_callback, queue_size=1)
-        self.dataset_request_sub    = rospy.Subscriber(self.namespace + '/requests/dataset/ready', ResponseDataset, self.dataset_request_callback, queue_size=1)
-        self.svm_request_pub        = self.add_pub(self.namespace + '/requests/svm/ready', ResponseSVM, queue_size=1)
-        self.dataset_request_pub    = self.add_pub(self.namespace + "/requests/dataset/request", RequestDataset, queue_size=1)
         
     def init_vars(self):
+        super().init_vars()
         # Set up SVM
         self.svm                    = SVMModelProcessor(ros=True)
         self.svm_queue              = []
         self.dataset_queue          = []
+
+    def init_rospy(self):
+        super().init_rospy()
+        
+        self.svm_request_sub        = rospy.Subscriber(self.namespace + '/requests/svm/request', RequestSVM, self.svm_request_callback, queue_size=1)
+        self.dataset_request_sub    = rospy.Subscriber(self.namespace + '/requests/dataset/ready', ResponseDataset, self.dataset_request_callback, queue_size=1)
+        self.svm_request_pub        = self.add_pub(self.namespace + '/requests/svm/ready', ResponseSVM, queue_size=1)
+        self.dataset_request_pub    = self.add_pub(self.namespace + "/requests/dataset/request", RequestDataset, queue_size=1)
         
     def dataset_request_callback(self, msg):
         if msg.success == False:
@@ -76,18 +77,6 @@ class Main_ROS_Class(Base_ROS_Class):
         else:
             self.print("SVM model generated.")
             self.svm_request_pub.publish(ResponseSVM(params=params_for_swap, success=True))
-
-    def param_callback(self, msg):
-        if self.params.exists(msg.data):
-            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
-            self.params.update(msg.data)
-
-            if msg.data == self.LOG_LEVEL.name:
-                set_rospy_log_lvl(self.LOG_LEVEL.get())
-            elif msg.data == self.RATE_NUM.name:
-                self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
     def generate_new_svm(self, svm_model_params):
         if not self.svm.load_model(svm_model_params): # No model currently exists;

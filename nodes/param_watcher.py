@@ -30,13 +30,14 @@ class Main_ROS_Class(Base_ROS_Class):
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_vars(self):
+        super().init_vars()
         self.watch_params   = [i for i in rospy.get_param_names() if i.startswith(self.namespace)]
         self.params_dict    = dict.fromkeys(self.watch_params)
         self.print("Watching params: %s" % str(self.watch_params), LogType.DEBUG)
 
     def init_rospy(self):
-        self.rate_obj       = rospy.Rate(self.RATE_NUM.get())
-        self.param_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_cb, queue_size=100)
+        super().init_rospy()
+        
         self.watch_pub      = self.add_pub(self.namespace + "/params_update", String, queue_size=100)
         self.watch_timer    = rospy.Timer(rospy.Duration(secs=5), self.watch_cb)
 
@@ -58,18 +59,6 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.print("Update detected for: %s (%s->%s)" % (i, str(self.params_dict[i]), str(check_param)), LogType.DEBUG)
                 self.params_dict[i] = check_param
                 self.watch_pub.publish(String(i))
-
-    def param_cb(self, msg):
-        if self.params.exists(msg.data):
-            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
-            self.params.update(msg.data)
-
-            if msg.data == self.LOG_LEVEL.name:
-                set_rospy_log_lvl(self.LOG_LEVEL.get())
-            elif msg.data == self.RATE_NUM.name:
-                self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
     def main(self):
         self.set_state(NodeState.MAIN)

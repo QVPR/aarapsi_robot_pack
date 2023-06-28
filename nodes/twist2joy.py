@@ -6,13 +6,15 @@ import sys
 import numpy as np
 import argparse as ap
 
+from enum import Enum
+
 from sensor_msgs.msg import Joy
 from std_msgs.msg import String
 from geometry_msgs.msg import Twist, TwistStamped
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool, check_positive_int
 from pyaarapsi.core.ros_tools import Base_ROS_Class, roslogger, LogType, NodeState, set_rospy_log_lvl
-from pyaarapsi.core.enum_tools import enum_name
+from pyaarapsi.core.enum_tools import enum_name, enum_value
 from pyaarapsi.core.helper_tools import formatException
 from pyaarapsi.vpr_simple.vpr_helpers import FeatureType
 
@@ -26,6 +28,31 @@ Used to interface with bluetooth controller topics
 Configured to keep safety lock-outs from the ps4 controller
 '''
 
+class PS4_Buttons(Enum):
+    X               = 0
+    O               = 1
+    Square          = 2
+    Triangle        = 3
+    LeftBumper      = 4
+    RightBumper     = 5
+    Share           = 6
+    Options         = 7
+    PS              = 8
+    LeftStickIn     = 9
+    RightStickIn    = 10
+    LeftArrow       = 11
+    RightArrow      = 12
+    UpArrow         = 13
+    DownArrow       = 14
+
+class PS4_Triggers(Enum):
+    LeftStickXAxis  = 0
+    LeftStickYAxis  = 1
+    LeftTrigger     = 2 # Released = 1, Pressed = -1
+    RightStickXAxis = 3
+    RightStickYAxis = 4
+    RightTrigger    = 5 # Released = 1, Pressed = -1
+
 class Main_ROS_Class(Base_ROS_Class):
     def __init__(self, twist_sub_topic, twist_pub_topic, joy_sub_topic, node_name, anon, namespace, rate_num, log_level, reset=True, order_id=0):
         super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
@@ -37,57 +64,51 @@ class Main_ROS_Class(Base_ROS_Class):
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_vars(self):
+        super().init_vars()
+
         self.mode               = 0
-        # Button order:
-        # X, O, Square, Triangle, LeftB, RightB, Share, Options, PS, LStickIn, RStickIn, LeftAr, RightAr, UpAr, DownAr
-        # 0  1  2       3         4      5       6      7        8   9         10        11      12       13    14
-        self.buttons            = [1] + [0] * 14
-        # Axes order:
-        # LStickX{L=1,R=-1}, LStickY{U=1,D=-1}, LTrigger(Released=1, Press=-1) RStickX{L=1,R=-1}, RStickY{U=1,D=-1}, RTrigger(Released=1, Press=-1)
-        # 0                  1                  2                              3                  4                  5                  
+        self.buttons            = [1] + [0] * 14                
         self.axes               = [0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
 
-        # Button assignment:
-        self.enable             = 0
-        self.disable            = 1
-        self.slow_safety_i      = 4
-        self.fast_safety_i      = 5
+        self.enable             = enum_value(PS4_Buttons.X)
+        self.disable            = enum_value(PS4_Buttons.O)
+        self.slow_safety_i      = enum_value(PS4_Buttons.LeftBumper)
+        self.fast_safety_i      = enum_value(PS4_Buttons.RightBumper)
+        self.netvlad_ind        = enum_value(PS4_Buttons.LeftArrow)
+        self.hybridnet_ind      = enum_value(PS4_Buttons.RightArrow)
+        self.raw_ind            = enum_value(PS4_Buttons.UpArrow)
+        self.patchnorm_ind      = enum_value(PS4_Buttons.DownArrow)
+        self.linI               = enum_value(PS4_Triggers.LeftStickYAxis)
+        self.angI               = enum_value(PS4_Triggers.RightStickXAxis)
 
-        self.netvlad_ind        = 11
-        self.hybridnet_ind      = 12
-        self.raw_ind            = 13
-        self.patchnorm_ind      = 14
+        self.feat_arr           = {self.raw_ind: FeatureType.RAW,           self.patchnorm_ind: FeatureType.PATCHNORM, 
+                                   self.netvlad_ind: FeatureType.NETVLAD,   self.hybridnet_ind: FeatureType.HYBRIDNET}
 
-        # Axes assignment:
-        self.linI               = 1
-        self.angI               = 3
+        self.slow_max_lin       = 0.2 # m/s
+        self.fast_max_lin       = 0.4 # m/s
 
-        self.slow_max_lin       = 0.2
-        self.fast_max_lin       = 0.4
-
-        self.slow_max_ang       = 0.2
-        self.fast_max_ang       = 0.6
+        self.slow_max_ang       = 0.2 # rad/s
+        self.fast_max_ang       = 0.6 # rad/s
 
         self.enabled            = False
         self.parameters_ready   = True
-        self.feature_mode       = FeatureType.RAW
 
         self.twist_msg          = Twist()
 
     def init_rospy(self, rate_num, joy_sub_topic, twist_sub_topic, twist_pub_topic):
-        self.rate_obj           = rospy.Rate(rate_num)
+        super().init_rospy()
+        
         self.last_msg_time      = rospy.Time.now().to_sec()
 
         self.joy_sub            = rospy.Subscriber(joy_sub_topic, Joy, self.joy_cb, queue_size=1)
         self.twist_sub          = rospy.Subscriber(twist_sub_topic, TwistStamped, self.twist_cb, queue_size=1)
-        self.param_sub          = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
         self.twist_pub          = self.add_pub(twist_pub_topic, Twist, queue_size=1)
         self.srv_safety         = rospy.Service(self.namespace + '/safety', GetSafetyStates, self.handle_GetSafetyStates)
 
     def handle_GetSafetyStates(self, requ):
-        ans = GetSafetyStatesResponse()
-        ans.states.autonomous = self.enabled
-        ans.states.fast_mode = self.mode == 2
+        ans                     = GetSafetyStatesResponse()
+        ans.states.autonomous   = self.enabled
+        ans.states.fast_mode    = self.mode == 2
         return ans
 
     def main(self):
@@ -97,23 +118,6 @@ class Main_ROS_Class(Base_ROS_Class):
             self.rate_obj.sleep()
 
             self.twist_pub.publish(self.twist_msg)
-    
-    def param_callback(self, msg):
-        self.parameters_ready = False
-        if self.params.exists(msg.data):
-            if not self.params.update(msg.data):
-                self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
-        
-            else:
-                self.print("Change to parameter [%s]; updated." % msg.data, LogType.DEBUG)
-
-                if msg.data == self.LOG_LEVEL.name:
-                    set_rospy_log_lvl(self.LOG_LEVEL.get())
-                elif msg.data == self.RATE_NUM.name:
-                    self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
-        self.parameters_ready = True
 
     def joy_cb(self, msg):
         if abs(rospy.Time.now().to_sec() - msg.header.stamp.to_sec()) > 0.5: # if joy message was generated longer ago than half a second:
@@ -135,26 +139,11 @@ class Main_ROS_Class(Base_ROS_Class):
 
         # Toggle mode:
         try:
-            if msg.buttons[self.raw_ind]:
-                if not self.feature_mode == FeatureType.RAW:
-                    self.feature_mode = FeatureType.RAW
-                    rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
-                    rospy.loginfo("Switched to %s." % enum_name(self.feature_mode))
-            elif msg.buttons[self.patchnorm_ind]:
-                if not self.feature_mode == FeatureType.PATCHNORM:
-                    self.feature_mode = FeatureType.PATCHNORM
-                    rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
-                    rospy.loginfo("Switched to %s." % enum_name(self.feature_mode))
-            elif msg.buttons[self.netvlad_ind]:
-                if not self.feature_mode == FeatureType.NETVLAD:
-                    self.feature_mode = FeatureType.NETVLAD
-                    rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
-                    rospy.loginfo("Switched to %s." % enum_name(self.feature_mode))
-            elif msg.buttons[self.hybridnet_ind]:
-                if not self.feature_mode == FeatureType.HYBRIDNET:
-                    self.feature_mode = FeatureType.HYBRIDNET
-                    rospy.set_param(self.namespace + '/feature_type', enum_name(self.feature_mode))
-                    rospy.loginfo("Switched to %s." % enum_name(self.feature_mode))
+            for i in self.feat_arr.keys():
+                if msg.buttons[i] and (not self.FEAT_TYPE.get() == self.feat_arr[i]):
+                    rospy.set_param(self.namespace + '/feature_type', enum_name(FeatureType.RAW))
+                    rospy.loginfo("Switched to %s." % enum_name(self.FEAT_TYPE.get()))
+                    break
         except:
             rospy.logdebug_throttle(60, "Param switching is disabled for rosbags :-(")
 
@@ -190,10 +179,10 @@ class Main_ROS_Class(Base_ROS_Class):
         else:
             raise Exception("Unknown safety mode.")
 
-        new_vx              = np.sign(msg.twist.linear.x) * np.min([abs(msg.twist.linear.x), lin_max])
-        new_vw              = -1 * np.sign(msg.twist.angular.z)* np.min([abs(msg.twist.angular.z), ang_max])
-        self.twist_msg.linear.x  = new_vx
-        self.twist_msg.angular.z = new_vw
+        new_vx                      = np.sign(msg.twist.linear.x) * np.min([abs(msg.twist.linear.x), lin_max])
+        new_vw                      = -1 * np.sign(msg.twist.angular.z)* np.min([abs(msg.twist.angular.z), ang_max])
+        self.twist_msg.linear.x     = new_vx
+        self.twist_msg.angular.z    = new_vw
 
         roslogger("vx: %s, vw: %s" % (str(new_vx), str(new_vw)), LogType.DEBUG, ros=True)
         

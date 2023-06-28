@@ -42,6 +42,7 @@ class Main_ROS_Class(Base_ROS_Class):
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
         
     def init_vars(self, use_gpu):
+        super().init_vars()
         # Process reference data
         path_dataset_dict       = self.make_dataset_dict(path=True)
         ref_dataset_dict        = self.make_dataset_dict(path=False)
@@ -58,8 +59,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.dataset_queue      = []
 
     def init_rospy(self):
-        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
-        self.param_sub              = rospy.Subscriber(self.namespace + "/params_update", String, self.param_callback, queue_size=100)
+        super().init_rospy()
+        
         self.srv_extraction         = rospy.Service(self.namespace + '/do_extraction', DoExtraction, self.handle_do_extraction)
         self.dataset_request_sub    = rospy.Subscriber(self.namespace + '/requests/dataset/request', RequestDataset, self.dataset_request_callback, queue_size=10)
         self.dataset_request_pub    = self.add_pub(self.namespace + '/requests/dataset/ready', ResponseDataset, queue_size=1)
@@ -95,18 +96,6 @@ class Main_ROS_Class(Base_ROS_Class):
         ans.success         = success
         self.print("Service requested, Success=%s" % (str(success)), LogType.DEBUG)
         return ans
-
-    def param_callback(self, msg):
-        if self.params.exists(msg.data):
-            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
-            self.params.update(msg.data)
-
-            if msg.data == self.LOG_LEVEL.name:
-                set_rospy_log_lvl(self.LOG_LEVEL.get())
-            elif msg.data == self.RATE_NUM.name:
-                self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
     def main(self):
         self.set_state(NodeState.MAIN)

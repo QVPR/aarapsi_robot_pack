@@ -45,6 +45,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.ODOM_TOPIC     = self.params.add(self.namespace + "/odom_topic",  None,           check_string,           force=False)
         
     def init_vars(self):
+        super().init_vars()
+
         self.img        = None
         self.odom       = None
         self.new_img    = False
@@ -61,8 +63,8 @@ class Main_ROS_Class(Base_ROS_Class):
             self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.imgmsg_to_cv2(img, "passthrough"))
 
     def init_rospy(self):
-        self.rate_obj   = rospy.Rate(self.RATE_NUM.get())
-        self.param_sub  = rospy.Subscriber(self.namespace + "/params_update", String, self.param_cb, queue_size=100)
+        super().init_rospy()
+        
         self.img_sub    = rospy.Subscriber(self.IMG_TOPIC.get(), self.img_type, self.img_cb, queue_size=1)
         self.odom_sub   = rospy.Subscriber(self.ODOM_TOPIC.get(), Odometry, self.odom_cb, queue_size=1)
         self.pub        = self.add_pub(self.namespace + '/img_odom', ImageOdom, queue_size=1)
@@ -103,18 +105,6 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.pub.publish(msg_to_pub)
         del msg_to_pub
-
-    def param_cb(self, msg):
-        if self.params.exists(msg.data):
-            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
-            self.params.update(msg.data)
-
-            if msg.data == self.LOG_LEVEL.name:
-                set_rospy_log_lvl(self.LOG_LEVEL.get())
-            elif msg.data == self.RATE_NUM.name:
-                self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
 
 def do_args():
     parser = ap.ArgumentParser(prog="image_odom_aggregator.py", 

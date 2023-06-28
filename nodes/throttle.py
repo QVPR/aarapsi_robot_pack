@@ -76,6 +76,8 @@ class Main_ROS_Class(Base_ROS_Class):
         rospy.set_param(self.namespace + '/launch_step', order_id + 1)
 
     def init_vars(self, mode, resize_dims):
+        super().init_vars()
+
         self.mode           = mode
         self.resize_dims    = resize_dims
 
@@ -96,9 +98,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.bridge         = CvBridge()
 
     def init_rospy(self):
-        self.rate_obj       = rospy.Rate(self.RATE_NUM.get())
-        self.param_sub      = rospy.Subscriber(self.namespace + "/params_update", String, self.param_cb, queue_size=100)
-
+        super().init_rospy()
+        
         # Set up throttles:
         self.throttles      = [Throttle_Topic(self.cin[i], self.cout[i], self.namespace, self.exts, self.types, self.RATE_NUM.get(), self, \
                                     transform=lambda x: self.img_resize(x, mode="rectangle"), printer=self.print) \
@@ -106,18 +107,6 @@ class Main_ROS_Class(Base_ROS_Class):
                                Throttle_Topic(self.cin[i], self.cout[i], self.namespace, self.exts, self.types, self.RATE_NUM.get(), self, \
                                     transform=lambda x: self.img_resize(x, mode="square"), printer=self.print) \
                                 for i in range(len(self.cin))]
-
-    def param_cb(self, msg):
-        if self.params.exists(msg.data):
-            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
-            self.params.update(msg.data)
-
-            if msg.data == self.LOG_LEVEL.name:
-                set_rospy_log_lvl(self.LOG_LEVEL.get())
-            elif msg.data == self.RATE_NUM.name:
-                self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
         
     def get_cam_topics(self):
         # Helper function to abstract topic generation

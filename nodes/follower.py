@@ -38,6 +38,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.SVM_OVERRIDE    = self.params.add(self.nodespace + "/svm_override",       False,     check_bool,           force=reset)
 
     def init_vars(self):
+        super().init_vars()
         self.dt             = 1/self.RATE_NUM.get()
 
         self.current_yaw    = 0.0
@@ -64,14 +65,14 @@ class Main_ROS_Class(Base_ROS_Class):
         self.bridge         = CvBridge()
 
     def init_rospy(self):
-        self.rate_obj       = rospy.Rate(self.RATE_NUM.get())
+        super().init_rospy()
+        
         self.time           = rospy.Time.now().to_sec()
 
         self.vpr_path_sub   = rospy.Subscriber(self.namespace + '/path',           Path,                self.path_cb,        queue_size=1) # from vpr_cruncher
         self.sensors_sub    = rospy.Subscriber(self.jackal_odom,                   Odometry,            self.sensors_cb,     queue_size=1) # wheel encoders (and maybe imu ??? don't think so)
         self.gt_sub         = rospy.Subscriber(self.ODOM_TOPIC.get(),              Odometry,            self.gt_cb,          queue_size=1) # ONLY for ground truth
         self.state_sub      = rospy.Subscriber(self.namespace + '/state',          MonitorDetails,      self.state_cb,       queue_size=1)
-        self.param_sub      = rospy.Subscriber(self.namespace + "/params_update",  String,              self.param_callback, queue_size=100)
         self.info_pub       = self.add_pub(self.nodespace + '/info',               ControllerStateInfo,                      queue_size=1)
         self.twist_pub      = self.add_pub('/twist2joy/in',                        TwistStamped,                             queue_size=1)
         self.ego_good_pub   = self.add_pub(self.nodespace + '/odom/good',          Odometry,                                 queue_size=1)
@@ -80,23 +81,6 @@ class Main_ROS_Class(Base_ROS_Class):
         self.srv_safety     = rospy.ServiceProxy(self.namespace + '/safety',       GetSafetyStates)
         
         self.main()
-
-    def param_callback(self, msg):
-        self.parameters_ready = False
-        if self.params.exists(msg.data):
-            if not self.params.update(msg.data):
-                self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
-        
-            else:
-                self.print("Change to parameter [%s]; updated." % msg.data, LogType.DEBUG)
-
-                if msg.data == self.LOG_LEVEL.name:
-                    set_rospy_log_lvl(self.LOG_LEVEL.get())
-                elif msg.data == self.RATE_NUM.name:
-                    self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
-        self.parameters_ready = True
 
     def srv_GetPath(self, generate=False):
         try:

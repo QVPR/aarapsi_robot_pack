@@ -9,9 +9,7 @@ from std_msgs.msg import String, Header
 from fastdist import fastdist
 import cv2
 import numpy as np
-import rospkg
 import argparse as ap
-import os
 import sys
 import copy
 
@@ -46,6 +44,7 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
         self.DVC_WEIGHT      = self.params.add(self.nodespace + "/dvc_weight",          1,                      lambda x: check_bounded_float(x, 0, 1, 'both'), force=reset)
 
     def init_vars(self):
+        super().init_vars()
 
         self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
         self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
@@ -58,7 +57,6 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
         self.main_ready             = False # make sure everything commences together, safely
         self.ego_known              = False # whether or not an initial position has been found
         self.dataset_swap_pending   = False # whether we are waiting on a vpr dataset to be built
-        self.parameters_ready       = True # Separate main loop errors from those due to parameter updates
 
         self.dataset_requests       = []
         self.time_history           = []
@@ -75,19 +73,17 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
         self.generate_path(path=True, ref=True)
 
     def init_rospy(self):
+        super().init_rospy()
+        
         self.last_time              = rospy.Time.now()
-        self.rate_obj               = rospy.Rate(self.RATE_NUM.get())
 
-        self.sublis                 = SubscribeListener()
-
-        self.odom_estimate_pub      = self.add_pub(self.namespace + "/vpr_odom",                   Odometry,           queue_size=1)
-        self.path_pub               = self.add_pub(self.namespace + '/path',                       Path,               queue_size=1, subscriber_listener=self.sublis)
-        self.ref_path_pub           = self.add_pub(self.namespace + '/ref/path',                   Path,               queue_size=1, subscriber_listener=self.sublis)
-        self.vpr_label_pub          = self.add_pub(self.namespace + "/label",                      ImageLabelDetails,  queue_size=1)
-        self.dataset_request_pub    = self.add_pub(self.namespace + "/requests/dataset/request",   RequestDataset,     queue_size=1)
+        self.odom_estimate_pub      = self.add_pub(         self.namespace + "/vpr_odom",                   Odometry,           queue_size=1)
+        self.path_pub               = self.add_pub(         self.namespace + '/path',                       Path,               queue_size=1, subscriber_listener=self.sublis)
+        self.ref_path_pub           = self.add_pub(         self.namespace + '/ref/path',                   Path,               queue_size=1, subscriber_listener=self.sublis)
+        self.vpr_label_pub          = self.add_pub(         self.namespace + "/label",                      ImageLabelDetails,  queue_size=1)
+        self.dataset_request_pub    = self.add_pub(         self.namespace + "/requests/dataset/request",   RequestDataset,     queue_size=1)
         self.dataset_request_sub    = rospy.Subscriber(     self.namespace + '/requests/dataset/ready',     ResponseDataset,    self.dataset_request_callback,  queue_size=1)
         self.data_sub               = rospy.Subscriber(     self.namespace + "/img_odom",                   ImageOdom,          self.data_callback,             queue_size=1)
-        self.param_checker_sub      = rospy.Subscriber(     self.namespace + "/params_update",              String,             self.param_callback,            queue_size=100)
         self.send_path_plan         = rospy.Service(        self.namespace + '/path',                       GenerateObj,        self.handle_GetPathPlan)
         self.srv_extraction         = rospy.ServiceProxy(   self.namespace + '/do_extraction',              DoExtraction)
 
