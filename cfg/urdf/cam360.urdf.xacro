@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:macro name="camera_360" params="parent:=front_mount child:=camera">
+        <xacro:macro name="camera_feed_mount" params="id:=0 child_frame:=camera name:=camera parent_frame:=front_mount">
+            <xacro:macro name="camera_feed"
+                params="frame:=camera name:=camera camera_x:=0.047758 camera_y:=0.029 camera_z:=0.029 camera_mass:=0.03
+                        image_topic_name:=image camera_info_name:=camera_info
+                        hfov:=1.5079644737 vfov:=1.0122900000 fps:=15 width:=720 height:=480 format:=R8G8B8 near:=0.1 far:=300">
+                <link name="${frame}">
+                <inertial>
+                    <mass value="${camera_mass}" />
+                    <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6" />
+                </inertial>
+                <visual>
+                    <origin xyz="0 0 0.05" rpy="0 0 0" />
+                    <geometry>
+                        <box size="${camera_x} ${camera_y} ${camera_z}" />
+                    </geometry>
+                    <material name="dark_grey" />
+                </visual>
+                <collision>
+                    <origin xyz="0.003 0 ${camera_z/2}" rpy="0 0 0" />
+                    <geometry>
+                        <box size="${camera_x} ${camera_y} ${camera_z}" />
+                    </geometry>
+                </collision>
+                </link>
+
+                <link name="${frame}_optical" />
+                <joint name="${frame}_lens_joint" type="fixed">
+                    <origin xyz="0.02685 0 0.01425" rpy="0 0 0" />
+                    <parent link="${frame}" />
+                    <child link="${frame}_optical" />
+                </joint>
+
+                <!-- Gazebo -->
+                <gazebo reference="${frame}_optical">
+                <material>Gazebo/Grey</material>
+                <sensor type="camera" name="${name}">
+                    <update_rate>${fps}</update_rate>
+                    <camera name="${name}">
+                        <pose>0 0 0.05 0 0 0</pose>
+                        <horizontal_fov>${hfov}</horizontal_fov>
+                        <vertical_fov>${vfov}</vertical_fov>
+                        <image>
+                            <width>${width}</width>
+                            <height>${height}</height>
+                            <format>${format}</format>
+                        </image>
+                        <clip>
+                            <near>${near}</near>
+                            <far>${far}</far>
+                        </clip>
+                        <noise>
+                            <type>gaussian</type>
+                            <mean>0.0</mean>
+                            <stddev>0.007</stddev>
+                        </noise>
+                    </camera>
+
+                    <plugin name="camera_controller" filename="libgazebo_ros_camera.so">
+                    <alwaysOn>true</alwaysOn>
+                    <updateRate>${fps}</updateRate>
+                    <cameraName>${name}</cameraName>
+                    <imageTopicName>${image_topic_name}</imageTopicName>
+                    <cameraInfoTopicName>${camera_info_name}</cameraInfoTopicName>
+                    <frameName>${frame}_optical</frameName>
+                    <hackBaseline>0.07</hackBaseline>
+                    <distortionK1>0.0</distortionK1>
+                    <distortionK2>0.0</distortionK2>
+                    <distortionK3>0.0</distortionK3>
+                    <distortionT1>0.0</distortionT1>
+                    <distortionT2>0.0</distortionT2>
+                    </plugin>
+                </sensor>
+                </gazebo>
+            </xacro:macro>
+
+            <xacro:camera_feed frame="${child_frame}${id}" name="camera${id}" image_topic_name="image" camera_info_name="camera_info"/>
+
+            <joint name="${child_frame}_mount_joint${id}" type="fixed">
+                <child link="${child_frame}${id}"/>
+                <parent link="${parent_frame}"/>
+                <origin xyz="0 0 0" rpy="0 0 ${-1 * ((2 * pi) / 5) * id}"/>
+            </joint>
+        </xacro:macro>
+
+        <xacro:camera_feed_mount id="0" parent_frame="${parent}" child_frame="${child}"/>
+        <xacro:camera_feed_mount id="1" parent_frame="${parent}" child_frame="${child}"/>
+        <xacro:camera_feed_mount id="2" parent_frame="${parent}" child_frame="${child}"/>
+        <xacro:camera_feed_mount id="3" parent_frame="${parent}" child_frame="${child}"/>
+        <xacro:camera_feed_mount id="4" parent_frame="${parent}" child_frame="${child}"/>
+    
+    </xacro:macro>
+
+</robot>
