@@ -83,6 +83,7 @@ add_service_files(
   GenerateObj.srv
   DoExtraction.srv
   GetSafetyStates.srv
+  SaveObj.srv
 )
 
 ## Generate actions in the 'action' folder
