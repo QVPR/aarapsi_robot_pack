@@ -33,7 +33,8 @@ class Main_ROS_Class(Base_ROS_Class):
 
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
-        self.ODOM_TOPIC      = self.params.add(self.namespace + "/odom_topic",          None,     check_string,         force=False)
+        self.ODOM_TOPIC      = self.params.add(self.namespace + "/odom_topic",         None,      check_string,         force=False)
+        self.PUB_INFO        = self.params.add(self.nodespace + "/publish_info",       None,      check_bool,           force=False)
         self.SVM_OVERRIDE    = self.params.add(self.nodespace + "/svm_override",       False,     check_bool,           force=reset)
 
     def init_vars(self):
@@ -71,10 +72,10 @@ class Main_ROS_Class(Base_ROS_Class):
         self.gt_sub         = rospy.Subscriber(self.ODOM_TOPIC.get(),              Odometry,            self.gt_cb,          queue_size=1) # ONLY for ground truth
         self.state_sub      = rospy.Subscriber(self.namespace + '/state',          MonitorDetails,      self.state_cb,       queue_size=1)
         self.param_sub      = rospy.Subscriber(self.namespace + "/params_update",  String,              self.param_callback, queue_size=100)
-        self.info_pub       = self.add_pub(self.nodespace + '/info',      ControllerStateInfo,                      queue_size=1)
-        self.twist_pub      = self.add_pub('/twist2joy/in',               TwistStamped,                             queue_size=1)
-        self.ego_good_pub   = self.add_pub(self.nodespace + '/odom/good', Odometry,                                 queue_size=1)
-        self.ego_bad_pub    = self.add_pub(self.nodespace + '/odom/bad',  Odometry,                                 queue_size=1)
+        self.info_pub       = self.add_pub(self.nodespace + '/info',               ControllerStateInfo,                      queue_size=1)
+        self.twist_pub      = self.add_pub('/twist2joy/in',                        TwistStamped,                             queue_size=1)
+        self.ego_good_pub   = self.add_pub(self.nodespace + '/odom/good',          Odometry,                                 queue_size=1)
+        self.ego_bad_pub    = self.add_pub(self.nodespace + '/odom/bad',           Odometry,                                 queue_size=1)
         self.srv_path       = rospy.ServiceProxy(self.namespace + '/path',         GenerateObj)
         self.srv_safety     = rospy.ServiceProxy(self.namespace + '/safety',       GetSafetyStates)
         
@@ -236,17 +237,20 @@ class Main_ROS_Class(Base_ROS_Class):
 
         #self.print("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw))
         #self.print("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, angle_wrap(self.true_yaw - self.current_yaw)))
-
-        self.publish_controller_info() # requires self.state_msg
-
+        new_twist.twist.linear.x  = 0.2
+        ego_pub = self.ego_bad_pub
+        
         if self.state_msg.mStateBin == True or self.SVM_OVERRIDE.get():
             new_twist.twist.linear.x  = 0.5
-            self.ego_good_pub.publish(current_ego)
-        else:
-            new_twist.twist.linear.x  = 0.2
-            self.ego_bad_pub.publish(current_ego)
+            ego_pub = self.ego_good_pub
 
         self.twist_pub.publish(new_twist)
+
+        if not self.PUB_INFO.get():
+            return
+        
+        self.publish_controller_info() # requires self.state_msg
+        ego_pub.publish(current_ego)
 
 
 def do_args():
