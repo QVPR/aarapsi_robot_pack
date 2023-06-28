@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<launch>
+  <include file="$(find aarapsi_robot_pack)/launch/sim/gazebo.launch">
+  </include>
+
+  <include file="$(find aarapsi_robot_pack)/launch/sim/view_robot.launch">
+  </include>
+
+  <include file="$(find aarapsi_robot_pack)/launch/slam.launch">
+    <arg name="param_file" value="sim_cfg.yaml" />
+    <arg name="load_params" value="true" />
+  </include>
+
+  <node name="multicam_fusion" pkg="aarapsi_robot_pack" type="multicam_fusion.py" />
+</launch>

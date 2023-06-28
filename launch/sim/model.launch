@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name='launch_rsp' default='true'/>
+  
+  <param name="robot_description"
+         command="$(find aarapsi_robot_pack)/exe/env_run
+                    $(find aarapsi_robot_pack)/cfg/urdf/jackal
+                    $(find xacro)/xacro $(find aarapsi_robot_pack)/cfg/urdf/jackal.urdf.xacro" />
+  <node if='$(arg launch_rsp)' name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+</launch>
