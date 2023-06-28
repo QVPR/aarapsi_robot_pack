@@ -6,12 +6,15 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 
+from pyaarapsi.core.ros_tools       import Base_ROS_Class, LogType
+from pyaarapsi.core.helper_tools    import formatException
+
 ### Correct barrel distortion:
 ## needs revision; calibration, per-camera coefficients. all of this was a guessing game aided by a dirty GUI
 # Idea: https://stackoverflow.com/questions/26602981/correct-barrel-distortion-in-opencv-manually-without-chessboard-image
 # GUI: https://github.com/kaustubh-sadekar/VirtualCam
 
-class mrc: # main ROS class
+class Main_ROS_Class(Base_ROS_Class): # main ROS class
     def __init__(self):
 
         rospy.init_node('multicam_fusion', anonymous=False)
@@ -65,27 +68,30 @@ class mrc: # main ROS class
                 rospy.loginfo_throttle(15, 'Waiting... %s' % str(self.new_imgs))
                 rospy.sleep(0.001)
                 continue
+            try:
+                nmrc.rate_obj.sleep()
+                self.new_imgs = [False] * 5
 
-            nmrc.rate_obj.sleep()
-            self.new_imgs = [False] * 5
+                ## perform distortion removal:
+                corrected_imgs = [cv2.undistort(i, self.cam, self.distCoeff)[:, 30:-30] for i in self.imgs]
 
-            ## perform distortion removal:
-            corrected_imgs = [cv2.undistort(i, self.cam, self.distCoeff)[:, 30:-30] for i in self.imgs]
+                ## create panoramic image:
+                panorama = np.concatenate(corrected_imgs[3:] + corrected_imgs[:3], axis=1)[:-20,:]
+                corrected_pano = cv2.resize(panorama, (panorama.shape[1], int(panorama.shape[0]*1.5)), interpolation=cv2.INTER_AREA)
+                
+                
+                ## Publish to ROS for viewing pleasure (optional)
+                # convert to ROS message first
+                ros_pano = nmrc.bridge.cv2_to_compressed_imgmsg(corrected_pano, "png")\
+                # publish
+                nmrc.pub.publish(ros_pano)
 
-            ## create panoramic image:
-            panorama = np.concatenate(corrected_imgs[3:] + corrected_imgs[:3], axis=1)[:-20,:]
-            corrected_pano = cv2.resize(panorama, (panorama.shape[1], int(panorama.shape[0]*1.5)), interpolation=cv2.INTER_AREA)
-            
-            
-            ## Publish to ROS for viewing pleasure (optional)
-            # convert to ROS message first
-            ros_pano = nmrc.bridge.cv2_to_compressed_imgmsg(corrected_pano, "png")\
-            # publish
-            nmrc.pub.publish(ros_pano)
+            except:
+                self.print(formatException(), LogType.WARN)
 
 if __name__ == '__main__':
     try:
-        nmrc = mrc()
+        nmrc = Main_ROS_Class()
         nmrc.main()
         rospy.loginfo("Exit state reached.")
     except rospy.ROSInterruptException:

@@ -43,4 +43,7 @@
     <arg name="robot_yaw"   default="0.0" />
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
         args="-urdf -model jackal -param robot_description -x $(arg robot_x) -y $(arg robot_y) -z $(arg robot_z) -R 0 -P 0 -Y $(arg robot_yaw)" />
+
+    <!-- Add node to kill gazebo quickly -->
+    <node name='gazebo_watcher' pkg='aarapsi_robot_pack' type='gzlauncher'/>
 </launch>
