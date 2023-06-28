@@ -8,37 +8,45 @@ import time
 
 from bokeh.layouts import column, row
 from bokeh.models.widgets import Div
-from bokeh.models import Button, ColumnDataSource
+from bokeh.models import Button, ColumnDataSource, AjaxDataSource
 from bokeh.palettes import RdYlBu3
 from bokeh.plotting import figure, curdoc
 from bokeh.themes import Theme
 
-# def _callback(_in, doc):
-#     print(time.strftime("%H:%M:%S",time.localtime()))
+from pyaarapsi.core.ajax_tools          import GET_Method_Types, AJAX_Connection
+from pyaarapsi.core.enum_tools          import enum_name
+from pyaarapsi.core.helper_tools        import vis_dict
+from pyaarapsi.vpr_simple.vpr_plots_new import doOdomFigBokeh, updateOdomFigBokeh
 
-# def main(doc):
-#     p = figure(x_range=(0, 100), y_range=(0, 100), toolbar_location=None)
-#     data = {'x_values': [1, 2, 3, 4, 5],
-#         'y_values': [6, 7, 2, 3, 6]}
+print("\n...........................\n")
 
-#     source = ColumnDataSource(data=data)
-#     p.circle('x_values', 'y_values', source=source)
-#     doc.add_root(column(p))
-#     doc.theme = Theme(filename=os.path.dirname(os.path.abspath(__file__)) + "/theme.yaml")
-#     doc.add_periodic_callback(partial(_callback, _in=1, doc=doc), 100)
+ajax = AJAX_Connection(name='Bokeh')
 
-# main(curdoc())
+while not ajax.check_if_ready():
+    print('Waiting for AJAX database to finish initialisation...')
+    time.sleep(1)
 
-# Bokeh related code
-from bokeh.models import AjaxDataSource
+print("AJAX responsive.")
 
-source = AjaxDataSource(data_url='http://localhost:5050/data', polling_interval=100, method="GET", http_headers={'Request-Type': 'bokeh/odom'})
+headers = {
+            'Publisher-Name': 'bokeh', 
+            'Method-Type': 'Get',
+            'Data-Key': 'odom',
+            }
+source = AjaxDataSource(data_url='http://localhost:5050/data',
+                        polling_interval=100, http_headers=headers, method="GET")
 
 p = figure(height=300, width=800, background_fill_color="lightgrey",
            title="Streaming Noisy sin(x) via Ajax")
 p.circle('px', 'py', source=source)
+p.x_range.follow = "end"
+p.x_range.follow_interval = 10
 
-#p.x_range.follow = "end"
-#p.x_range.follow_interval = 10
+def test():
+    print(source.data.keys())
 
-curdoc().add_root(column(p))
+#odom_fig = doOdomFigBokeh(source)
+doc = curdoc()
+doc.theme = Theme(filename=os.path.dirname(__file__)+"/theme.yaml")
+doc.add_periodic_callback(test, 1)
+doc.add_root(p)

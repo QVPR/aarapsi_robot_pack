@@ -74,5 +74,11 @@ vpr_nodes:
   vpr_plotter:
     log_level: 2
     rate: 12.0
+
+  follower:
+    log_level: 2
+    rate: 12.0
+    publish_info: true
+
   
   z_config_file_name: "desktop_cfg"
