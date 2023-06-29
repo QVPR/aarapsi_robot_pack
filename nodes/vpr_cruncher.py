@@ -49,8 +49,8 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
         self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
         self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
 
-        self.path_msg               = None
-        self.ref_path_msg           = None
+        self.plan_path              = None
+        self.ref_path               = None
 
         # flags to denest main loop:
         self.new_query              = False # new query odom+image
@@ -70,7 +70,8 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
             self.print(formatException(), LogType.ERROR)
             self.exit()
 
-        self.generate_path(path=True, ref=True)
+        self.plan_path  = self.generate_path(dataset = self.path_dataset)
+        self.ref_path   = self.generate_path(dataset = self.ip.dataset)
 
     def init_rospy(self):
         super().init_rospy()
@@ -97,15 +98,16 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
         path = False
         ref = False
         if topic_name == self.namespace + '/path':
-            path = True
+            path = self.path_dataset
         elif topic_name == self.namespace + '/ref/path':
             ref = True
         if not self.main_ready:
-            self.generate_path(path=path, ref=ref)
+            self.plan_path  = self.generate_path(dataset = self.path_dataset)
+            self.ref_path   = self.generate_path(dataset = self.ip.dataset)
         if path:
-            self.path_pub.publish(self.path_msg)
+            self.path_pub.publish(self.plan_path)
         if ref:
-            self.ref_path_pub.publish(self.ref_path_msg)
+            self.ref_path_pub.publish(self.ref_path)
 
     def handle_GetPathPlan(self, req):
     # /vpr_nodes/path service
@@ -114,8 +116,10 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
 
         try:
             if req.generate == True:
-                self.generate_path(path=True)
-            self.path_pub.publish(self.path_msg)
+                self.plan_path  = self.generate_path(dataset = self.path_dataset)
+                self.ref_path   = self.generate_path(dataset = self.ip.dataset)
+            self.path_pub.publish(self.plan_path)
+            self.ref_path_pub.publish(self.ref_path)
         except:
             success = False
 
@@ -123,32 +127,6 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
         ans.topic = self.namespace + "/path"
         self.print("Service requested [Gen=%s], Success=%s" % (str(req.generate), str(success)), LogType.DEBUG)
         return ans
-
-    def generate_path(self, path=False, ref=False):
-        datasets = []
-        if path:
-            datasets.append((self.path_dataset['dataset'], 'path'))
-        if ref:
-            datasets.append((self.ip.dataset['dataset'], 'ref'))
-        
-        for i in datasets:
-            px      = i[0]['px']
-            py      = i[0]['py']
-            pw      = i[0]['pw']
-            time    = i[0]['time']
-            new_msg = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
-            for (c, (x, y, w, t)) in enumerate(zip(px, py, pw, time)):
-                if not c % 3 == 0:
-                    continue
-                new_pose = PoseStamped(header=Header(stamp=rospy.Time.from_sec(t), frame_id="map", seq=c))
-                new_pose.pose.position = Point(x=x, y=y, z=0)
-                new_pose.pose.orientation = q_from_yaw(w)
-                new_msg.poses.append(new_pose)
-                del new_pose
-            if i[1] == 'path':
-                self.path_msg = new_msg
-            elif i[1] == 'ref':
-                self.ref_path_msg = new_msg
 
     def update_VPR(self):
         dataset_dict = self.make_dataset_dict()
