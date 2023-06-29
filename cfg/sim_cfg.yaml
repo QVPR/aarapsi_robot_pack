@@ -82,5 +82,14 @@ vpr_nodes:
     rate: 12.0
     publish_info: true
 
+  slam_follower:
+    log_level: 2
+    rate: 12.0
+    noise: 
+      enable: true
+      vals:
+      - 0.1
+      - 0.1
+      - 0.1
   
-  z_config_file_name: "desktop_cfg"
+  z_config_file_name: "sim_cfg"
