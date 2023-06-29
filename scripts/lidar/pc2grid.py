@@ -89,6 +89,7 @@ class mrc:
         grid_msg.data                  = populated_grid
 
         self.og_pub.publish(grid_msg)
+        rospy.loginfo_throttle(5, 'Published new grid!')
 
 if __name__ == '__main__':
     nmrc = mrc()
