@@ -38,9 +38,9 @@
 
     <!-- Spawn Jackal -->
     <arg name="robot_x"     default="0.0"/>
-    <arg name="robot_y"     default="0.0"/>
+    <arg name="robot_y"     default="1.0"/>
     <arg name="robot_z"     default="0.2"/>
-    <arg name="robot_yaw"   default="0.0" />
+    <arg name="robot_yaw"   default="3.14" />
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
         args="-urdf -model jackal -param robot_description -x $(arg robot_x) -y $(arg robot_y) -z $(arg robot_z) -R 0 -P 0 -Y $(arg robot_yaw)" />
 
