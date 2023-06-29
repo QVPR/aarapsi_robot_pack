@@ -7,6 +7,7 @@ import numpy as np
 import sys
 import os
 import csv
+import copy
 from fastdist import fastdist
 
 from nav_msgs.msg import Path, Odometry
@@ -14,9 +15,10 @@ from std_msgs.msg import Header, ColorRGBA
 from geometry_msgs.msg import PoseStamped, Point, Twist, Vector3, Quaternion
 from visualization_msgs.msg import MarkerArray, Marker
 
-from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string, check_float_list
-from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, Base_ROS_Class, q_from_yaw, yaw_from_q, pose2xyw
-from pyaarapsi.core.helper_tools import formatException, Timer, angle_wrap, normalize_angle
+from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_string, check_float_list
+from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, Base_ROS_Class, q_from_yaw, yaw_from_q, pose2xyw
+from pyaarapsi.core.helper_tools            import formatException, Timer, angle_wrap, normalize_angle
+from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 
 '''
 SLAM Path Follower
@@ -41,7 +43,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.USE_NOISE  = self.params.add(self.nodespace + "/noise/enable", False,      check_bool,                          force=True)
         self.NOISE_VALS = self.params.add(self.nodespace + "/noise/vals",   [0.1]*3,    lambda x: check_float_list(x, 3),    force=True)
         self.REVERSE    = self.params.add(self.nodespace + "/reverse",      False,      check_bool,                          force=False)
-        self.PATH_FILE  = self.params.add(self.namespace + "/path_file",    None,       check_string,                        force=False)
+        self.PATH_FILE  = self.params.add(self.namespace + "/path/file",    None,       check_string,                        force=False)
 
     def init_vars(self):
         super().init_vars()
@@ -49,6 +51,19 @@ class Main_ROS_Class(Base_ROS_Class):
         self.ego        = []
         self.new_ego    = False
         self.lookahead  = 5
+
+        # Process path data
+        if self.PATH_FILE.get() == '':
+            try:
+                self.ip     = VPRDatasetProcessor(self.make_dataset_dict(path=True), try_gen=False, ros=True)
+            except:
+                self.print(formatException(), LogType.ERROR)
+                self.exit()
+
+            self.make_path_from_data()
+        else:
+            self.make_path_from_file()
+
 
     def init_rospy(self):
         super().init_rospy()
@@ -90,7 +105,7 @@ class Main_ROS_Class(Base_ROS_Class):
             self.ego   += np.random.rand(3) * np.array(self.NOISE_VALS.get())
         self.new_ego    = True
 
-    def make_path(self):
+    def make_path_from_file(self):
         self.root           = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + '/data/paths'
         with open(self.root + '/' + self.PATH_FILE.get()) as f:
             reader = csv.reader(f, quoting=csv.QUOTE_NONNUMERIC)
@@ -98,10 +113,22 @@ class Main_ROS_Class(Base_ROS_Class):
             x_data = data[0]
             y_data = data[1]
             w_data = data[2]
-            if self.REVERSE.get():
-                w_data = list(angle_wrap(np.pi + np.array(w_data), mode='RAD'))
             self.points = np.transpose(np.array([x_data, y_data, w_data]))
             f.close()
+        self.make_path()
+
+    def make_path_from_data(self):
+        px      = list(self.ip.dataset['dataset']['px'])
+        py      = list(self.ip.dataset['dataset']['py'])
+        pw      = list(self.ip.dataset['dataset']['pw'])
+
+        self.points = np.transpose(np.array([px, py, pw]))
+        self.make_path()
+
+    def make_path(self):
+        if self.REVERSE.get():
+            self.points[:,2] = list(angle_wrap(np.pi + self.points[:,2], mode='RAD'))
+            self.points = np.flipud(self.points)
 
         # Generate speed profile based on curvature of track:
         points_diff = np.abs(angle_wrap(np.roll(self.points[:,2], 1, 0) - np.roll(self.points[:,2], -1, 0), mode='RAD'))
@@ -110,9 +137,6 @@ class Main_ROS_Class(Base_ROS_Class):
         speeds = (1 - ((points_smooth - np.min(points_smooth)) / (np.max(points_smooth) - np.min(points_smooth)))) **2
 
         self.points = np.concatenate([self.points, speeds[:, np.newaxis]], axis=1)
-
-        if self.REVERSE.get():
-            self.points = np.flipud(self.points)
 
         self.path       = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
         self.speeds     = MarkerArray()
@@ -143,13 +167,11 @@ class Main_ROS_Class(Base_ROS_Class):
             self.path.poses.append(new_pose)
             self.speeds.markers.append(new_marker)
 
-        self.path_pub.publish(self.path)
-        self.speed_pub.publish(self.speeds)
-
     def main(self):
         self.set_state(NodeState.MAIN)
 
-        self.make_path()
+        self.path_pub.publish(self.path)
+        self.speed_pub.publish(self.speeds)
 
         while not self.new_ego:
             self.rate_obj.sleep()
