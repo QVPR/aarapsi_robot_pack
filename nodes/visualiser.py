@@ -93,7 +93,7 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_rospy(self):
         super().init_rospy()
         
-        self.control_sub     = rospy.Subscriber(self.namespace + "/follower/info",              ControllerStateInfo, self.control_callback, queue_size=1)
+        self.control_sub     = rospy.Subscriber(self.namespace + "/follower/info",     ControllerStateInfo, self.control_callback, queue_size=1)
         self.confidence_pub  = self.add_pub(self.namespace + '/confidence',            MarkerArray,                                queue_size=1)
         self.display_pub     = self.add_pub(self.namespace + '/display/compressed',    CompressedImage,                            queue_size=1)
 
