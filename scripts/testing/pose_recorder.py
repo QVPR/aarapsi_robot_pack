@@ -14,7 +14,7 @@ from geometry_msgs.msg import PoseStamped
 from aarapsi_robot_pack.srv import SaveObj, SaveObjResponse
 
 from pyaarapsi.core.argparse_tools      import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools           import NodeState, roslogger, LogType, Base_ROS_Class, xyw_from_pose, pose_covariance_to_stamped
+from pyaarapsi.core.ros_tools           import NodeState, roslogger, LogType, Base_ROS_Class, pose2xyw, pose_covariance_to_stamped
 from pyaarapsi.core.helper_tools        import formatException
 from pyaarapsi.core.file_system_tools   import scan_directory
 
@@ -119,14 +119,14 @@ class Main_ROS_Class(Base_ROS_Class):
         message type: nav_msgs/Odometry  
         '''
         if self.last_position is None:
-            self.last_position = xyw_from_pose(msg.pose.pose)
+            self.last_position = pose2xyw(msg.pose.pose)
             self.points.append(self.last_position)
             self.path.poses.append(pose_covariance_to_stamped(msg.pose))
             self.path.header.stamp = rospy.Time.now()
             self.path_pub.publish(self.path)
             return
         
-        new_pos = xyw_from_pose(msg.pose.pose)
+        new_pos = pose2xyw(msg.pose.pose)
 
         if not (np.sqrt(((new_pos[0] - self.last_position[0]) ** 2) + ((new_pos[1] - self.last_position[1]) ** 2)) > self.SEPARATION.get()):
             return
