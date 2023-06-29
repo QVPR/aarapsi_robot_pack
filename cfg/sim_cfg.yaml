@@ -13,13 +13,12 @@ vpr_nodes:
 
   slam_map: cpr_office_0_01res.pcd
 
-  path_file: cpr_office_loop_1.csv
-
   groundtruth: true
   path: 
     bag_name: s4_ccw_1
     odom_topic: /odom/true
     img_topic: /ros_indigosdk_occam/stitched_image0/compressed
+    file: cpr_office_loop_1.csv
 
   svm:
     qry:
