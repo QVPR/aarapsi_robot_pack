@@ -40,6 +40,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.USE_NOISE  = self.params.add(self.nodespace + "/noise/enable", False,      check_bool,                          force=True)
         self.NOISE_VALS = self.params.add(self.nodespace + "/noise/vals",   [0.1]*3,    lambda x: check_float_list(x, 3),    force=True)
+        self.REVERSE    = self.params.add(self.nodespace + "/reverse",      False,      check_bool,                          force=False)
         self.PATH_FILE  = self.params.add(self.namespace + "/path_file",    None,       check_string,                        force=False)
 
     def init_vars(self):
@@ -52,10 +53,11 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_rospy(self):
         super().init_rospy()
 
-        self.path_pub   = self.add_pub(     self.namespace + '/path',   Path,                   queue_size=1, latch=True)
-        self.speed_pub  = self.add_pub(     self.namespace + '/speeds', MarkerArray,            queue_size=1, latch=True)
-        self.odom_sub   = rospy.Subscriber(self.ODOM_TOPIC.get(),       Odometry, self.odom_cb, queue_size=1)
-        self.twist_pub  = self.add_pub(     '/cmd_vel',                 Twist,                  queue_size=1)
+        self.path_pub   = self.add_pub(     self.namespace + '/path',       Path,                   queue_size=1, latch=True)
+        self.goal_pub   = self.add_pub(     self.namespace + '/path_goal',  PoseStamped,            queue_size=1)
+        self.speed_pub  = self.add_pub(     self.namespace + '/speeds',     MarkerArray,            queue_size=1, latch=True)
+        self.odom_sub   = rospy.Subscriber(self.ODOM_TOPIC.get(),           Odometry, self.odom_cb, queue_size=1)
+        self.twist_pub  = self.add_pub(     '/cmd_vel',                     Twist,                  queue_size=1)
 
     def global2local(self):
         Tx  = self.points[:,0] - self.ego[0]
@@ -70,7 +72,7 @@ class Main_ROS_Class(Base_ROS_Class):
         rel_x, rel_y    = self.global2local()
 
         # 2. Find the nearest waypoint
-        distances       = fastdist.matrix_to_matrix_distance(self.points, np.matrix([self.ego[0], self.ego[1], self.ego[2]]), fastdist.euclidean, "euclidean").flatten()
+        distances       = fastdist.matrix_to_matrix_distance(self.points[:,0:3], np.matrix([self.ego[0], self.ego[1], self.ego[2]]), fastdist.euclidean, "euclidean").flatten()
         near_ind        = np.argmin(distances, axis=0)
 
         # 3. Find target index
@@ -96,6 +98,8 @@ class Main_ROS_Class(Base_ROS_Class):
             x_data = data[0]
             y_data = data[1]
             w_data = data[2]
+            if self.REVERSE.get():
+                w_data = list(angle_wrap(np.pi + np.array(w_data), mode='RAD'))
             self.points = np.transpose(np.array([x_data, y_data, w_data]))
             f.close()
 
@@ -107,6 +111,9 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.points = np.concatenate([self.points, speeds[:, np.newaxis]], axis=1)
 
+        if self.REVERSE.get():
+            self.points = np.flipud(self.points)
+
         self.path       = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
         self.speeds     = MarkerArray()
         _num = self.points.shape[0]
@@ -114,18 +121,26 @@ class Main_ROS_Class(Base_ROS_Class):
             new_pose = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id="map"))
 
             new_pose.pose.position = Point(x=self.points[i,0], y=self.points[i,1], z=0.0)
-            new_pose.pose.orientation = q_from_yaw(self.points[i,2])
-            self.path.poses.append(new_pose)
+            
 
             new_marker                      = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
             new_marker.type                 = new_marker.ARROW
             new_marker.action               = new_marker.ADD
             new_marker.id                   = i
-            new_marker.color                = ColorRGBA(r=0.859, b=0.220, g=0.094, a=1.000)
+            new_marker.color                = ColorRGBA(r=0.859, b=0.220, g=0.094, a=0.5)
             new_marker.scale                = Vector3(x=self.points[i,3], y=0.05, z=0.05)
 
             new_marker.pose.position        = Point(x=self.points[i,0], y=self.points[i,1], z=0.0)
-            new_marker.pose.orientation     = q_from_yaw(self.points[i,2] + np.pi/2)
+            if not self.REVERSE.get():
+                yaw = q_from_yaw(self.points[i,2] + np.pi/2)
+                
+            else:
+                yaw = q_from_yaw(self.points[i,2] - np.pi/2)
+
+            new_pose.pose.orientation       = q_from_yaw(self.points[i,2])
+            new_marker.pose.orientation     = yaw
+
+            self.path.poses.append(new_pose)
             self.speeds.markers.append(new_marker)
 
         self.path_pub.publish(self.path)
@@ -157,11 +172,16 @@ class Main_ROS_Class(Base_ROS_Class):
 
         error_y, error_yaw, ind = self.calc_error()
 
+        goal                    = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id='map'))
+        goal.pose.position      = Point(x=self.points[ind,0], y=self.points[ind,1], z=0.0)
+        goal.pose.orientation   = q_from_yaw(self.points[ind,2])
+
         new_msg             = Twist()
         new_msg.linear.x    = 0.5 * self.points[ind, 3] + 0.3
         new_msg.angular.z   = 0.7 * error_y
 
         self.twist_pub.publish(new_msg)
+        self.goal_pub.publish(goal)
 
 def do_args():
     parser = ap.ArgumentParser(prog="slam_follower.py", 
