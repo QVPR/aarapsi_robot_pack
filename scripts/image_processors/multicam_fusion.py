@@ -43,13 +43,18 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
 
         self.rate_obj           = rospy.Rate(self.rate_num)
 
-        rospy.Subscriber("/camera%d/image/compressed" % 0, CompressedImage, lambda msg: self.img_callback(0, msg), queue_size=1)
-        rospy.Subscriber("/camera%d/image/compressed" % 1, CompressedImage, lambda msg: self.img_callback(1, msg), queue_size=1)
-        rospy.Subscriber("/camera%d/image/compressed" % 2, CompressedImage, lambda msg: self.img_callback(2, msg), queue_size=1)
-        rospy.Subscriber("/camera%d/image/compressed" % 3, CompressedImage, lambda msg: self.img_callback(3, msg), queue_size=1)
-        rospy.Subscriber("/camera%d/image/compressed" % 4, CompressedImage, lambda msg: self.img_callback(4, msg), queue_size=1)
+        self.cam0_sub           = rospy.Subscriber("/camera%d/image/compressed" % 0, CompressedImage, lambda msg: self.img_callback(0, msg), queue_size=1)
+        self.cam1_sub           = rospy.Subscriber("/camera%d/image/compressed" % 1, CompressedImage, lambda msg: self.img_callback(1, msg), queue_size=1)
+        self.cam2_sub           = rospy.Subscriber("/camera%d/image/compressed" % 2, CompressedImage, lambda msg: self.img_callback(2, msg), queue_size=1)
+        self.cam3_sub           = rospy.Subscriber("/camera%d/image/compressed" % 3, CompressedImage, lambda msg: self.img_callback(3, msg), queue_size=1)
+        self.cam4_sub           = rospy.Subscriber("/camera%d/image/compressed" % 4, CompressedImage, lambda msg: self.img_callback(4, msg), queue_size=1)
 
-        self.pub                = rospy.Publisher("/ros_indigosdk_occam/stitched_image0/compressed", CompressedImage, queue_size=1)
+        self.pano_pub           = rospy.Publisher("/ros_indigosdk_occam/stitched_image0/compressed",    CompressedImage, queue_size=1)
+        self.cam0_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 0,        CompressedImage, queue_size=1)
+        self.cam1_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 1,        CompressedImage, queue_size=1)
+        self.cam2_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 2,        CompressedImage, queue_size=1)
+        self.cam3_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 3,        CompressedImage, queue_size=1)
+        self.cam4_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 4,        CompressedImage, queue_size=1)
 
     def img_callback(self, index, msg):
     # /ros_indigosdk_occam/image0/compressed (sensor_msgs/CompressedImage)
@@ -69,7 +74,7 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
                 rospy.sleep(0.001)
                 continue
             try:
-                nmrc.rate_obj.sleep()
+                self.rate_obj.sleep()
                 self.new_imgs = [False] * 5
 
                 ## perform distortion removal:
@@ -82,9 +87,14 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
                 
                 ## Publish to ROS for viewing pleasure (optional)
                 # convert to ROS message first
-                ros_pano = nmrc.bridge.cv2_to_compressed_imgmsg(corrected_pano, "png")\
+                ros_pano = self.bridge.cv2_to_compressed_imgmsg(corrected_pano, "png")\
                 # publish
-                nmrc.pub.publish(ros_pano)
+                self.pano_pub.publish(ros_pano)
+                self.cam0_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[0],"png"))
+                self.cam1_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[1],"png"))
+                self.cam2_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[2],"png"))
+                self.cam3_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[3],"png"))
+                self.cam4_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[4],"png"))
 
             except:
                 self.print(formatException(), LogType.WARN)
