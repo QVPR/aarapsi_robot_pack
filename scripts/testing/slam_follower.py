@@ -40,10 +40,11 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
 
-        self.USE_NOISE  = self.params.add(self.nodespace + "/noise/enable", False,      check_bool,                          force=True)
-        self.NOISE_VALS = self.params.add(self.nodespace + "/noise/vals",   [0.1]*3,    lambda x: check_float_list(x, 3),    force=True)
-        self.REVERSE    = self.params.add(self.nodespace + "/reverse",      False,      check_bool,                          force=False)
-        self.PATH_FILE  = self.params.add(self.namespace + "/path/file",    None,       check_string,                        force=False)
+        self.USE_NOISE      = self.params.add(self.nodespace + "/noise/enable", False,      check_bool,                          force=True)
+        self.NOISE_VALS     = self.params.add(self.nodespace + "/noise/vals",   [0.1]*3,    lambda x: check_float_list(x, 3),    force=True)
+        self.REVERSE        = self.params.add(self.nodespace + "/reverse",      False,      check_bool,                          force=False)
+        self.PATH_FILE      = self.params.add(self.namespace + "/path/file",    None,       check_string,                        force=False)
+        self.PATH_DENSITY   = self.params.add(self.namespace + "/path/density", None,       check_positive_float,                force=False)
 
     def init_vars(self):
         super().init_vars()
@@ -130,6 +131,18 @@ class Main_ROS_Class(Base_ROS_Class):
             self.points[:,2] = list(angle_wrap(np.pi + self.points[:,2], mode='RAD'))
             self.points = np.flipud(self.points)
 
+        dists = np.round(fastdist.matrix_to_matrix_distance(self.points[:,0:2], self.points[:,0:2], fastdist.euclidean, "euclidean"),1)
+        _len  = dists.shape[0]
+        dists = dists + np.eye(_len)
+        inds_to_bin = []
+        for i in range(_len):
+            if i in inds_to_bin:
+                continue
+            inds_to_bin += np.argwhere(dists[i,:]<self.PATH_DENSITY.get()).flatten().tolist()
+        
+        inds_to_bin = np.unique(inds_to_bin).tolist()
+        self.points = np.delete(self.points, inds_to_bin, 0)
+
         # Generate speed profile based on curvature of track:
         points_diff = np.abs(angle_wrap(np.roll(self.points[:,2], 1, 0) - np.roll(self.points[:,2], -1, 0), mode='RAD'))
         k_rad = 5
@@ -144,9 +157,8 @@ class Main_ROS_Class(Base_ROS_Class):
         for i in range(_num):
             new_pose = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id="map"))
 
-            new_pose.pose.position = Point(x=self.points[i,0], y=self.points[i,1], z=0.0)
+            new_pose.pose.position          = Point(x=self.points[i,0], y=self.points[i,1], z=0.0)
             
-
             new_marker                      = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
             new_marker.type                 = new_marker.ARROW
             new_marker.action               = new_marker.ADD
