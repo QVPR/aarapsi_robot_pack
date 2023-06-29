@@ -14,7 +14,7 @@ from std_msgs.msg import String
 from fastdist import fastdist
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools       import Base_ROS_Class, roslogger, LogType, NodeState, yaw_from_q, q_from_yaw, set_rospy_log_lvl
+from pyaarapsi.core.ros_tools       import Base_ROS_Class, roslogger, LogType, NodeState, yaw_from_q, q_from_yaw, pose2xyw
 from pyaarapsi.core.helper_tools    import formatException, angle_wrap
 
 from aarapsi_robot_pack.srv import GenerateObj, GenerateObjRequest, GetSafetyStates, GetSafetyStatesRequest
@@ -94,14 +94,9 @@ class Main_ROS_Class(Base_ROS_Class):
         except:
             rospy.logerr(formatException())
 
-    def pose2xyw(self, pose, stamped=False):
-        if stamped:
-            pose = pose.pose
-        return [pose.position.x, pose.position.y, yaw_from_q(pose.orientation)]
-
     def path_process(self):
     # Abstracted to separate function as the for loop execution time may be long
-        self.path_array     = np.array([self.pose2xyw(pose, stamped=True) for pose in self.path_msg.poses])
+        self.path_array     = np.array([pose2xyw(pose, stamped=True) for pose in self.path_msg.poses])
         self.path_processed = True
 
     def gt_cb(self, msg):
@@ -212,12 +207,12 @@ class Main_ROS_Class(Base_ROS_Class):
         current_ego.pose.pose.position.y  = self.vpr_ego[1]
         current_ego.pose.pose.orientation = q_from_yaw(self.vpr_ego[2])
 
-        new_twist           = TwistStamped()
-        new_twist.header.stamp = rospy.Time.now()
-        new_twist.header.frame_id = "odom"
-        self.delta_yaw      = angle_wrap(yaw_from_q(self.sensor_msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_msg.pose.pose.orientation))
-        self.current_yaw    = angle_wrap(0.5 * angle_wrap(self.current_yaw + self.vpr_ego[2]) + self.delta_yaw)
-        new_twist.twist.angular.z = -1 * angle_wrap(self.target_yaw - self.current_yaw)
+        new_twist                   = TwistStamped()
+        new_twist.header.stamp      = rospy.Time.now()
+        new_twist.header.frame_id   = "odom"
+        self.delta_yaw              = angle_wrap(yaw_from_q(self.sensor_msg.pose.pose.orientation) - yaw_from_q(self.old_sensor_msg.pose.pose.orientation))
+        self.current_yaw            = angle_wrap(0.5 * angle_wrap(self.current_yaw + self.vpr_ego[2]) + self.delta_yaw)
+        new_twist.twist.angular.z   = -1 * angle_wrap(self.target_yaw - self.current_yaw)
 
         #self.print("Target: %0.2f, Current: %0.2f" % (self.target_yaw, self.current_yaw))
         #self.print("True Current: %0.2f, Error: %0.2f" % (self.true_yaw, angle_wrap(self.true_yaw - self.current_yaw)))
