@@ -10,12 +10,13 @@ import csv
 from fastdist import fastdist
 
 from nav_msgs.msg import Path, Odometry
-from std_msgs.msg import Header
-from geometry_msgs.msg import PoseStamped, Point, Twist
+from std_msgs.msg import Header, ColorRGBA
+from geometry_msgs.msg import PoseStamped, Point, Twist, Vector3, Quaternion
+from visualization_msgs.msg import MarkerArray, Marker
 
-from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, Base_ROS_Class, q_from_yaw, yaw_from_q, xyw_from_pose
-from pyaarapsi.core.helper_tools import formatException, Timer
+from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string, check_float_list
+from pyaarapsi.core.ros_tools import NodeState, roslogger, LogType, Base_ROS_Class, q_from_yaw, yaw_from_q, pose2xyw
+from pyaarapsi.core.helper_tools import formatException, Timer, angle_wrap, normalize_angle
 
 '''
 SLAM Path Follower
@@ -37,7 +38,9 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
 
-        self.PATH_FILE      = self.params.add(self.namespace + "/path_file", None, check_string, force=False)
+        self.USE_NOISE  = self.params.add(self.nodespace + "/noise/enable", False,      check_bool,                          force=True)
+        self.NOISE_VALS = self.params.add(self.nodespace + "/noise/vals",   [0.1]*3,    lambda x: check_float_list(x, 3),    force=True)
+        self.PATH_FILE  = self.params.add(self.namespace + "/path_file",    None,       check_string,                        force=False)
 
     def init_vars(self):
         super().init_vars()
@@ -50,18 +53,9 @@ class Main_ROS_Class(Base_ROS_Class):
         super().init_rospy()
 
         self.path_pub   = self.add_pub(     self.namespace + '/path',   Path,                   queue_size=1, latch=True)
+        self.speed_pub  = self.add_pub(     self.namespace + '/speeds', MarkerArray,            queue_size=1, latch=True)
         self.odom_sub   = rospy.Subscriber(self.ODOM_TOPIC.get(),       Odometry, self.odom_cb, queue_size=1)
         self.twist_pub  = self.add_pub(     '/cmd_vel',                 Twist,                  queue_size=1)
-
-    def normalize_angle(self, angle):
-        # Normalize angle [-pi, +pi]
-        if angle > np.pi:
-            norm_angle = angle - 2*np.pi
-        elif angle < -np.pi:
-            norm_angle = angle + 2*np.pi
-        else:
-            norm_angle = angle
-        return norm_angle
 
     def global2local(self):
         Tx  = self.points[:,0] - self.ego[0]
@@ -73,7 +67,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
     def calc_error(self):
         # 1. Global to relative coordinate
-        rel_x, rel_y  = self.global2local()
+        rel_x, rel_y    = self.global2local()
 
         # 2. Find the nearest waypoint
         distances       = fastdist.matrix_to_matrix_distance(self.points, np.matrix([self.ego[0], self.ego[1], self.ego[2]]), fastdist.euclidean, "euclidean").flatten()
@@ -84,12 +78,14 @@ class Main_ROS_Class(Base_ROS_Class):
 
         # 4. Calculate errors
         error_yaw       = np.arctan2(rel_y[target_ind], rel_x[target_ind])
-        error_yaw       = self.normalize_angle(error_yaw) # Normalize angle to [-pi, +pi]
+        error_yaw       = normalize_angle(error_yaw) # Normalize angle to [-pi, +pi]
         error_y         = rel_y[target_ind]
-        return error_y, error_yaw
+        return error_y, error_yaw, near_ind
 
     def odom_cb(self, msg):
-        self.ego        = xyw_from_pose(msg.pose.pose)
+        self.ego        = pose2xyw(msg.pose.pose)
+        if self.USE_NOISE.get():
+            self.ego   += np.random.rand(3) * np.array(self.NOISE_VALS.get())
         self.new_ego    = True
 
     def make_path(self):
@@ -102,15 +98,38 @@ class Main_ROS_Class(Base_ROS_Class):
             w_data = data[2]
             self.points = np.transpose(np.array([x_data, y_data, w_data]))
             f.close()
-        
-        self.path = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
-        for i in self.points:
+
+        # Generate speed profile based on curvature of track:
+        points_diff = np.abs(angle_wrap(np.roll(self.points[:,2], 1, 0) - np.roll(self.points[:,2], -1, 0), mode='RAD'))
+        k_rad = 5
+        points_smooth = np.sum([np.roll(points_diff, i, 0) for i in np.arange(2*k_rad + 1)-k_rad], axis=0)
+        speeds = (1 - ((points_smooth - np.min(points_smooth)) / (np.max(points_smooth) - np.min(points_smooth)))) **2
+
+        self.points = np.concatenate([self.points, speeds[:, np.newaxis]], axis=1)
+
+        self.path       = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
+        self.speeds     = MarkerArray()
+        _num = self.points.shape[0]
+        for i in range(_num):
             new_pose = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id="map"))
-            new_pose.pose.position = Point(x=i[0], y=i[1], z=0.0)
-            new_pose.pose.orientation = q_from_yaw(i[2])
+
+            new_pose.pose.position = Point(x=self.points[i,0], y=self.points[i,1], z=0.0)
+            new_pose.pose.orientation = q_from_yaw(self.points[i,2])
             self.path.poses.append(new_pose)
 
+            new_marker                      = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
+            new_marker.type                 = new_marker.ARROW
+            new_marker.action               = new_marker.ADD
+            new_marker.id                   = i
+            new_marker.color                = ColorRGBA(r=0.859, b=0.220, g=0.094, a=1.000)
+            new_marker.scale                = Vector3(x=self.points[i,3], y=0.05, z=0.05)
+
+            new_marker.pose.position        = Point(x=self.points[i,0], y=self.points[i,1], z=0.0)
+            new_marker.pose.orientation     = q_from_yaw(self.points[i,2] + np.pi/2)
+            self.speeds.markers.append(new_marker)
+
         self.path_pub.publish(self.path)
+        self.speed_pub.publish(self.speeds)
 
     def main(self):
         self.set_state(NodeState.MAIN)
@@ -136,10 +155,10 @@ class Main_ROS_Class(Base_ROS_Class):
         self.rate_obj.sleep()
         self.new_ego  = False
 
-        error_y, error_yaw = self.calc_error()
+        error_y, error_yaw, ind = self.calc_error()
 
         new_msg             = Twist()
-        new_msg.linear.x    = 0.8
+        new_msg.linear.x    = 0.5 * self.points[ind, 3] + 0.3
         new_msg.angular.z   = 0.7 * error_y
 
         self.twist_pub.publish(new_msg)
