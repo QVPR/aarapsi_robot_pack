@@ -91,5 +91,6 @@ vpr_nodes:
       - 0.1
       - 0.1
       - 0.1
+      reverse: false
   
   z_config_file_name: "sim_cfg"
