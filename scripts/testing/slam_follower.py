@@ -40,11 +40,13 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
 
-        self.USE_NOISE      = self.params.add(self.nodespace + "/noise/enable", False,      check_bool,                          force=True)
-        self.NOISE_VALS     = self.params.add(self.nodespace + "/noise/vals",   [0.1]*3,    lambda x: check_float_list(x, 3),    force=True)
-        self.REVERSE        = self.params.add(self.nodespace + "/reverse",      False,      check_bool,                          force=False)
-        self.PATH_FILE      = self.params.add(self.namespace + "/path/file",    None,       check_string,                        force=False)
-        self.PATH_DENSITY   = self.params.add(self.namespace + "/path/density", None,       check_positive_float,                force=False)
+        self.USE_NOISE      = self.params.add(self.nodespace + "/noise/enable",             False,      check_bool,                          force=True)
+        self.NOISE_VALS     = self.params.add(self.nodespace + "/noise/vals",               [0.1]*3,    lambda x: check_float_list(x, 3),    force=True)
+        self.REVERSE        = self.params.add(self.nodespace + "/reverse",                  False,      check_bool,                          force=False)
+        self.PATH_FILE      = self.params.add(self.namespace + "/path/file",                None,       check_string,                        force=False)
+        self.PATH_DENSITY   = self.params.add(self.namespace + "/path/density",             None,       check_positive_float,                force=False)
+        self.LIN_VEL_MAX    = self.params.add(self.namespace + "/limits/linear_velocity",   None,       check_positive_float,                force=False)
+        self.ANG_VEL_MAX    = self.params.add(self.namespace + "/limits/angular_velocity",  None,       check_positive_float,                force=False)
 
     def init_vars(self):
         super().init_vars()
@@ -211,8 +213,8 @@ class Main_ROS_Class(Base_ROS_Class):
         goal.pose.orientation   = q_from_yaw(self.points[ind,2])
 
         new_msg             = Twist()
-        new_msg.linear.x    = 0.5 * self.points[ind, 3] + 0.3
-        new_msg.angular.z   = 0.7 * error_y
+        new_msg.linear.x    = np.min([(0.8 * self.points[ind, 3] + 0.4) * self.LIN_VEL_MAX.get()])
+        new_msg.angular.z   = np.min([0.7 * error_y * self.LIN_VEL_MAX.get()])
 
         self.twist_pub.publish(new_msg)
         self.goal_pub.publish(goal)

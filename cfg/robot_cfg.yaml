@@ -13,6 +13,10 @@ vpr_nodes:
 
   slam_map: s11_center_map.pcd
 
+  limits:
+    linear_velocity: 0.2
+    angular_velocity: 0.2
+
   groundtruth: true
   path: 
     bag_name: s4_ccw_1

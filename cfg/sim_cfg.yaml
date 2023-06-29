@@ -13,6 +13,10 @@ vpr_nodes:
 
   slam_map: cpr_office_0_01res.pcd
 
+  limits:
+    linear_velocity: 0.8
+    angular_velocity: 0.4
+
   groundtruth: true
   path: 
     bag_name: s4_ccw_1
