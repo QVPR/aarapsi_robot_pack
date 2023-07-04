@@ -22,7 +22,7 @@
     <group ns="$(arg namespace)">
 
         <!-- Param Watcher Node: -->
-        <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
+        <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
                 args="-V $(arg log_level) -R $(arg reset) -ID 1"/>
 
     </group>
