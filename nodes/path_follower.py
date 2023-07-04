@@ -129,7 +129,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.new_vpr_ego        = False
         self.autonomous_cmd     = False
 
-        self.mode               = Safety_Mode.STOP
+        self.safety_mode        = Safety_Mode.STOP
 
         self.enable_ind         = enum_value(PS4_Buttons.X)
         self.disable_ind        = enum_value(PS4_Buttons.O)
@@ -218,9 +218,9 @@ class Main_ROS_Class(Base_ROS_Class):
                         self.autonomous_cmd = False
                 elif msg.data == self.SAFETY_OVERRIDE.name:
                     if not self.SAFETY_OVERRIDE.get() == Safety_Mode.UNSET:
-                        self.mode = self.SAFETY_OVERRIDE.get()
+                        self.safety_mode = self.SAFETY_OVERRIDE.get()
                     else:
-                        self.mode = Safety_Mode.STOP
+                        self.safety_mode = Safety_Mode.STOP
 
         else:
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
@@ -455,14 +455,14 @@ class Main_ROS_Class(Base_ROS_Class):
             auto_mode_string = C_I_RED + 'ENABLED' + C_RESET
         else:
             auto_mode_string = C_I_GREEN + 'DISABLED' + C_RESET
-        if self.mode == Safety_Mode.STOP:
+        if self.safety_mode == Safety_Mode.STOP:
             safety_mode_string = C_I_GREEN + 'STOPPED' + C_RESET
-        elif self.mode == Safety_Mode.SLOW:
+        elif self.safety_mode == Safety_Mode.SLOW:
             safety_mode_string = C_I_YELLOW + 'SLOW MODE' + C_RESET
-        elif self.mode == Safety_Mode.FAST:
+        elif self.safety_mode == Safety_Mode.FAST:
             safety_mode_string = C_I_RED + 'FAST MODE' + C_RESET
         else:
-            raise Exception('Bad mode state, %s' % str(self.mode))
+            raise Exception('Bad mode state, %s' % str(self.safety_mode))
 
         base_pos_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '% 5.2f ' for i in 'xyw']) + C_RESET
         vpr_pos_string  = base_pos_string % tuple(self.vpr_ego)
@@ -529,10 +529,10 @@ class Main_ROS_Class(Base_ROS_Class):
         goal.pose.orientation   = q_from_yaw(self.points[current_ind,2])
         self.goal_pub.publish(goal)
 
-        if self.mode == Safety_Mode.SLOW:
+        if self.safety_mode == Safety_Mode.SLOW:
             lin_max = self.SLOW_LIN_VEL_MAX.get()
             ang_max = self.SLOW_LIN_VEL_MAX.get()
-        elif self.mode == Safety_Mode.FAST:
+        elif self.safety_mode == Safety_Mode.FAST:
             lin_max = self.FAST_LIN_VEL_MAX.get()
             ang_max = self.FAST_LIN_VEL_MAX.get()
         else:
