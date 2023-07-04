@@ -6,7 +6,7 @@
     <arg name="launch_cruncher"         default="true"/>
     <arg name="launch_trainer"          default="true"/>
 
-    <arg name="offline"                 default="false"/>
+    <arg name="load_params"             default="false"/>
 
     <arg name="main_rate"               default="12.0"/>
     <arg name="anon"                    default="True"/>
@@ -15,9 +15,11 @@
     <arg name="namespace"               default="/vpr_nodes"/>
 
     <arg name="log_level"               default="2"/>
+    <arg name="param_file"              default="sim_cfg.yaml"/>
 
-    <group if="$(arg offline)">
-        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/pipeline_config.yaml"/> 
+    <group if="$(arg load_params)">
+        <!-- Load in params; must be done outside of a namespace -->
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
     </group>
     
     <group ns="$(arg namespace)">

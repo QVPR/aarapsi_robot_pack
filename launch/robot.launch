@@ -15,34 +15,44 @@
     <arg name="log_level"               default="2"/>
     <arg name="reset"                   default="True"/>
 
+    <!-- Load in params; must be done outside of a namespace -->
     <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
 
     <group ns="$(arg namespace)">
         <!-- SLAM Nodes: -->
         <group if="$(arg launch_slam)">
             <include file="$(find aarapsi_robot_pack)/launch/slam.launch">
-                <arg name="load_params" value="false"/>
-                <arg name="param_file"  value="$(arg param_file)"/>
-                <arg name="log_level"   value="$(arg log_level)"/>
-                <arg name="reset"       value="$(arg reset)"/>
+                <arg name="log_level"           value="$(arg log_level)"/>
+                <arg name="reset"               value="$(arg reset)"/>
             </include>
         </group>
 
         <!-- Web Server, Parameter Watcher, Image+Odom Aggregator, Image Throttle Nodes: -->
         <group if="$(arg launch_init)">
             <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_initialisation.launch">
-                <arg name="log_level"   value="$(arg log_level)"/>
-                <arg name="reset"       value="$(arg reset)"/>
+                <arg name="log_level"           value="$(arg log_level)"/>
+                <arg name="reset"               value="$(arg reset)"/>
             </include>
         </group>
 
         <!-- Core Pipeline Nodes: -->
         <group if="$(arg launch_core)">
             <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_pipeline.launch">
-                <arg name="use_gpu"     value="$(arg use_gpu)"/>
-                <arg name="log_level"   value="$(arg log_level)"/>
-                <arg name="reset"       value="$(arg reset)"/>
-                <!-- Autonomous Nodes: -->
+                <arg name="launch_webserver"    value="false"/>
+                <arg name="launch_throttle"     value="false"/>
+                <arg name="launch_img_odom_agg" value="false"/>
+                <arg name="launch_paramwatcher" value="false"/>
+                <arg name="use_gpu"             value="$(arg use_gpu)"/>
+                <arg name="log_level"           value="$(arg log_level)"/>
+                <arg name="reset"               value="$(arg reset)"/>
+            </include>
+        </group>
+        
+        <!-- Autonomous Nodes: -->
+        <group if="$(arg launch_auto)">
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/path_follower.launch">
+                <arg name="log_level"           value="$(arg log_level)"/>
+                <arg name="reset"               value="$(arg reset)"/>
             </include>
         </group>
     </group>

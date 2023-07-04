@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!-- 
-    Plotter launch file
+    VPR Path follower launch file
  -->
 <launch>
 
@@ -12,10 +12,8 @@
 
     <arg name="namespace"               default="/vpr_nodes"/>
 
-    <arg name="plotter_port"            default="5006"/>
-    <arg name="plotter_address"         default="0.0.0.0"/>
-
-    <arg name="log_level"               default="2"/> <!-- 1: Debug, 2: Info, 4: Warn, 8: Error, 16: Fatal -->
+    <arg name="log_level"               default="2"/>
+    <arg name="param_file"              default="sim_cfg.yaml"/>
 
     <group if="$(arg load_params)">
         <!-- Load in params; must be done outside of a namespace -->
@@ -25,8 +23,8 @@
     <group ns="$(arg namespace)">
 
         <!-- Plotter Node: -->
-        <node pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
-            args="-P $(arg plotter_port) -A $(arg plotter_address) -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 8">
+        <node pkg="aarapsi_robot_pack" type="path_follower.py" name="path_follower" output="screen" 
+            args="-r $(arg main_rate) -N path_follower -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 10">
         </node>
 
     </group>
