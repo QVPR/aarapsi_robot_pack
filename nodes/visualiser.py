@@ -16,11 +16,12 @@ from aarapsi_robot_pack.msg import ControllerStateInfo
 from sensor_msgs.msg        import CompressedImage
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_positive_int, check_bool, check_string
-from pyaarapsi.core.ros_tools               import Base_ROS_Class, NodeState, roslogger, LogType, set_rospy_log_lvl, q_from_yaw
+from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, set_rospy_log_lvl, q_from_yaw
 from pyaarapsi.core.helper_tools            import formatException, angle_wrap, uint8_list_to_np_ndarray, vis_dict
-from pyaarapsi.core.enum_tools              import enum_name
+from pyaarapsi.core.enum_tools              import enum_name, enum_value_options
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.vpr_image_methods import convert_img_to_uint8, label_image, apply_icon
+from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
 
 import matplotlib
 matplotlib.use('Agg')
@@ -39,15 +40,14 @@ to reduce interruptions to normal pipeline execution.
 '''
 
 class Main_ROS_Class(Base_ROS_Class):
-    def __init__(self, node_name, rate_num, namespace, anon, log_level, reset, order_id=0):
-        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs, throttle=30)
 
-        self.init_params(rate_num, log_level, reset)
+        self.init_params(kwargs['rate_num'], kwargs['log_level'], kwargs['reset'])
         self.init_vars()
         self.init_rospy()
-
-        self.main_ready      = True
-        rospy.set_param(self.namespace + '/launch_step', order_id + 1)
+        
+        self.node_ready(kwargs['order_id'])
 
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
@@ -323,24 +323,20 @@ def do_args():
     parser = ap.ArgumentParser(prog="visualiser.py", 
                             description="ROS Visualiser Node",
                             epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-    parser.add_argument('--node-name',        '-N',  type=check_string,                 default="visualiser",     help="Specify node name (default: %(default)s).")
-    parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=10.0,             help='Specify node rate (default: %(default)s).')
-    parser.add_argument('--anon',             '-a',  type=check_bool,                   default=False,            help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
-    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16],    default=2,                help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--reset',            '-R',  type=check_bool,                   default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
-    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
+    
+    # Optional Arguments:
+    parser = base_optional_args(parser, node_name='visualiser')
 
-    raw_args = parser.parse_known_args()
-    return vars(raw_args[0])
+    # Parse args...
+    return vars(parser.parse_known_args()[0])
 
 if __name__ == '__main__':
     try:
         args = do_args()
-        nmrc = Main_ROS_Class(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'], order_id=args['order_id'])
-        nmrc.print("Initialisation complete. Generating visualisations...")
+        nmrc = Main_ROS_Class(**args)
+        nmrc.print("Initialisation complete.", LogType.INFO)
         nmrc.main()
-        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
+        nmrc.print("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
     except SystemExit as e:
         pass

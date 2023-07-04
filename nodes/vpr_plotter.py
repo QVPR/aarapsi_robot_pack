@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 
 import rospy
-from std_msgs.msg import String
 import numpy as np
 import rospkg
 import argparse as ap
 import os
-import sys
 
 from aarapsi_robot_pack.msg import MonitorDetails, ImageDetails
 
-from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
-from pyaarapsi.vpr_simple.vpr_plots              import doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, doXYWVFigBokeh, \
-                                                        updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
+from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
+from pyaarapsi.vpr_simple.vpr_plots         import doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, doXYWVFigBokeh, \
+                                                    updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
 
-from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_int, check_valid_ip, check_string
-from pyaarapsi.core.helper_tools    import formatException, vis_dict
-from pyaarapsi.core.ros_tools       import Base_ROS_Class, set_rospy_log_lvl, NodeState, LogType
+from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_positive_int, check_valid_ip, check_string
+from pyaarapsi.core.helper_tools            import formatException, vis_dict
+from pyaarapsi.core.ros_tools               import set_rospy_log_lvl, NodeState, LogType
+from pyaarapsi.core.enum_tools              import enum_value_options
+from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
 
 from functools import partial
 from bokeh.layouts import column, row
@@ -27,17 +27,14 @@ from bokeh.themes import Theme
 import logging
 
 class Main_ROS_Class(Base_ROS_Class):
-    def __init__(self, rate_num, namespace, node_name, anon, log_level, reset, order_id=0):
-        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30, disable_signals=True)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs, throttle=30)
 
-        self.init_params(rate_num, log_level, reset)
+        self.init_params(kwargs['rate_num'], kwargs['log_level'], kwargs['reset'])
         self.init_vars()
         self.init_rospy()
-
-        # Last item as it sets a flag that enables main loop execution.
-        self.main_ready = True
-        rospy.set_param(self.namespace + '/launch_step', order_id + 1)
-        self.set_state(NodeState.MAIN)
+        
+        self.node_ready(kwargs['order_id'])
 
     def init_vars(self):
         super().init_vars()
@@ -138,7 +135,7 @@ class Doc_Frame:
         self.fig_svmm_handles = doSVMMFigBokeh(self.num_points) # Make SVM metrics figure
         
 
-def main_loop(nmrc, doc_frame):
+def main_loop(nmrc: Main_ROS_Class, doc_frame: Doc_Frame):
     # Main loop process
 
     if not (nmrc.new_state and nmrc.main_ready): # denest
@@ -201,26 +198,21 @@ def do_args():
     parser = ap.ArgumentParser(prog="vpr_plotter", 
                                description="ROS implementation of QVPR's VPR Primer: Plotting Extension",
                                epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-    parser.add_argument('--port',             '-P',  type=check_positive_int,        default=5006,             help='Set bokeh server port  (default: %(default)s).')
-    parser.add_argument('--address',          '-A',  type=check_valid_ip,            default='0.0.0.0',        help='Set bokeh server address (default: %(default)s).')
-    parser.add_argument('--rate',             '-r',  type=check_positive_float,      default=10.0,             help='Set node rate (default: %(default)s).')
-    parser.add_argument('--node-name',        '-N',  type=check_string,              default="vpr_plotter",    help="Specify node name (default: %(default)s).")
-    parser.add_argument('--anon',             '-a',  type=check_bool,                default=True,             help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',        '-n',  type=check_string,              default="/vpr_nodes",     help="Specify namespace for topics (default: %(default)s).")
-    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16], default=2,                help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--reset',            '-R',  type=check_bool,                default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
-    parser.add_argument('--order-id',         '-ID', type=int,                       default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
+    
+    # Optional Arguments:
+    parser = base_optional_args(parser, node_name='vpr_plotter')
+    parser.add_argument('--port',    '-P',  type=check_positive_int, default=5006,      help='Set bokeh server port  (default: %(default)s).')
+    parser.add_argument('--address', '-A',  type=check_valid_ip,     default='0.0.0.0', help='Set bokeh server address (default: %(default)s).')
+    
     # Parse args...
-    raw_args = parser.parse_known_args()
-    return vars(raw_args[0])
+    return vars(parser.parse_known_args()[0])
 
 if __name__ == '__main__':
     os.environ['BOKEH_ALLOW_WS_ORIGIN'] = '0.0.0.0,131.181.33.60'
     logging.getLogger('bokeh').setLevel(logging.ERROR) # hide bokeh superfluous messages
 
     args = do_args()
-    nmrc = Main_ROS_Class(rate_num=args['rate'], namespace=args['namespace'], \
-                    node_name=args['node_name'], anon=args['anon'], log_level=args['log_level'], reset=args['reset'], order_id=args['order_id'])
+    nmrc = Main_ROS_Class(**args)
     nmrc.print("[ROS Base] Ready.")
     server = Server({'/': lambda doc: main(doc, nmrc)}, num_procs=1, address=args['address'], port=args['port'])
     server.start()

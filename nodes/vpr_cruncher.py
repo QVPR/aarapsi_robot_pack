@@ -2,55 +2,48 @@
 
 import rospy
 
-from nav_msgs.msg import Odometry, Path
-from geometry_msgs.msg import PoseStamped, Point
-from std_msgs.msg import String, Header
-
 from fastdist import fastdist
-import cv2
 import numpy as np
 import argparse as ap
 import sys
-import copy
 
 from rospy_message_converter import message_converter
-from aarapsi_robot_pack.srv import GenerateObj, GenerateObjResponse, DoExtraction, DoExtractionRequest
+from aarapsi_robot_pack.srv import DoExtraction, DoExtractionRequest
 from aarapsi_robot_pack.msg import RequestDataset, ResponseDataset, xyw, ImageOdom, ImageLabelDetails
 
-from pyaarapsi.vpr_simple.vpr_helpers            import VPR_Tolerance_Mode
-from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
+from nav_msgs.msg import Odometry
 
-from pyaarapsi.core.enum_tools                   import enum_name
-from pyaarapsi.core.argparse_tools               import check_bounded_float, check_positive_float, check_positive_int, check_bool, check_enum, check_string
-from pyaarapsi.core.ros_tools                    import Base_ROS_Class, yaw_from_q, q_from_yaw, roslogger, set_rospy_log_lvl, LogType, NodeState, SubscribeListener
-from pyaarapsi.core.helper_tools                 import formatException, np_ndarray_to_uint8_list, uint8_list_to_np_ndarray, vis_dict
+from pyaarapsi.core.enum_tools              import enum_name, enum_value_options
+from pyaarapsi.core.argparse_tools          import check_bounded_float, check_positive_float, check_positive_int, check_bool, check_enum, check_string
+from pyaarapsi.core.ros_tools               import yaw_from_q, q_from_yaw, roslogger, set_rospy_log_lvl, LogType, NodeState
+from pyaarapsi.core.helper_tools            import formatException, np_ndarray_to_uint8_list, uint8_list_to_np_ndarray, vis_dict
+from pyaarapsi.vpr_simple.vpr_helpers       import VPR_Tolerance_Mode
+from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
+from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
 
-class Main_ROS_Class(Base_ROS_Class): # main ROS class
-    def __init__(self, rate_num, namespace, node_name, anon, log_level, reset, order_id=0):
-        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
+class Main_ROS_Class(Base_ROS_Class):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs, throttle=30)
 
-        self.init_params(rate_num, log_level, reset)
+        self.init_params(kwargs['rate_num'], kwargs['log_level'], kwargs['reset'])
         self.init_vars()
         self.init_rospy()
-
-        self.main_ready      = True
-        rospy.set_param(self.namespace + '/launch_step', order_id + 1)
+        
+        self.node_ready(kwargs['order_id'])
 
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
         self.TOL_MODE        = self.params.add(self.namespace + "/tolerance/mode",      None,                   lambda x: check_enum(x, VPR_Tolerance_Mode),    force=False)
         self.TOL_THRES       = self.params.add(self.namespace + "/tolerance/threshold", None,                   check_positive_float,                           force=False)
+        self.VPR_ODOM_TOPIC  = self.params.add(self.namespace + "/vpr_odom_topic",      None,                   check_string,                                   force=False)
         self.TIME_HIST_LEN   = self.params.add(self.nodespace + "/time_history_length", max(1,int(5*rate_num)), check_positive_int,                             force=reset)
         self.DVC_WEIGHT      = self.params.add(self.nodespace + "/dvc_weight",          1,                      lambda x: check_bounded_float(x, 0, 1, 'both'), force=reset)
-
+        
     def init_vars(self):
         super().init_vars()
 
         self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
         self.vpr_ego                = [0.0, 0.0, 0.0] # our estimate of robot position
-
-        self.plan_path              = None
-        self.ref_path               = None
 
         # flags to denest main loop:
         self.new_query              = False # new query odom+image
@@ -63,70 +56,25 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
 
         # Process reference data
         try:
-            self.ip                 = VPRDatasetProcessor(self.make_dataset_dict(path=True), try_gen=False, ros=True)
-            self.path_dataset       = copy.deepcopy(self.ip.dataset)
-            self.ip.load_dataset(self.make_dataset_dict(path=False))
+            self.ip                 = VPRDatasetProcessor(self.make_dataset_dict(path=False), try_gen=False, ros=True)
         except:
             self.print(formatException(), LogType.ERROR)
             self.exit()
-
-        self.plan_path  = self.generate_path(dataset = self.path_dataset)
-        self.ref_path   = self.generate_path(dataset = self.ip.dataset)
 
     def init_rospy(self):
         super().init_rospy()
         
         self.last_time              = rospy.Time.now()
 
-        self.odom_estimate_pub      = self.add_pub(         self.namespace + "/vpr_odom",                   Odometry,           queue_size=1)
-        self.path_pub               = self.add_pub(         self.namespace + '/path',                       Path,               queue_size=1, subscriber_listener=self.sublis)
-        self.ref_path_pub           = self.add_pub(         self.namespace + '/ref/path',                   Path,               queue_size=1, subscriber_listener=self.sublis)
+        self.odom_estimate_pub      = self.add_pub(         self.namespace + self.VPR_ODOM_TOPIC.get(),     Odometry,           queue_size=1)
         self.vpr_label_pub          = self.add_pub(         self.namespace + "/label",                      ImageLabelDetails,  queue_size=1)
         self.dataset_request_pub    = self.add_pub(         self.namespace + "/requests/dataset/request",   RequestDataset,     queue_size=1)
         self.dataset_request_sub    = rospy.Subscriber(     self.namespace + '/requests/dataset/ready',     ResponseDataset,    self.dataset_request_callback,  queue_size=1)
         self.data_sub               = rospy.Subscriber(     self.namespace + "/img_odom",                   ImageOdom,          self.data_callback,             queue_size=1)
-        self.send_path_plan         = rospy.Service(        self.namespace + '/path',                       GenerateObj,        self.handle_GetPathPlan)
         self.srv_extraction         = rospy.ServiceProxy(   self.namespace + '/do_extraction',              DoExtraction)
-
-        self.sublis.add_operation(self.namespace + '/path',     method_sub=self.path_peer_subscribe)
-        self.sublis.add_operation(self.namespace + '/ref/path', method_sub=self.path_peer_subscribe)
 
     def dataset_request_callback(self, msg):
         pass # TODO
-
-    def path_peer_subscribe(self, topic_name):
-        path = False
-        ref = False
-        if topic_name == self.namespace + '/path':
-            path = self.path_dataset
-        elif topic_name == self.namespace + '/ref/path':
-            ref = True
-        if not self.main_ready:
-            self.plan_path  = self.generate_path(dataset = self.path_dataset)
-            self.ref_path   = self.generate_path(dataset = self.ip.dataset)
-        if path:
-            self.path_pub.publish(self.plan_path)
-        if ref:
-            self.ref_path_pub.publish(self.ref_path)
-
-    def handle_GetPathPlan(self, req):
-    # /vpr_nodes/path service
-        ans = GenerateObjResponse()
-        success = True
-
-        try:
-            if req.generate == True:
-                self.plan_path  = self.generate_path(dataset = self.path_dataset)
-                self.ref_path   = self.generate_path(dataset = self.ip.dataset)
-            self.path_pub.publish(self.plan_path)
-            self.ref_path_pub.publish(self.ref_path)
-        except:
-            success = False
-
-        ans.success = success
-        ans.topic = self.namespace + "/path"
-        self.print("Service requested [Gen=%s], Success=%s" % (str(req.generate), str(success)), LogType.DEBUG)
-        return ans
 
     def update_VPR(self):
         dataset_dict = self.make_dataset_dict()
@@ -307,27 +255,18 @@ def do_args():
                                 epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
     
     # Optional Arguments:
-    parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=10.0,             help='Set node rate (default: %(default)s).')
-    parser.add_argument('--node-name',        '-N',  type=check_string,                 default="vpr_cruncher",   help="Specify node name (default: %(default)s).")
-    parser.add_argument('--anon',             '-a',  type=check_bool,                   default=True,             help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
-    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16],    default=2,                help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--reset',            '-R',  type=check_bool,                   default=False,            help='Force reset of parameters to specified ones (default: %(default)s).')
-    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
+    parser = base_optional_args(parser, node_name='vpr_cruncher')
 
     # Parse args...
-    raw_args = parser.parse_known_args()
-    return vars(raw_args[0])
+    return vars(parser.parse_known_args()[0])
 
 if __name__ == '__main__':
     try:
         args = do_args()
-        nmrc = Main_ROS_Class(rate_num=args['rate'], namespace=args['namespace'], \
-                   node_name=args['node_name'], anon=args['anon'], log_level=args['log_level'], reset=args['reset'], order_id=args['order_id']\
-                )
-        nmrc.print("Initialisation complete. Listening for queries...", LogType.INFO)    
+        nmrc = Main_ROS_Class(**args)
+        nmrc.print("Initialisation complete.", LogType.INFO)
         nmrc.main()
-        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
+        nmrc.print("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
     except SystemExit as e:
         pass

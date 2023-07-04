@@ -11,9 +11,9 @@ from cv_bridge import CvBridge
 
 from sensor_msgs.msg import CompressedImage
 
-from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools import roslogger, LogType
-from pyaarapsi.core.ros_tools import Heartbeat, NodeState, img2msg
+from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_string
+from pyaarapsi.core.ros_tools       import roslogger, LogType, Heartbeat, NodeState, img2msg
+from pyaarapsi.core.enum_tools      import enum_value_options
 
 '''
 ROS Image Spinner Tool
@@ -61,12 +61,13 @@ if __name__ == '__main__':
     parser = ap.ArgumentParser(prog="image_spin.py", 
                             description="ROS Image Spinner Tool",
                             epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-    parser.add_argument('--node-name', '-N', type=check_string,              default="image_spin",     help="Specify node name (default: %(default)s).")
-    parser.add_argument('--namespace', '-n', type=check_string,              default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
-    parser.add_argument('--anon',      '-a', type=check_bool,                default=False,            help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--log-level', '-V', type=int, choices=[1,2,4,8,16], default=2,                help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--rate',      '-r', type=check_positive_float,      default=20.0,             help='Set node rate (default: %(default)s).')
-    parser.add_argument('--img-path',  '-p', type=check_string,              default=img_path_default, help="Specify ROS namespace (default: %(default)s).")
+    levels = enum_value_options(LogType)[0]
+    parser.add_argument('--node-name',        '-N',  type=check_string,                 default="image_spin",     help="Specify node name (default: %(default)s).")
+    parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
+    parser.add_argument('--anon',             '-a',  type=check_bool,                   default=False,            help="Specify whether node should be anonymous (default: %(default)s).")
+    parser.add_argument('--log-level',        '-V',  type=float, choices=levels,        default=2,                help="Specify ROS log level (default: %(default)s).")
+    parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=20.0,             help='Set node rate (default: %(default)s).')
+    parser.add_argument('--img-path',         '-p',  type=check_string,                 default=img_path_default, help="Specify ROS namespace (default: %(default)s).")
     
     raw_args = parser.parse_known_args()
     args = vars(raw_args[0])

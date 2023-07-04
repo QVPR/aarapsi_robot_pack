@@ -4,14 +4,16 @@
  -->
 <launch>
     <!-- Global Arguments: -->
-    <arg name="launch_slam"             default="true"/>
-    <arg name="launch_init"             default="true"/>
+    <arg name="launch_slam"             default="true" />
+    <arg name="launch_init"             default="true" />
     <arg name="launch_core"             default="false"/> <!-- Typically we do this offboard, but for onboard solutions set to true -->
     <arg name="launch_auto"             default="false"/>
 
     <arg name="use_gpu"                 default="False"/>
     <arg name="param_file"              default="robot_cfg.yaml"/>
     <arg name="namespace"               default="/vpr_nodes"/>
+    <arg name="log_level"               default="2"/>
+    <arg name="reset"                   default="True"/>
 
     <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
 
@@ -21,21 +23,26 @@
             <include file="$(find aarapsi_robot_pack)/launch/slam.launch">
                 <arg name="load_params" value="false"/>
                 <arg name="param_file"  value="$(arg param_file)"/>
+                <arg name="log_level"   value="$(arg log_level)"/>
+                <arg name="reset"       value="$(arg reset)"/>
             </include>
         </group>
 
         <!-- Web Server, Parameter Watcher, Image+Odom Aggregator, Image Throttle Nodes: -->
         <group if="$(arg launch_init)">
-            <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_initialisation.launch"/>
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_initialisation.launch">
+                <arg name="log_level"   value="$(arg log_level)"/>
+                <arg name="reset"       value="$(arg reset)"/>
+            </include>
         </group>
 
         <!-- Core Pipeline Nodes: -->
         <group if="$(arg launch_core)">
             <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_pipeline.launch">
+                <arg name="use_gpu"     value="$(arg use_gpu)"/>
+                <arg name="log_level"   value="$(arg log_level)"/>
+                <arg name="reset"       value="$(arg reset)"/>
                 <!-- Autonomous Nodes: -->
-                <arg name="launch_twist2joy"    value="$(arg launch_auto)"/>
-                <arg name="launch_follower"     value="$(arg launch_auto)"/>
-                <arg name="use_gpu"             value="$(arg use_gpu)"/>
             </include>
         </group>
     </group>

@@ -5,6 +5,7 @@
 <launch>
     <!-- Global Arguments: -->
     <arg name="log_level"               default="2"/>
+    <arg name="reset"                   default="True"/>
     <arg name="launch_slam_node"        default="true"/>
     <arg name="launch_slam_ekf"         default="true"/>
     <arg name="launch_transformer"      default="true"/>
@@ -32,7 +33,8 @@
 
         <!-- Frame Transformer Node: -->
         <group if="$(arg launch_transformer)">
-            <node pkg="aarapsi_robot_pack" type="frame_transformer.py" name="frame_transformer" output="screen"/>
+            <node pkg="aarapsi_robot_pack" type="frame_transformer.py" name="frame_transformer" output="screen"
+                args="-V $(arg log_level) -R $(arg reset)"/>
         </group>
 
     </group>

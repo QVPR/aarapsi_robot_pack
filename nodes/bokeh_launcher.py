@@ -12,23 +12,22 @@ from aarapsi_robot_pack.msg import MonitorDetails
 
 from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
 
-from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_positive_int, check_valid_ip, check_string
+from pyaarapsi.core.argparse_tools  import check_positive_int, check_valid_ip
 from pyaarapsi.core.helper_tools    import formatException
-from pyaarapsi.core.ros_tools       import Base_ROS_Class, roslogger, set_rospy_log_lvl, NodeState, LogType
+from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, NodeState, LogType
 from pyaarapsi.core.ajax_tools      import AJAX_Connection, POST_Method_Types
+from pyaarapsi.core.os_tools        import exec_screen, kill_screens
+from pyaarapsi.vpr_classes.base     import Base_ROS_Class, base_optional_args
 
-class Main_ROS_Class(Base_ROS_Class): # main ROS class
-    def __init__(self, rate_num, namespace, node_name, anon, log_level, reset, order_id=0):
-        
-        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, disable_signals=True)
+class Main_ROS_Class(Base_ROS_Class):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs, throttle=30)
 
-        self.init_params(rate_num, log_level, reset)
+        self.init_params(kwargs['rate_num'], kwargs['log_level'], kwargs['reset'])
         self.init_vars()
         self.init_rospy()
 
-        # Last item as it sets a flag that enables main loop execution.
-        self.main_ready = True
-        rospy.set_param(self.namespace + '/launch_step', order_id + 1)
+        self.node_ready(kwargs['order_id'])
 
     def init_vars(self):
         # flags to denest main loop:
@@ -60,34 +59,18 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
             self.print("VPR reference data swapped.", LogType.INFO)
             return True
 
-    def param_callback(self, msg):
-        self.parameters_ready = False
-        if self.params.exists(msg.data):
-            if not self.params.update(msg.data):
-                self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
-            
-            else:
-                self.print("Change to parameter [%s]; updated." % msg.data, LogType.DEBUG)
-
-                if msg.data == self.LOG_LEVEL.name:
-                    set_rospy_log_lvl(self.LOG_LEVEL.get())
-                elif msg.data == self.RATE_NUM.name:
-                    self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-
-                ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
-                try:
-                    param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
-                    self.print("Change to VPR reference data parameters detected.", LogType.WARN)
-                    if not self.update_VPR():
-                        param.revert()
-                except IndexError:
-                    pass
-                except:
-                    param.revert()
-                    self.print(formatException(), LogType.ERROR)
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
-        self.parameters_ready = True
+    def param_helper(self, msg):
+        ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
+        try:
+            param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
+            self.print("Change to VPR reference data parameters detected.", LogType.WARN)
+            if not self.update_VPR():
+                param.revert()
+        except IndexError:
+            pass
+        except:
+            param.revert()
+            self.print(formatException(), LogType.ERROR)
 
     def state_callback(self, msg):
     # /vpr_nodes/state (aarapsi_robot_pack/MonitorDetails)
@@ -130,48 +113,18 @@ class Main_ROS_Class(Base_ROS_Class): # main ROS class
             self.print((dt, np.round(1/dt,3)), LogType.DEBUG)
             time        = new_time
 
-def kill_screen(name):
-    '''
-    Kill screen
-
-    Inputs:
-    - name: str type, corresponding to full screen name as per 'screen -list'
-    Returns:
-    None
-    '''
-    os.system("if screen -list | grep -q '{sname}'; then screen -S '{sname}' -X quit; fi;".format(sname=name))
-
-def kill_screens(names):
-    '''
-    Kill all screens in list of screen names
-
-    Inputs:
-    - names: list of str type, elements corresponding to full screen name as per 'screen -list'
-    Returns:
-    None
-    '''
-    for name in names:
-        kill_screen(name)
-
-def exec_screen(name, cmd):
-    os.system("screen -dmS '{sname}' bash -c '{scmd}; exec bash'".format(sname=name, scmd=cmd))
-
 def do_args():
     parser = ap.ArgumentParser(prog="vpr_plotter", 
                                description="ROS implementation of QVPR's VPR Primer: Plotting Extension",
                                epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-    parser.add_argument('--port',             '-P',  type=check_positive_int,        default=5006,             help='Set bokeh server port  (default: %(default)s).')
-    parser.add_argument('--address',          '-A',  type=check_valid_ip,            default='0.0.0.0',        help='Set bokeh server address (default: %(default)s).')
-    parser.add_argument('--rate',             '-r',  type=check_positive_float,      default=10.0,             help='Set node rate (default: %(default)s).')
-    parser.add_argument('--node-name',        '-N',  type=check_string,              default="vpr_plotter",    help="Specify node name (default: %(default)s).")
-    parser.add_argument('--anon',             '-a',  type=check_bool,                default=True,             help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',        '-n',  type=check_string,              default="/vpr_nodes",     help="Specify namespace for topics (default: %(default)s).")
-    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16], default=2,                help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--reset',            '-R',  type=check_bool,                default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
-    parser.add_argument('--order-id',         '-ID', type=int,                       default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
+    
+    # Optional Arguments:
+    parser = base_optional_args(parser, node_name='vpr_plotter')
+    parser.add_argument('--port',             '-P',  type=check_positive_int, default=5006,      help='Set bokeh server port  (default: %(default)s).')
+    parser.add_argument('--address',          '-A',  type=check_valid_ip,     default='0.0.0.0', help='Set bokeh server address (default: %(default)s).')
+    
     # Parse args...
-    raw_args = parser.parse_known_args()
-    return vars(raw_args[0])
+    return vars(parser.parse_known_args()[0])
 
 if __name__ == '__main__':
 
@@ -183,16 +136,15 @@ if __name__ == '__main__':
     try:
         args = do_args()
 
-        file_path       = rospkg.RosPack().get_path('aarapsi_robot_pack')+'/nodes/bokeh_server'
-        origin          = '--port %s --address %s' % (str(args['port']), args['address'])
+        file_path       = rospkg.RosPack().get_path('aarapsi_robot_pack')+'/servers/bokeh_server'
+        origin          = '--port %s --address %s' % (str(args.pop('port')), str(args.pop('address')))
         bokeh_scmd      = 'bokeh serve --allow-websocket-origin "*" ' + origin + ' --check-unused-sessions 100 --unused-session-lifetime 100 ' + file_path
         if show: 
             bokeh_scmd += ' --show'
 
         ajax_scmd       = file_path + '/ajax_node.py'
 
-        nmrc = Main_ROS_Class(rate_num=args['rate'], namespace=args['namespace'], \
-                        node_name=args['node_name'], anon=args['anon'], log_level=args['log_level'], reset=args['reset'], order_id=args['order_id'])
+        nmrc = Main_ROS_Class(disable_signals=True, **args)
         nmrc.print("ROS Base ready.")
         
         kill_screens([bokeh_sname, ajax_sname])

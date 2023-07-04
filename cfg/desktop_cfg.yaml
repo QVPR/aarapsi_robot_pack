@@ -1,4 +1,7 @@
 vpr_nodes:
+  z_config_file_name: "desktop_cfg"
+
+  simulation: true
   launch_step: 1
   feature_type: RAW
   img_dims:
@@ -8,14 +11,24 @@ vpr_nodes:
   svm_dbp: /cfg/svm_models
   bag_dbp: /data/rosbags
 
-  odom_topic: /odom/true
+  slam_odom_topic: /odom/true
+  robot_odom_topic: /jackal_velocity_controller/odom
+  vpr_odom_topic: /vpr_odom
   img_topic: /ros_indigosdk_occam/stitched_image0/compressed
+  joy_topic: /bluetooth_teleop/joy
+  cmd_topic: /cmd_vel
 
   slam_map: s11_center_map.pcd
+  controller_mac: '1C:A0:B8:EC:59:05'
 
   limits:
-    linear_velocity: 0.2
-    angular_velocity: 0.2
+    slow:
+      linear: 0.2
+      angular: 0.2
+    fast:
+      linear: 0.5
+      angular: 0.5
+    mode: 'slow'
 
   groundtruth: true
   path: 
@@ -97,4 +110,16 @@ vpr_nodes:
       - 0.1
       reverse: false
 
-  z_config_file_name: "desktop_cfg"
+  path_follower:
+    log_level: 2
+    rate: 12.0
+    noise: 
+      enable: true
+      vals:
+      - 0.1
+      - 0.1
+      - 0.1
+      reverse: false
+    override:
+      safety: -1
+      autonomous: -1

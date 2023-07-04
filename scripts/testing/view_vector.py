@@ -14,8 +14,9 @@ import argparse as ap
 import warnings
 import math
 
-from pyaarapsi.core.argparse_tools import check_positive_float, check_string, check_bool
-from pyaarapsi.core.ros_tools import yaw_from_q
+from pyaarapsi.core.argparse_tools  import check_positive_float, check_string, check_bool
+from pyaarapsi.core.ros_tools       import yaw_from_q, LogType
+from pyaarapsi.core.enum_tools      import enum_value_options
 
 class Viewer:
     def __init__(self, node_name, anon, log_level, rate, mode, topic=None):
@@ -429,13 +430,15 @@ if __name__ == '__main__':
         parser = ap.ArgumentParser(prog="vector viewer", 
                                 description="ROS Vector Viewer Tool",
                                 epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-        parser.add_argument('--mode', '-m', type=check_string, choices=["imu","odom", "dOdom", "vec3s"], default="odom", help="Specify ROS log level (default: %(default)s).")
-        parser.add_argument('--topic', '-t', type=check_string, default=None, help='Set node rate (default: %(default)s).')
-        parser.add_argument('--rate', '-r', type=check_positive_float, default=10.0, help='Set node rate (default: %(default)s).')
-        parser.add_argument('--node-name', '-N', default="view_vector", help="Specify node name (default: %(default)s).")
-        parser.add_argument('--anon', '-a', type=check_bool, default=True, help="Specify whether node should be anonymous (default: %(default)s).")
-        parser.add_argument('--log-level', '-V', type=int, choices=[1,2,4,8,16], default=2, help="Specify ROS log level (default: %(default)s).")
-
+        levels = enum_value_options(LogType)[0]
+        modes = ["imu","odom", "dOdom", "vec3s"]
+        parser.add_argument('--mode',            '-m',   type=check_string, choices=modes,  default="odom",           help="Specify ROS log level (default: %(default)s).")
+        parser.add_argument('--topic',            '-t',  type=check_string,                 default=None,             help='Set node rate (default: %(default)s).')
+        parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=10.0,             help='Set node rate (default: %(default)s).')
+        parser.add_argument('--node-name',        '-N',  type=check_string,                 default="view_vector",    help="Specify node name (default: %(default)s).")
+        parser.add_argument('--anon',             '-a',  type=check_bool,                   default=True,             help="Specify whether node should be anonymous (default: %(default)s).")
+        parser.add_argument('--log-level',        '-V',  type=float, choices=levels,        default=2,                help="Specify ROS log level (default: %(default)s).")
+    
         raw_args    = parser.parse_known_args()
         args        = vars(raw_args[0])
 

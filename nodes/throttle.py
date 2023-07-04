@@ -9,8 +9,10 @@ from std_msgs.msg import Header, String
 from sensor_msgs.msg import Image, CompressedImage
 
 from pyaarapsi.core.argparse_tools  import check_positive_float, check_positive_two_int_tuple, check_bool, check_string, check_positive_int
-from pyaarapsi.core.ros_tools       import Base_ROS_Class, imgmsgtrans, NodeState, roslogger, LogType, set_rospy_log_lvl
+from pyaarapsi.core.ros_tools       import imgmsgtrans, NodeState, roslogger, LogType, set_rospy_log_lvl
 from pyaarapsi.core.helper_tools    import formatException
+from pyaarapsi.core.enum_tools      import enum_value_options
+from pyaarapsi.vpr_classes.base     import Base_ROS_Class, base_optional_args
 
 '''
 ROS Throttle Tool
@@ -66,20 +68,20 @@ class Throttle_Topic:
                 self.pubs[i].publish(self.transform(msg_to_pub))
 
 class Main_ROS_Class(Base_ROS_Class):
-    def __init__(self, node_name, rate_num, namespace, anon, mode, resize_dims, log_level, reset=True, order_id=0):
-        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=order_id, throttle=30)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs, throttle=30)
 
-        self.init_params(rate_num, log_level, reset)
-        self.init_vars(mode, resize_dims)
+        self.init_params(kwargs['rate_num'], kwargs['log_level'], kwargs['reset'])
+        self.init_vars(kwargs['mode'], kwargs['img_dims'])
         self.init_rospy()
+        
+        self.node_ready(kwargs['order_id'])
 
-        rospy.set_param(self.namespace + '/launch_step', order_id + 1)
-
-    def init_vars(self, mode, resize_dims):
+    def init_vars(self, mode, img_dims):
         super().init_vars()
 
         self.mode           = mode
-        self.resize_dims    = resize_dims
+        self.img_dims       = img_dims
 
         # set up topics
         self.cin, self.cout = self.get_cam_topics()
@@ -122,16 +124,16 @@ class Main_ROS_Class(Base_ROS_Class):
     
     def img_resize(self, msg, frame_id="occam", mode="square"):
         if mode == "square":
-            def transform(img, resize_dims):
-                return cv2.resize(img, resize_dims, interpolation=cv2.INTER_AREA)
+            def transform(img, img_dims):
+                return cv2.resize(img, img_dims, interpolation=cv2.INTER_AREA)
         elif mode == "rectangle":
-            def transform(img, resize_dims):
+            def transform(img, img_dims):
                 img_size    = img.shape
-                resize_dims = (round((img_size[1]/img_size[0])*resize_dims[0]), resize_dims[0])
-                return cv2.resize(img, resize_dims, interpolation=cv2.INTER_AREA)
+                img_dims = (round((img_size[1]/img_size[0])*img_dims[0]), img_dims[0])
+                return cv2.resize(img, img_dims, interpolation=cv2.INTER_AREA)
         else:
             raise Exception("Undefined mode %s, should be either 'square' or 'rectangle'." % mode)
-        rmsg                = imgmsgtrans(msg, lambda img: transform(img, self.resize_dims), bridge=self.bridge)
+        rmsg                = imgmsgtrans(msg, lambda img: transform(img, self.img_dims), bridge=self.bridge)
         rmsg.header         = Header(stamp=rospy.Time.now(), frame_id=frame_id, seq=msg.header.seq)
         return rmsg
     
@@ -146,25 +148,22 @@ def do_args():
     parser = ap.ArgumentParser(prog="throttle.py", 
                                 description="ROS Topic Throttle Tool",
                                 epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-    parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=10.0,             help='Set node rate (default: %(default)s).')
-    parser.add_argument('--img-dims',         '-i',  type=check_positive_two_int_tuple, default=(64,64),          help='Set image dimensions (default: %(default)s).')
-    parser.add_argument('--node-name',        '-N',  type=check_string,                 default="throttle",       help="Specify node name (default: %(default)s).")
-    parser.add_argument('--anon',             '-a',  type=check_bool,                   default=True,             help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
-    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16],    default=2,                help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--mode',             '-m',  type=int, choices=[0,1,2],         default=2,                help="Specify whether to throttle raw (0), compressed (1), or both (2) topics (default: %(default)s).")
-    parser.add_argument('--order-id',         '-ID', type=int,                          default=0,                help='Specify boot order of pipeline nodes (default: %(default)s).')
     
-    raw_args = parser.parse_known_args()
-    return vars(raw_args[0])
+    # Optional Arguments:
+    parser = base_optional_args(parser, node_name='throttle')
+    parser.add_argument('--img-dims', '-i', type=check_positive_two_int_tuple, default=(64,64), help='Set image dimensions (default: %(default)s).')
+    parser.add_argument('--mode',     '-m', type=int, choices=[0,1,2],         default=2,       help="Specify whether to throttle raw (0), compressed (1), or both (2) topics (default: %(default)s).")
+
+    # Parse args...
+    return vars(parser.parse_known_args()[0])
 
 if __name__ == '__main__':
     try:
         args = do_args()
-        nmrc = Main_ROS_Class(args['node_name'], args['rate'], args['namespace'], args['anon'], args['mode'], \
-                   args['img_dims'], args['log_level'], order_id=args['order_id'])
+        nmrc = Main_ROS_Class(**args)
+        nmrc.print("Initialisation complete.", LogType.INFO)
         nmrc.main()
-        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
+        nmrc.print("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
     except SystemExit as e:
         pass

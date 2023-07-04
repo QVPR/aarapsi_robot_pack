@@ -16,9 +16,11 @@ from geometry_msgs.msg import PoseStamped, Point, Twist, Vector3, Quaternion
 from visualization_msgs.msg import MarkerArray, Marker
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_string, check_float_list
-from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, Base_ROS_Class, q_from_yaw, yaw_from_q, pose2xyw
+from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, q_from_yaw, yaw_from_q, pose2xyw
 from pyaarapsi.core.helper_tools            import formatException, Timer, angle_wrap, normalize_angle
+from pyaarapsi.core.enum_tools              import enum_value_options
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
+from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
 
 '''
 SLAM Path Follower
@@ -28,14 +30,14 @@ Node description.
 '''
 
 class Main_ROS_Class(Base_ROS_Class):
-    def __init__(self, node_name, rate_num, namespace, anon, log_level, reset):
-        super().__init__(node_name, namespace, rate_num, anon, log_level, order_id=None, throttle=30)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs, throttle=30)
 
-        self.init_params(rate_num, log_level, reset)
+        self.init_params(kwargs['rate_num'], kwargs['log_level'], kwargs['reset'])
         self.init_vars()
         self.init_rospy()
 
-        self.main_ready     = True
+        self.node_ready(kwargs['order_id'])
 
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
@@ -45,8 +47,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.REVERSE        = self.params.add(self.nodespace + "/reverse",                  False,      check_bool,                          force=False)
         self.PATH_FILE      = self.params.add(self.namespace + "/path/file",                None,       check_string,                        force=False)
         self.PATH_DENSITY   = self.params.add(self.namespace + "/path/density",             None,       check_positive_float,                force=False)
-        self.LIN_VEL_MAX    = self.params.add(self.namespace + "/limits/linear_velocity",   None,       check_positive_float,                force=False)
-        self.ANG_VEL_MAX    = self.params.add(self.namespace + "/limits/angular_velocity",  None,       check_positive_float,                force=False)
+        self.LIN_VEL_MAX    = self.params.add(self.namespace + "/limits/slow/linear",       None,       check_positive_float,                force=False)
+        self.ANG_VEL_MAX    = self.params.add(self.namespace + "/limits/slow/angular",      None,       check_positive_float,                force=False)
 
     def init_vars(self):
         super().init_vars()
@@ -74,7 +76,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.path_pub   = self.add_pub(     self.namespace + '/path',       Path,                   queue_size=1, latch=True)
         self.goal_pub   = self.add_pub(     self.namespace + '/path_goal',  PoseStamped,            queue_size=1)
         self.speed_pub  = self.add_pub(     self.namespace + '/speeds',     MarkerArray,            queue_size=1, latch=True)
-        self.odom_sub   = rospy.Subscriber(self.ODOM_TOPIC.get(),           Odometry, self.odom_cb, queue_size=1)
+        self.odom_sub   = rospy.Subscriber(self.SLAM_ODOM_TOPIC.get(),      Odometry, self.odom_cb, queue_size=1)
         self.twist_pub  = self.add_pub(     '/cmd_vel',                     Twist,                  queue_size=1)
 
     def global2local(self):
@@ -223,23 +225,20 @@ def do_args():
     parser = ap.ArgumentParser(prog="slam_follower.py", 
                                 description="SLAM Path Follower",
                                 epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-    parser.add_argument('--node-name',        '-N',  type=check_string,                 default="slam_follower",  help="Specify node name (default: %(default)s).")
-    parser.add_argument('--rate',             '-r',  type=check_positive_float,         default=12,               help='Specify node rate (default: %(default)s).')
-    parser.add_argument('--anon',             '-a',  type=check_bool,                   default=False,            help="Specify whether node should be anonymous (default: %(default)s).")
-    parser.add_argument('--namespace',        '-n',  type=check_string,                 default="/vpr_nodes",     help="Specify ROS namespace (default: %(default)s).")
-    parser.add_argument('--log-level',        '-V',  type=int, choices=[1,2,4,8,16],    default=2,                help="Specify ROS log level (default: %(default)s).")
-    parser.add_argument('--reset',            '-R',  type=check_bool,                   default=False,            help='Force reset of parameters to specified ones (default: %(default)s)')
+    
+    # Optional Arguments:
+    parser = base_optional_args(parser, node_name='slam_follower')
 
-    raw_args = parser.parse_known_args()
-    return vars(raw_args[0])
+    # Parse args...
+    return vars(parser.parse_known_args()[0])
 
 if __name__ == '__main__':
     try:
         args = do_args()
-        nmrc = Main_ROS_Class(args['node_name'], args['rate'], args['namespace'], args['anon'], args['log_level'], args['reset'])
-        nmrc.print('Initialisation complete.')
+        nmrc = Main_ROS_Class(**args)
+        nmrc.print("Initialisation complete.", LogType.INFO)
         nmrc.main()
-        roslogger("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
+        nmrc.print("Operation complete.", LogType.INFO, ros=False) # False as rosnode likely terminated
         sys.exit()
     except SystemExit as e:
         pass

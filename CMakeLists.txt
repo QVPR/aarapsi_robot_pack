@@ -73,7 +73,6 @@ add_message_files(
   RequestSVM.msg
   ResponseDataset.msg
   ResponseSVM.msg
-  SafetyStates.msg
   xyw.msg
 )
 
@@ -82,7 +81,6 @@ add_service_files(
   FILES
   GenerateObj.srv
   DoExtraction.srv
-  GetSafetyStates.srv
   SaveObj.srv
 )
 

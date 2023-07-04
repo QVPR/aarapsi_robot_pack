@@ -6,7 +6,8 @@ int64 trueId                            # Index ground truth thinks is best (-1 
 int8 gt_state                           # int matching -1: unknown, 0: bad, 1: good
 float64 gt_error			# float value for error in groundtruth scheme
 
-aarapsi_robot_pack/SafetyStates safety_states
+string safety_mode
+bool autonomous_cmd
 
 float64 current_yaw
 float64 target_yaw
@@ -21,7 +22,3 @@ float64 mState
 float64 prob
 bool mStateBin
 float64[] factors
-
-string vpr_topic
-string jackal_topic
-string groundtruth_topic
