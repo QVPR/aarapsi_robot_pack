@@ -72,7 +72,7 @@ vpr_nodes:
     rate: 10.0
 
   param_watcher:
-    log_level: 1
+    log_level: 2
     rate: 2.0
 
   img_odom_agg:
@@ -80,7 +80,7 @@ vpr_nodes:
     rate: 10.0
 
   vpr_cruncher:
-    log_level: 1
+    log_level: 2
     dvc_weight: 1
     rate: 12.0
     time_history_length: 20

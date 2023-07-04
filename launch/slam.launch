@@ -34,7 +34,7 @@
         <!-- Frame Transformer Node: -->
         <group if="$(arg launch_transformer)">
             <node pkg="aarapsi_robot_pack" type="frame_transformer.py" name="frame_transformer" output="screen"
-                args="-V $(arg log_level) -R $(arg reset)"/>
+                args="-V $(arg log_level) -R $(arg reset) -ID 0"/>
         </group>
 
     </group>
