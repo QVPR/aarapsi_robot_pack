@@ -40,10 +40,7 @@
         <!-- Core Pipeline Nodes: -->
         <group if="$(arg launch_core)">
             <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_pipeline.launch">
-                <arg name="launch_webserver"    value="false"/>
-                <arg name="launch_throttle"     value="false"/>
-                <arg name="launch_img_odom_agg" value="false"/>
-                <arg name="launch_paramwatcher" value="false"/>
+                <arg name="launch_init"         value="false"/>
                 <arg name="use_gpu"             value="$(arg use_gpu)"/>
                 <arg name="param_file"          value="robot_cfg.yaml"/>
                 <arg name="log_level"           value="$(arg log_level)"/>

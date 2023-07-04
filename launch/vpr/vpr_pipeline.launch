@@ -37,27 +37,29 @@
         <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/>
     </group>
     
-    <group ns="$(arg namespace)">            
-        <!-- Web Server Node: -->
-        <node if="$(arg launch_webserver)" pkg="web_video_server" type="web_video_server" name="web_video_server" output="screen"/>
+    <group ns="$(arg namespace)">   
+        <group if="$(arg launch_init)">         
+            <!-- Web Server Node: -->
+            <node if="$(arg launch_webserver)" pkg="web_video_server" type="web_video_server" name="web_video_server" output="screen"/>
 
-        <!-- Param Watcher Node: -->
-        <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
-            args="
-                    -r $(arg throttle_rate) -N param_watcher -n $(arg namespace) -a $(arg anon) 
-                    -V $(arg log_level) -R $(arg reset) -ID 1"/>
+            <!-- Param Watcher Node: -->
+            <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
+                args="
+                        -r $(arg throttle_rate) -N param_watcher -n $(arg namespace) -a $(arg anon) 
+                        -V $(arg log_level) -R $(arg reset) -ID 1"/>
 
-        <!-- Camera Topic Throttling Node: -->
-        <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
-            args="-m $(arg tt_mode) -i $(arg tt_img_dims) 
-                    -r $(arg throttle_rate) -N throttle -n $(arg namespace) -a $(arg anon) 
-                    -V $(arg log_level) -R $(arg reset) -ID 2" />
+            <!-- Camera Topic Throttling Node: -->
+            <node if="$(arg launch_throttle)" pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
+                args="-m $(arg tt_mode) -i $(arg tt_img_dims) 
+                        -r $(arg throttle_rate) -N throttle -n $(arg namespace) -a $(arg anon) 
+                        -V $(arg log_level) -R $(arg reset) -ID 2" />
 
-        <!-- Image+Odom Aggregation Node: -->
-        <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
-            args="
-                    -r $(arg throttle_rate) -N img_odom_agg -n $(arg namespace) -a $(arg anon) 
-                    -V $(arg log_level) -R $(arg reset) -ID 3" />
+            <!-- Image+Odom Aggregation Node: -->
+            <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
+                args="
+                        -r $(arg throttle_rate) -N img_odom_agg -n $(arg namespace) -a $(arg anon) 
+                        -V $(arg log_level) -R $(arg reset) -ID 3" />
+        </group>
 
         <!-- Cruncher's Trainer Node: -->
         <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="dataset_trainer.py" name="dataset_trainer" output="screen" 
