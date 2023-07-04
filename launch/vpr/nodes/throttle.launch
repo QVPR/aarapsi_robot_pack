@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!-- 
+    throttle launch file
+ -->
+<launch>
+    <arg name="load_params"             default="false"/>
+    
+    <arg name="throttle_rate"           default="10.0"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="reset"                   default="True"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <arg name="tt_mode"                 default="1"/>
+    <arg name="tt_img_dims"             default="(640,480)"/>
+
+    <arg name="log_level"               default="2"/>
+    <arg name="param_file"              default="sim_cfg.yaml"/>
+
+    <group if="$(arg load_params)">
+        <!-- Load in params; must be done outside of a namespace -->
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
+    </group>
+
+    <group ns="$(arg namespace)">
+
+        <!-- Camera Topic Throttling Node: -->
+        <node pkg="aarapsi_robot_pack" type="throttle.py" name="throttle" output="screen"
+                args="-N throttle -r $(arg throttle_rate) -a $(arg anon) -m $(arg tt_mode) -i $(arg tt_img_dims) -V $(arg log_level) -R $(arg reset) -ID 2" />
+
+    </group>
+
+</launch>

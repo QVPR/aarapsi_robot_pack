@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!-- 
+    param_watcher launch file
+ -->
+<launch>
+    <arg name="load_params"             default="false"/>
+    
+    <arg name="throttle_rate"           default="10.0"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="reset"                   default="True"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <arg name="log_level"               default="2"/>
+    <arg name="param_file"              default="sim_cfg.yaml"/>
+
+    <group if="$(arg load_params)">
+        <!-- Load in params; must be done outside of a namespace -->
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
+    </group>
+
+    <group ns="$(arg namespace)">
+
+        <!-- Param Watcher Node: -->
+        <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
+                args="-V $(arg log_level) -R $(arg reset) -ID 1"/>
+
+    </group>
+
+</launch>

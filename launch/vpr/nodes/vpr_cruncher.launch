@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <!-- 
-    Monitor launch file
+    dataset_trainer + vpr_cruncher launch file
  -->
 <launch>
-    <arg name="launch_monitor"          default="true"/>
+    <arg name="launch_cruncher"         default="true"/>
     <arg name="launch_trainer"          default="true"/>
 
     <arg name="load_params"             default="false"/>
-    
+
     <arg name="main_rate"               default="12.0"/>
     <arg name="anon"                    default="True"/>
     <arg name="reset"                   default="True"/>
@@ -23,14 +23,14 @@
     </group>
     
     <group ns="$(arg namespace)">
-        <!-- Monitor's Trainer Node: -->
-        <node if="$(arg launch_trainer)" pkg="aarapsi_robot_pack" type="svm_trainer.py" name="svm_trainer" output="screen" 
-            args="-r $(arg main_rate) -N svm_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
+        <!-- Cruncher's Trainer Node: -->
+        <node if="$(arg launch_trainer)" pkg="aarapsi_robot_pack" type="dataset_trainer.py" name="dataset_trainer" output="screen" 
+            args="-r $(arg main_rate) -N dataset_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 4">
         </node>
 
-        <!-- Monitor Node: -->
-        <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
-            args="-r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
+        <!-- Cruncher Node: -->
+        <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
+            args="-r $(arg main_rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 5">
         </node>
     </group>
 

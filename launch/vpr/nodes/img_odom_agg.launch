@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!-- 
+    img_odom_agg launch file
+ -->
+<launch>
+    <arg name="load_params"             default="false"/>
+    
+    <arg name="throttle_rate"           default="10.0"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="reset"                   default="True"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <arg name="ioa_compress"            default="True"/>
+    <arg name="ioa_img_topic"           default="$(arg namespace)/occam/image0"/>
+    <arg name="ioa_odom_topic"          default="/odom/filtered"/>
+    <arg name="ioa_pub_topic"           default="$(arg namespace)/img_odom"/>
+
+    <arg name="log_level"               default="2"/>
+    <arg name="param_file"              default="sim_cfg.yaml"/>
+
+    <group if="$(arg load_params)">
+        <!-- Load in params; must be done outside of a namespace -->
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
+    </group>
+
+    <group ns="$(arg namespace)">
+
+        <!-- Image+Odom Aggregation Node: -->
+        <node if="$(arg launch_img_odom_agg)" pkg="aarapsi_robot_pack" type="img_odom_agg.py" name="img_odom_agg"  output="screen"
+                args="-N img_odom_agg -r $(arg throttle_rate) -a $(arg anon) -C $(arg ioa_compress)
+                        --img-topic $(arg ioa_img_topic) --odom-topic $(arg ioa_odom_topic) --pub-topic $(arg ioa_pub_topic) -V $(arg log_level) -R $(arg reset) -ID 3" />
+
+    </group>
+
+</launch>
