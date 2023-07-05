@@ -5,7 +5,7 @@
             <xacro:macro name="camera_feed"
                 params="frame:=camera name:=camera camera_x:=0.047758 camera_y:=0.029 camera_z:=0.029 camera_mass:=0.03
                         image_topic_name:=image camera_info_name:=camera_info
-                        hfov:=1.5079644737 vfov:=1.0122900000 fps:=15 width:=720 height:=480 format:=R8G8B8 near:=0.1 far:=300">
+                        hfov:=1.5079644737 vfov:=1.0122900000 fps:=30 width:=720 height:=480 format:=R8G8B8 near:=0.1 far:=300">
                 <link name="${frame}">
                 <inertial>
                     <mass value="${camera_mass}" />
