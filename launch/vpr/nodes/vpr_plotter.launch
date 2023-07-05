@@ -25,7 +25,9 @@
 
         <!-- Plotter Node: -->
         <node pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
-            args="-P $(arg plotter_port) -A $(arg plotter_address) -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 8">
+            args="-P $(arg plotter_port) -A $(arg plotter_address) 
+                    -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) 
+                    -V $(arg log_level) -R $(arg reset) -ID 7">
         </node>
 
     </group>

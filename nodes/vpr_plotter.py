@@ -7,15 +7,15 @@ import argparse as ap
 import os
 
 from aarapsi_robot_pack.msg import MonitorDetails, ImageDetails
+from std_msgs.msg import String
 
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.vpr_plots         import doDVecFigBokeh, doOdomFigBokeh, doFDVCFigBokeh, doCntrFigBokeh, doSVMMFigBokeh, doXYWVFigBokeh, \
                                                     updateDVecFigBokeh, updateOdomFigBokeh, updateFDVCFigBokeh, updateCntrFigBokeh, updateXYWVFigBokeh, updateSVMMFigBokeh
 
-from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_positive_int, check_valid_ip, check_string
+from pyaarapsi.core.argparse_tools          import check_positive_int, check_valid_ip
 from pyaarapsi.core.helper_tools            import formatException, vis_dict
-from pyaarapsi.core.ros_tools               import set_rospy_log_lvl, NodeState, LogType
-from pyaarapsi.core.enum_tools              import enum_value_options
+from pyaarapsi.core.ros_tools               import LogType
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
 
 from functools import partial
@@ -67,44 +67,26 @@ class Main_ROS_Class(Base_ROS_Class):
         else:
             self.print("VPR reference data swapped.", LogType.INFO)
             return True
+        
+    def param_helper(self, msg: String):
+        ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
+        try:
+            param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
+            self.print("Change to VPR reference data parameters detected.", LogType.WARN)
+            if not self.update_VPR():
+                param.revert()
+        except IndexError:
+            pass
+        except:
+            param.revert()
+            self.print(formatException(), LogType.ERROR)
 
-    def param_callback(self, msg):
-        self.parameters_ready = False
-        if self.params.exists(msg.data):
-            if not self.params.update(msg.data):
-                self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
-            
-            else:
-                self.print("Change to parameter [%s]; updated." % msg.data, LogType.DEBUG)
-
-                if msg.data == self.LOG_LEVEL.name:
-                    set_rospy_log_lvl(self.LOG_LEVEL.get())
-                elif msg.data == self.RATE_NUM.name:
-                    self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-
-                ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
-                try:
-                    param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
-                    self.print("Change to VPR reference data parameters detected.", LogType.WARN)
-                    if not self.update_VPR():
-                        param.revert()
-                except IndexError:
-                    pass
-                except:
-                    param.revert()
-                    self.print(formatException(), LogType.ERROR)
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
-        self.parameters_ready = True
-
-    def field_callback(self, msg):
-    # /vpr_nodes/field (aarapsi_robot_pack/ImageDetails)
+    def field_callback(self, msg: ImageDetails):
     # Store new SVM field
         self.svm_field_msg  = msg
         self.update_contour = self.svm_field_msg.data.update
 
-    def state_callback(self, msg):
-    # /vpr_nodes/state (aarapsi_robot_pack/MonitorDetails)
+    def state_callback(self, msg: MonitorDetails):
     # Store new label message and act as drop-in replacement for odom_callback + img_callback
         self.state              = msg
         self.new_state          = True
@@ -122,7 +104,7 @@ class Main_ROS_Class(Base_ROS_Class):
         super().exit()
 
 class Doc_Frame:
-    def __init__(self, nmrc, printer=print):
+    def __init__(self, nmrc: Main_ROS_Class, printer=print):
         # Prepare figures:
         self.num_points       = len(nmrc.ip.dataset['dataset']['px'])
         self.sim_mtrx_img     = np.zeros((self.num_points, self.num_points)) # Make similarity matrix figure
@@ -159,7 +141,7 @@ def main_loop(nmrc: Main_ROS_Class, doc_frame: Doc_Frame):
         nmrc.update_contour = False
     updateSVMMFigBokeh(doc_frame, nmrc.state)
 
-def ros_spin(nmrc, doc_frame):
+def ros_spin(nmrc: Main_ROS_Class, doc_frame: Doc_Frame):
     try:
         nmrc.rate_obj.sleep()
         try:
@@ -178,7 +160,7 @@ def ros_spin(nmrc, doc_frame):
         nmrc.print(formatException(), LogType.ERROR)
         nmrc.exit()
 
-def main(doc, nmrc):
+def main(doc, nmrc: Main_ROS_Class):
     try:
         doc_frame = Doc_Frame(nmrc)
         doc.add_root(row(   #column(doc_frame.fig_iframe_feed_, row(doc_frame.fig_iframe_mtrx_)), \

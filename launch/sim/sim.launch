@@ -1,41 +1,45 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="launch_slam"             default="true" />
-  <arg name="launch_feedfuse"         default="true" />
-  <arg name="joystick"                default="true" />
-  <arg name="use_sim_time"            default="true" />
-  <arg name="gui"                     default="true" />
-  <arg name="headless"                default="false"/>
-  <arg name="reset"                   default="True"/>
-  <arg name="log_level"               default="2"/>
+    <arg name="launch_slam"             default="true" />
+    <arg name="launch_feedfuse"         default="true" />
+    <arg name="joystick"                default="true" />
+    <arg name="use_sim_time"            default="true" />
+    <arg name="gui"                     default="true" />
+    <arg name="headless"                default="false"/>
 
-  <!-- Load Jackal's description, controllers, and teleop nodes. -->
-  <param name="robot_description"
-      command="$(find aarapsi_robot_pack)/exe/env_run
-          $(find aarapsi_robot_pack)/cfg/urdf/jackal
-          $(find xacro)/xacro $(find aarapsi_robot_pack)/cfg/urdf/jackal.urdf.xacro" />
+    <arg name="namespace"               default="/vpr_nodes"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="reset"                   default="True"/>
+    <arg name="log_level"               default="2"/>
 
-  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+    <!-- Load Jackal's description, controllers, and teleop nodes. -->
+    <param name="robot_description"
+        command="$(find aarapsi_robot_pack)/exe/env_run
+            $(find aarapsi_robot_pack)/cfg/urdf/jackal
+            $(find xacro)/xacro $(find aarapsi_robot_pack)/cfg/urdf/jackal.urdf.xacro" />
 
-  <include file="$(find jackal_control)/launch/control.launch" />
-  <include if="$(arg joystick)" file="$(find aarapsi_robot_pack)/launch/sim/teleop.launch"/>
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
 
-  <include file="$(find aarapsi_robot_pack)/launch/sim/gazebo.launch">
-    <arg name="gui"                   value="$(arg gui)" />
-    <arg name="use_sim_time"          value="$(arg use_sim_time)" />
-    <arg name="headless"              value="$(arg headless)" />
-  </include>
+    <include file="$(find jackal_control)/launch/control.launch" />
+    <include if="$(arg joystick)" file="$(find aarapsi_robot_pack)/launch/sim/teleop.launch"/>
 
-  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find aarapsi_robot_pack)/rviz/sim_control.rviz" />
+    <include file="$(find aarapsi_robot_pack)/launch/sim/gazebo.launch">
+        <arg name="gui"                   value="$(arg gui)" />
+        <arg name="use_sim_time"          value="$(arg use_sim_time)" />
+        <arg name="headless"              value="$(arg headless)" />
+    </include>
 
-  <include if="$(arg launch_slam)" file="$(find aarapsi_robot_pack)/launch/slam.launch">
-    <arg name="param_file"            value="sim_cfg.yaml" />
-    <arg name="load_params"           value="true" />
-    <arg name="log_level"             value="$(arg log_level)"/>
-    <arg name="reset"                 value="$(arg reset)"/>
-  </include>
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find aarapsi_robot_pack)/rviz/sim_control.rviz" />
 
-  <node if="$(arg launch_feedfuse)" name="multicam_fusion" pkg="aarapsi_robot_pack" type="multicam_fusion.py" output="screen"
-        args="-V $(arg log_level) -R $(arg reset) -ID 1"/>
-  
+    <include if="$(arg launch_slam)" file="$(find aarapsi_robot_pack)/launch/slam.launch">
+        <arg name="param_file"            value="sim_cfg.yaml" />
+        <arg name="load_params"           value="true" />
+        <arg name="log_level"             value="$(arg log_level)"/>
+        <arg name="reset"                 value="$(arg reset)"/>
+    </include>
+
+    <node if="$(arg launch_feedfuse)" name="multicam_fusion" pkg="aarapsi_robot_pack" type="multicam_fusion.py" output="screen"
+        args="
+                -r 15.0 -N multicam_fusion -n $(arg namespace) -a $(arg anon) 
+                -V $(arg log_level) -R $(arg reset)"/>
 </launch>

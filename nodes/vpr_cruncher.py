@@ -7,17 +7,22 @@ import numpy as np
 import argparse as ap
 import sys
 
+import cv2
+from cv_bridge import CvBridge
+
 from rospy_message_converter import message_converter
 from aarapsi_robot_pack.srv import DoExtraction, DoExtractionRequest
 from aarapsi_robot_pack.msg import RequestDataset, ResponseDataset, xyw, ImageOdom, ImageLabelDetails
 
 from nav_msgs.msg import Odometry
+from std_msgs.msg import String
+from sensor_msgs.msg import CompressedImage
 
-from pyaarapsi.core.enum_tools              import enum_name, enum_value_options
-from pyaarapsi.core.argparse_tools          import check_bounded_float, check_positive_float, check_positive_int, check_bool, check_enum, check_string
-from pyaarapsi.core.ros_tools               import yaw_from_q, q_from_yaw, roslogger, set_rospy_log_lvl, LogType, NodeState
-from pyaarapsi.core.helper_tools            import formatException, np_ndarray_to_uint8_list, uint8_list_to_np_ndarray, vis_dict
-from pyaarapsi.vpr_simple.vpr_helpers       import VPR_Tolerance_Mode
+from pyaarapsi.core.enum_tools              import enum_name
+from pyaarapsi.core.argparse_tools          import check_bounded_float, check_positive_float, check_positive_int, check_enum, check_string
+from pyaarapsi.core.ros_tools               import yaw_from_q, q_from_yaw, roslogger, LogType, NodeState
+from pyaarapsi.core.helper_tools            import formatException, uint8_list_to_np_ndarray, vis_dict
+from pyaarapsi.vpr_simple.vpr_helpers       import VPR_Tolerance_Mode, FeatureType
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
 
@@ -31,7 +36,7 @@ class Main_ROS_Class(Base_ROS_Class):
         
         self.node_ready(kwargs['order_id'])
 
-    def init_params(self, rate_num, log_level, reset):
+    def init_params(self, rate_num: float, log_level: float, reset: bool):
         super().init_params(rate_num, log_level, reset)
         self.TOL_MODE        = self.params.add(self.namespace + "/tolerance/mode",      None,                   lambda x: check_enum(x, VPR_Tolerance_Mode),    force=False)
         self.TOL_THRES       = self.params.add(self.namespace + "/tolerance/threshold", None,                   check_positive_float,                           force=False)
@@ -54,6 +59,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.dataset_requests       = []
         self.time_history           = []
 
+        self.bridge                 = CvBridge()
+
         # Process reference data
         try:
             self.ip                 = VPRDatasetProcessor(self.make_dataset_dict(path=False), try_gen=False, ros=True)
@@ -73,7 +80,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.data_sub               = rospy.Subscriber(     self.namespace + "/img_odom",                   ImageOdom,          self.data_callback,             queue_size=1)
         self.srv_extraction         = rospy.ServiceProxy(   self.namespace + '/do_extraction',              DoExtraction)
 
-    def dataset_request_callback(self, msg):
+    def dataset_request_callback(self, msg: ResponseDataset):
         pass # TODO
 
     def update_VPR(self):
@@ -90,43 +97,26 @@ class Main_ROS_Class(Base_ROS_Class):
             self.dataset_swap_pending = False
             return True
 
-    def param_callback(self, msg):
-        self.parameters_ready = False
-        if self.params.exists(msg.data):
-            if not self.params.update(msg.data):
-                self.print("Change to parameter [%s]; bad value." % msg.data, LogType.DEBUG)
-            
-            else:
-                self.print("Change to parameter [%s]; updated." % msg.data, LogType.DEBUG)
+    def param_helper(self, msg: String):
+        ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
+        try:
+            param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
+            self.print("Change to VPR reference data parameters detected.", LogType.WARN)
+            if not self.update_VPR():
+                param.revert()
+        except IndexError:
+            pass
+        except:
+            param.revert()
+            self.print(formatException(), LogType.ERROR)
 
-                if msg.data == self.LOG_LEVEL.name:
-                    set_rospy_log_lvl(self.LOG_LEVEL.get())
-                elif msg.data == self.RATE_NUM.name:
-                    self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-
-                ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
-                try:
-                    param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
-                    self.print("Change to VPR reference data parameters detected.", LogType.WARN)
-                    if not self.update_VPR():
-                        param.revert()
-                except IndexError:
-                    pass
-                except:
-                    param.revert()
-                    self.print(formatException(), LogType.ERROR)
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
-        self.parameters_ready = True
-
-    def data_callback(self, msg):
-    # /data/img_odom (aarapsi_robot_pack/ImageOdom)
+    def data_callback(self, msg: ImageOdom):
 
         self.ego                    = [round(msg.odom.pose.pose.position.x, 3), round(msg.odom.pose.pose.position.y, 3), round(yaw_from_q(msg.odom.pose.pose.orientation), 3)]
-        self.store_query            = uint8_list_to_np_ndarray(msg.image)
+        self.store_query            = msg.image
         self.new_query              = True
         
-    def getMatchInd(self, ft_qry):
+    def getMatchInd(self, ft_qry: list):
     # top matching reference index for query
 
         dvc = fastdist.matrix_to_matrix_distance(self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())], \
@@ -155,7 +145,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         return trueInd
 
-    def publish_ros_info(self, tInd, mInd, dvc, gt_state, gt_error):
+    def publish_ros_info(self, tInd: int, mInd: int, dvc: list, gt_state: bool, gt_error: float):
     # Publish label and/or image feed
 
         struct_to_pub                   = ImageLabelDetails()
@@ -163,7 +153,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.vpr_ego                    = [self.ip.dataset['dataset']['px'][mInd], self.ip.dataset['dataset']['py'][mInd], self.ip.dataset['dataset']['pw'][mInd]]
         self.ego_known                  = True
 
-        struct_to_pub.queryImage        = np_ndarray_to_uint8_list(self.store_query)
+        struct_to_pub.queryImage        = self.store_query
         struct_to_pub.data.gt_ego       = xyw(x=self.ego[0], y=self.ego[1], w=self.ego[2])
         struct_to_pub.data.vpr_ego      = xyw(x=self.vpr_ego[0], y=self.vpr_ego[1], w=self.vpr_ego[2])
         struct_to_pub.data.dvc          = dvc
@@ -184,17 +174,19 @@ class Main_ROS_Class(Base_ROS_Class):
         self.odom_estimate_pub.publish(odom_to_pub)
         self.vpr_label_pub.publish(struct_to_pub) # label publisher
 
-    def extract(self, array, feat_type, img_dims):
+    def extract(self, query: CompressedImage, feat_type: FeatureType, img_dims: list):
         if not self.main_ready:
             return
+        
         requ            = DoExtractionRequest()
         requ.feat_type  = enum_name(feat_type)
         requ.img_dims   = list(img_dims)
-        requ.input      = np_ndarray_to_uint8_list(array)
-        resp = self.srv_extraction(requ)
+        requ.input      = query
+        resp            = self.srv_extraction(requ)
         if resp.success == False:
             raise Exception('[extract] Service executed, success=False!')
-        return uint8_list_to_np_ndarray(resp.output)
+        out = uint8_list_to_np_ndarray(resp.output)
+        return out
 
     def main(self):
         # Main loop process
@@ -205,7 +197,7 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.loop_contents()
             except Exception as e:
                 if self.parameters_ready:
-                    self.print(vis_dict(self.ip.dataset))
+                    self.print(vis_dict(self.ip.dataset), LogType.DEBUG)
                     raise Exception('Critical failure. ' + formatException()) from e
                 else:
                     self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
@@ -223,7 +215,6 @@ class Main_ROS_Class(Base_ROS_Class):
 
         ft_qry          = self.extract(self.store_query, self.FEAT_TYPE.get(), self.IMG_DIMS.get())
         matchInd, dvc   = self.getMatchInd(ft_qry) # Find match
-
         trueInd         = self.getTrueInd() # find correct match based on shortest difference to measured odometry
         tolMode         = self.TOL_MODE.get()
 

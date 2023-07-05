@@ -85,7 +85,6 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
 
-        self.PATH_FILE              = self.params.add(self.namespace + "/path/file",                None,               check_string,                           force=False)
         self.PATH_DENSITY           = self.params.add(self.namespace + "/path/density",             None,               check_positive_float,                   force=False)
         self.SLOW_LIN_VEL_MAX       = self.params.add(self.namespace + "/limits/slow/linear",       None,               check_positive_float,                   force=False)
         self.SLOW_ANG_VEL_MAX       = self.params.add(self.namespace + "/limits/slow/angular",      None,               check_positive_float,                   force=False)
@@ -162,21 +161,18 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.exit()
 
         # Process path data:
-        if self.PATH_FILE.get() == '':
-            try:
-                self.ip                 = VPRDatasetProcessor(self.make_dataset_dict(path=True), try_gen=False, ros=True, printer=self.print)
-                self.path_dataset       = copy.deepcopy(self.ip.dataset)
-                self.ip.load_dataset(self.make_dataset_dict(path=False))
-            except:
-                self.print(formatException(), LogType.ERROR)
-                self.exit()
+        try:
+            self.ip                 = VPRDatasetProcessor(self.make_dataset_dict(path=True), try_gen=False, ros=True, printer=self.print)
+            self.path_dataset       = copy.deepcopy(self.ip.dataset)
+            self.ip.load_dataset(self.make_dataset_dict(path=False))
+        except:
+            self.print(formatException(), LogType.ERROR)
+            self.exit()
 
-            self.plan_path      = self.generate_path(dataset = self.path_dataset)
-            self.ref_path       = self.generate_path(dataset = self.ip.dataset)
+        self.plan_path      = self.generate_path(dataset = self.path_dataset)
+        self.ref_path       = self.generate_path(dataset = self.ip.dataset)
 
-            self.make_path_from_data()
-        else:
-            self.make_path_from_file()
+        self.make_path()
 
     def init_rospy(self):
         super().init_rospy()
@@ -287,6 +283,9 @@ class Main_ROS_Class(Base_ROS_Class):
         self.new_slam_ego           = True
 
     def joy_cb(self, msg: Joy):
+        if not self.ready:
+            return
+        
         if abs(rospy.Time.now().to_sec() - msg.header.stamp.to_sec()) > 0.5: # if joy message was generated longer ago than half a second:
             self.safety_mode = Safety_Mode.STOP
             if not self.SIMULATION.get():
@@ -379,27 +378,13 @@ class Main_ROS_Class(Base_ROS_Class):
         error_y         = rel_y[target_ind]
         return error_y, error_yaw, current_ind, target_ind
 
-    def make_path_from_file(self):
-        self.root           = rospkg.RosPack().get_path(rospkg.get_package_name(os.path.abspath(__file__))) + '/data/paths'
-        with open(self.root + '/' + self.PATH_FILE.get()) as f:
-            reader = csv.reader(f, quoting=csv.QUOTE_NONNUMERIC)
-            data = list(reader)
-            x_data = data[0]
-            y_data = data[1]
-            w_data = data[2]
-            self.points = np.transpose(np.array([x_data, y_data, w_data]))
-            f.close()
-        self.make_path()
-
-    def make_path_from_data(self):
+    def make_path(self):
         px      = list(self.path_dataset['dataset']['px'])
         py      = list(self.path_dataset['dataset']['py'])
         pw      = list(self.path_dataset['dataset']['pw'])
 
         self.points = np.transpose(np.array([px, py, pw]))
-        self.make_path()
 
-    def make_path(self):
         if self.REVERSE.get():
             self.points[:,2] = list(angle_wrap(np.pi + self.points[:,2], mode='RAD'))
             self.points = np.flipud(self.points)

@@ -1,6 +1,6 @@
 string feat_type
 int64[] img_dims
-uint8[] input
+sensor_msgs/CompressedImage input
 ---
 bool success # Whether or not succeeded
 int64[] vector_dims

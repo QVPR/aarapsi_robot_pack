@@ -4,24 +4,18 @@ import rospy
 import sys
 import argparse as ap
 
-import cv2
-from cv_bridge import CvBridge
-
-from std_msgs.msg import String
-from sensor_msgs.msg import CompressedImage, Image
+from sensor_msgs.msg import CompressedImage
 from nav_msgs.msg import Odometry
 from aarapsi_robot_pack.msg import ImageOdom
 
-from pyaarapsi.core.argparse_tools  import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools       import NodeState, roslogger, LogType, set_rospy_log_lvl
-from pyaarapsi.core.helper_tools    import formatException, np_ndarray_to_uint8_list
-from pyaarapsi.core.enum_tools      import enum_value_options
+from pyaarapsi.core.ros_tools       import NodeState, roslogger, LogType
+from pyaarapsi.core.helper_tools    import formatException, Timer
 from pyaarapsi.vpr_classes.base     import Base_ROS_Class, base_optional_args
 
 '''
-Image+Odometry Aggregator
+Data Fuser
 
-This node exists to fuse an image stream with an odometry stream 
+This node exists to fuse a compressed image stream with an odometry stream 
 into a single synchronised message structure that keeps images and
 odometry aligned in time across networks. Without the use of this 
 node, if either the odometry or image stream fails, nodes further 
@@ -51,21 +45,12 @@ class Main_ROS_Class(Base_ROS_Class):
         self.odom       = None
         self.new_img    = False
         self.new_odom   = False
-        self.time       = rospy.Time.now().to_sec()
-
-        self.bridge     = CvBridge()
-
-        if self.IMG_TOPIC.get().endswith('compressed'):
-            self.img_type       = CompressedImage
-            self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.compressed_imgmsg_to_cv2(img, "bgr8"))
-        else:
-            self.img_type       = Image
-            self.img_convert    = lambda img: np_ndarray_to_uint8_list(self.bridge.imgmsg_to_cv2(img, "passthrough"))
+        self.time       = rospy.Time.now()
 
     def init_rospy(self):
         super().init_rospy()
         
-        self.img_sub    = rospy.Subscriber(self.IMG_TOPIC.get(), self.img_type, self.img_cb, queue_size=1)
+        self.img_sub    = rospy.Subscriber(self.IMG_TOPIC.get(), CompressedImage, self.img_cb, queue_size=1)
         self.odom_sub   = rospy.Subscriber(self.SLAM_ODOM_TOPIC.get(), Odometry, self.odom_cb, queue_size=1)
         self.pub        = self.add_pub(self.namespace + '/img_odom', ImageOdom, queue_size=1)
 
@@ -79,40 +64,40 @@ class Main_ROS_Class(Base_ROS_Class):
 
     def main(self):
         self.set_state(NodeState.MAIN)
+        self.timer = Timer()
 
         while not rospy.is_shutdown():
             self.loop_contents()
 
     def loop_contents(self):
 
-        if rospy.Time.now().to_sec() - self.time > 1:
+        if rospy.Time.now().to_sec() - self.time.to_sec() > 1:
             self.print("Long message delay experienced.", LogType.WARN, throttle=5)
 
         if not (self.new_img and self.new_odom):
             rospy.sleep(0.005)
             return # denest
+        
         self.rate_obj.sleep()
-        self.time       = rospy.Time.now().to_sec()
+        self.time                   = rospy.Time.now()
 
         self.new_img                = False
         self.new_odom               = False
 
         msg_to_pub                  = ImageOdom()
-        msg_to_pub.header.stamp     = rospy.Time.now()
+        msg_to_pub.header.stamp     = self.time
         msg_to_pub.header.frame_id  = self.odom.header.frame_id
         msg_to_pub.odom             = self.odom
-        msg_to_pub.image            = self.img_convert(self.img)
-
+        msg_to_pub.image            = self.img
         self.pub.publish(msg_to_pub)
-        del msg_to_pub
 
 def do_args():
-    parser = ap.ArgumentParser(prog="img_odom_agg.py", 
-                            description="ROS Image+Odom Aggregator Tool",
+    parser = ap.ArgumentParser(prog="data_fuser.py", 
+                            description="ROS Compressed Image+Odom Data Fuser Tool",
                             epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
     
     # Optional Arguments:
-    parser = base_optional_args(parser, node_name='img_odom_agg')
+    parser = base_optional_args(parser, node_name='data_fuser')
 
     # Parse args...
     return vars(parser.parse_known_args()[0])

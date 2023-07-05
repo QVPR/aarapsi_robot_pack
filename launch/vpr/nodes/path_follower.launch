@@ -23,7 +23,7 @@
 
         <!-- Path Follower Node: -->
         <node pkg="aarapsi_robot_pack" type="path_follower.py" name="path_follower" output="screen" 
-            args="-r $(arg main_rate) -N path_follower -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 10">
+            args="-r $(arg main_rate) -N path_follower -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 9">
         </node>
 
     </group>

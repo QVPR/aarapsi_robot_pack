@@ -4,20 +4,21 @@ import rospy
 import argparse as ap
 import sys
 import copy
-from rospy_message_converter import message_converter
-from pyaarapsi.core.argparse_tools  import check_bool
-from pyaarapsi.core.ros_tools       import NodeState, roslogger, LogType
-from pyaarapsi.core.helper_tools    import formatException, np_ndarray_to_uint8_list, uint8_list_to_np_ndarray
-from pyaarapsi.core.enum_tools      import enum_get
-from pyaarapsi.vpr_classes.base     import Base_ROS_Class, base_optional_args
+import cv2
+from cv_bridge import CvBridge
 
-from pyaarapsi.vpr_simple.vpr_helpers            import FeatureType
-from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
+from rospy_message_converter import message_converter
+from pyaarapsi.core.argparse_tools          import check_bool
+from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, compressed2np
+from pyaarapsi.core.helper_tools            import formatException, np_ndarray_to_uint8_list
+from pyaarapsi.core.enum_tools              import enum_get
+from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
+
+from pyaarapsi.vpr_simple.vpr_helpers       import FeatureType
+from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 
 from aarapsi_robot_pack.msg import RequestDataset, ResponseDataset
-from aarapsi_robot_pack.srv import DoExtraction, DoExtractionResponse
-
-import torch, gc
+from aarapsi_robot_pack.srv import DoExtraction, DoExtractionResponse, DoExtractionRequest
 
 '''
 
@@ -47,6 +48,7 @@ class Main_ROS_Class(Base_ROS_Class):
         path_dataset_dict       = self.make_dataset_dict(path=True)
         ref_dataset_dict        = self.make_dataset_dict(path=False)
         self.use_gpu            = use_gpu
+        self.bridge             = CvBridge()
         try:
             self.vpr                = VPRDatasetProcessor(path_dataset_dict, try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
                                                         autosave=True, use_tqdm=True, ros=True)
@@ -80,17 +82,18 @@ class Main_ROS_Class(Base_ROS_Class):
             self.print("Dataset generated.")
             self.dataset_request_pub.publish(ResponseDataset(params=params_for_swap, success=True))
 
-    def handle_do_extraction(self, req):
+    def handle_do_extraction(self, req: DoExtractionRequest):
         ans                 = DoExtractionResponse()
         success             = True
         try:
-            query           = uint8_list_to_np_ndarray(req.input)
+            query           = compressed2np(req.input, self.bridge)
             feat_type       = enum_get(req.feat_type, FeatureType)
             img_dims        = req.img_dims
             ft_qry          = self.vpr.getFeat(query, feat_type, use_tqdm=False, dims=img_dims)
             ans.output      = np_ndarray_to_uint8_list(ft_qry)
             ans.vector_dims = list(ft_qry.shape)
         except:
+            self.print(formatException(), LogType.ERROR)
             success         = False
 
         ans.success         = success
