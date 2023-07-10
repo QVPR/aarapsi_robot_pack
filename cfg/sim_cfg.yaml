@@ -3,7 +3,7 @@ vpr_nodes:
 
   simulation: true
   launch_step: 1
-  feature_type: RAW
+  feature_type: NETVLAD
   img_dims:
   - 64
   - 64
@@ -16,26 +16,29 @@ vpr_nodes:
   vpr_odom_topic: /vpr_odom
   img_topic: /ros_indigosdk_occam/stitched_image0/compressed
   joy_topic: /bluetooth_teleop/joy
-  cmd_topic: /cmd_vel
+  cmd_topic: /joy_teleop/cmd_vel
 
   slam_map: cpr_office_0_01res.pcd
   controller_mac: '1C:A0:B8:EC:59:05'
 
   limits:
     slow:
-      linear: 0.8
+      linear: 0.5
       angular: 0.6
     fast:
-      linear: 1.6
-      angular: 1.0
+      linear: 1.0
+      angular: 1.2
     mode: 'slow'
 
   groundtruth: true
   path: 
-    bag_name: sim1_ccw1
+    bag_name: sim1_ccw2
     odom_topic: /odom/true
     img_topic: /ros_indigosdk_occam/stitched_image0/compressed
     density: 0.2
+    zones:
+      length: 5
+      number: 20
 
   svm:
     qry:
@@ -54,7 +57,7 @@ vpr_nodes:
       threshold: 0.2
 
   ref:
-    bag_name: sim1_ccw2
+    bag_name: sim1_ccw1
     filters: '{}'
     sample_rate: 10.0
 

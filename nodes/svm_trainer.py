@@ -4,12 +4,9 @@ import rospy
 import argparse as ap
 import sys
 from rospy_message_converter import message_converter
-from std_msgs.msg import String
 
-from pyaarapsi.core.argparse_tools              import check_positive_float, check_bool, check_string
-from pyaarapsi.core.ros_tools                   import NodeState, roslogger, LogType, set_rospy_log_lvl
-from pyaarapsi.core.helper_tools                import formatException
-from pyaarapsi.core.enum_tools                  import enum_value_options
+from pyaarapsi.core.ros_tools                   import NodeState, roslogger, LogType
+from pyaarapsi.core.helper_tools                import formatException, vis_dict
 from pyaarapsi.vpr_simple.svm_model_tool        import SVMModelProcessor
 from pyaarapsi.vpr_classes.base                 import Base_ROS_Class, base_optional_args
 
@@ -112,13 +109,23 @@ class Main_ROS_Class(Base_ROS_Class):
                     raise Exception('Model generation failed even after new datasets were constructed!')
 
     def main(self):
+        # Main loop process
         self.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            self.rate_obj.sleep()
-            self.loop_contents()
+            try:
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
     
     def loop_contents(self):
+        self.rate_obj.sleep()
         self.update_SVM()
 
 def do_args():

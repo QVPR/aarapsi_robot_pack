@@ -63,11 +63,20 @@ class Main_ROS_Class(Base_ROS_Class):
         self.new_img    = True
 
     def main(self):
+        # Main loop process
         self.set_state(NodeState.MAIN)
-        self.timer = Timer()
 
         while not rospy.is_shutdown():
-            self.loop_contents()
+            try:
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
 
     def loop_contents(self):
 

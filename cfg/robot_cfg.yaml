@@ -16,7 +16,7 @@ vpr_nodes:
   vpr_odom_topic: /vpr_odom
   img_topic: /ros_indigosdk_occam/stitched_image0/compressed
   joy_topic: /bluetooth_teleop/joy
-  cmd_topic: /cmd_vel
+  cmd_topic: /joy_teleop/cmd_vel
 
   slam_map: s11_center_map.pcd
   controller_mac: '1C:A0:B8:EC:59:05'
@@ -36,6 +36,9 @@ vpr_nodes:
     odom_topic: /odom/true
     img_topic: /ros_indigosdk_occam/stitched_image0/compressed
     density: 0.2
+    zones:
+      length: 5
+      number: 20
 
   svm:
     qry:

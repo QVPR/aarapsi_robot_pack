@@ -85,7 +85,7 @@ class Main_ROS_Class(Base_ROS_Class):
         try:
             # Process reference data
             dataset_dict            = self.make_dataset_dict()
-            self.image_processor    = VPRDatasetProcessor(dataset_dict, try_gen=False, ros=True)
+            self.ip    = VPRDatasetProcessor(dataset_dict, try_gen=False, ros=True)
         except:
             self.print(formatException(), LogType.ERROR)
             self.exit()
@@ -124,7 +124,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
     def update_VPR(self):
         dataset_dict = self.make_dataset_dict()
-        if not self.image_processor.swap(dataset_dict, generate=False, allow_false=True):
+        if not self.ip.swap(dataset_dict, generate=False, allow_false=True):
             self.print("VPR reference data swap failed. Previous set will be retained (changed ROS parameter will revert)", LogType.WARN)
             return False
         else:
@@ -162,21 +162,20 @@ class Main_ROS_Class(Base_ROS_Class):
         self.parameters_ready = True
 
     def main(self):
+        # Main loop process
         self.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
             try:
                 self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
             except Exception as e:
-                if nmrc.parameters_ready:
-                    nmrc.print(vis_dict(nmrc.image_processor.dataset), LogType.DEBUG)
+                if self.parameters_ready:
                     raise Exception('Critical failure. ' + formatException()) from e
                 else:
-                    nmrc.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
                     rospy.sleep(0.5)
-
-                if rospy.is_shutdown():
-                    nmrc.exit()
 
     def make_control_visualisation(self):
         if not np.sqrt(np.sum(np.square(np.array(self.gt_ego) - np.array(self.last_ego)))) > 0.02:
@@ -255,8 +254,8 @@ class Main_ROS_Class(Base_ROS_Class):
         cv2.line(icon_piece, ( 65,  10), ( 65,  80), (200,100,100), 2)
         cv2.line(icon_piece, ( 10,  42), (120,  42), (200,100,100), 2)
 
-        ref_match_raw   = self.image_processor.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.vpr_ind]
-        ref_true_raw    = self.image_processor.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.gt_ind]
+        ref_match_raw   = self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.vpr_ind]
+        ref_true_raw    = self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.gt_ind]
         qry_raw         = uint8_list_to_np_ndarray(self.control_msg.query_image)
         ref_match       = convert_img_to_uint8(ref_match_raw,   resize=(250,250), dstack=(not len(ref_match_raw.shape) == 3))
         ref_true        = convert_img_to_uint8(ref_true_raw,    resize=(250,250), dstack=(not len(ref_true_raw.shape) == 3))

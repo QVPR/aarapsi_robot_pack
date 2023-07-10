@@ -7,7 +7,7 @@ int8 gt_state                           # int matching -1: unknown, 0: bad, 1: g
 float64 gt_error			# float value for error in groundtruth scheme
 
 string safety_mode
-bool autonomous_cmd
+string command_mode
 
 float64 current_yaw
 float64 target_yaw

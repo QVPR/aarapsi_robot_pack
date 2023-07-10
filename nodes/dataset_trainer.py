@@ -6,11 +6,12 @@ import sys
 import copy
 import cv2
 from cv_bridge import CvBridge
+from cv_bridge.boost.cv_bridge_boost import cvtColor2
 
 from rospy_message_converter import message_converter
 from pyaarapsi.core.argparse_tools          import check_bool
 from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, compressed2np
-from pyaarapsi.core.helper_tools            import formatException, np_ndarray_to_uint8_list
+from pyaarapsi.core.helper_tools            import formatException, np_ndarray_to_uint8_list, Timer
 from pyaarapsi.core.enum_tools              import enum_get
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
 
@@ -50,9 +51,9 @@ class Main_ROS_Class(Base_ROS_Class):
         self.use_gpu            = use_gpu
         self.bridge             = CvBridge()
         try:
-            self.vpr                = VPRDatasetProcessor(path_dataset_dict, try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
-                                                        autosave=True, use_tqdm=True, ros=True)
-            self.path_odom          = copy.deepcopy(self.vpr.dataset)
+            self.vpr            = VPRDatasetProcessor(path_dataset_dict, try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
+                                        autosave=True, use_tqdm=True, ros=True)
+            self.path_odom      = copy.deepcopy(self.vpr.dataset)
             self.vpr.load_dataset(ref_dataset_dict, try_gen=True)
         except Exception as e:
             self.print(formatException(), LogType.ERROR)
@@ -86,7 +87,7 @@ class Main_ROS_Class(Base_ROS_Class):
         ans                 = DoExtractionResponse()
         success             = True
         try:
-            query           = compressed2np(req.input, self.bridge)
+            query           = compressed2np(req.input)
             feat_type       = enum_get(req.feat_type, FeatureType)
             img_dims        = req.img_dims
             ft_qry          = self.vpr.getFeat(query, feat_type, use_tqdm=False, dims=img_dims)
@@ -100,14 +101,25 @@ class Main_ROS_Class(Base_ROS_Class):
         self.print("Service requested, Success=%s" % (str(success)), LogType.DEBUG)
         return ans
 
+    
     def main(self):
+        # Main loop process
         self.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            self.rate_obj.sleep()
-            self.loop_contents()
-    
+            try:
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
+
     def loop_contents(self):
+        self.rate_obj.sleep()
         self.update_VPR()
 
 def do_args():

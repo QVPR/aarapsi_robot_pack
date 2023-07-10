@@ -14,7 +14,7 @@ from pyaarapsi.vpr_simple.vpr_dataset_tool       import VPRDatasetProcessor
 
 from pyaarapsi.core.argparse_tools  import check_positive_int, check_valid_ip
 from pyaarapsi.core.helper_tools    import formatException
-from pyaarapsi.core.ros_tools       import roslogger, set_rospy_log_lvl, NodeState, LogType
+from pyaarapsi.core.ros_tools       import roslogger, NodeState, LogType
 from pyaarapsi.core.ajax_tools      import AJAX_Connection, POST_Method_Types
 from pyaarapsi.core.os_tools        import exec_screen, kill_screens
 from pyaarapsi.vpr_classes.base     import Base_ROS_Class, base_optional_args
@@ -92,8 +92,9 @@ class Main_ROS_Class(Base_ROS_Class):
             'factors': msg.factors 
         }
         self.ajax.post('state', data=data, method_type=POST_Method_Types.SET)
-    
+
     def main(self):
+        # Main loop process
         self.set_state(NodeState.MAIN)
 
         while (not rospy.is_shutdown()) and (not self.ajax_ready):
@@ -104,14 +105,20 @@ class Main_ROS_Class(Base_ROS_Class):
         self.ajax.post('odom', data={k: self.ip.dataset['dataset'][k].tolist() for k in ['time', 'px', 'py', 'pw', 'vx', 'vy', 'vw']}, method_type=POST_Method_Types.SET)
         self.print("Handling ROS data.")
 
-        # loop forever until signal shutdown
-        time = rospy.Time.now().to_sec()
         while not rospy.is_shutdown():
-            self.rate_obj.sleep()
-            new_time    = rospy.Time.now().to_sec()
-            dt          = np.max([np.round(new_time - time,3), 0.0001])
-            self.print((dt, np.round(1/dt,3)), LogType.DEBUG)
-            time        = new_time
+            try:
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
+
+    def loop_contents(self):
+        self.rate_obj.sleep()
 
 def do_args():
     parser = ap.ArgumentParser(prog="vpr_plotter", 

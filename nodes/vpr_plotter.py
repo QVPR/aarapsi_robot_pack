@@ -148,7 +148,6 @@ def ros_spin(nmrc: Main_ROS_Class, doc_frame: Doc_Frame):
             main_loop(nmrc, doc_frame)
         except Exception as e:
             if nmrc.parameters_ready:
-                nmrc.print(vis_dict(nmrc.ip.dataset), LogType.DEBUG)
                 raise Exception('Critical failure. ' + formatException()) from e
             else:
                 nmrc.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
@@ -194,7 +193,7 @@ if __name__ == '__main__':
     logging.getLogger('bokeh').setLevel(logging.ERROR) # hide bokeh superfluous messages
 
     args = do_args()
-    nmrc = Main_ROS_Class(**args)
+    nmrc = Main_ROS_Class(**args, disable_signals=True)
     nmrc.print("[ROS Base] Ready.")
     server = Server({'/': lambda doc: main(doc, nmrc)}, num_procs=1, address=args['address'], port=args['port'])
     server.start()

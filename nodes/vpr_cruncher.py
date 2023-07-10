@@ -7,9 +7,6 @@ import numpy as np
 import argparse as ap
 import sys
 
-import cv2
-from cv_bridge import CvBridge
-
 from rospy_message_converter import message_converter
 from aarapsi_robot_pack.srv import DoExtraction, DoExtractionRequest
 from aarapsi_robot_pack.msg import RequestDataset, ResponseDataset, xyw, ImageOdom, ImageLabelDetails
@@ -21,7 +18,7 @@ from sensor_msgs.msg import CompressedImage
 from pyaarapsi.core.enum_tools              import enum_name
 from pyaarapsi.core.argparse_tools          import check_bounded_float, check_positive_float, check_positive_int, check_enum, check_string
 from pyaarapsi.core.ros_tools               import yaw_from_q, q_from_yaw, roslogger, LogType, NodeState
-from pyaarapsi.core.helper_tools            import formatException, uint8_list_to_np_ndarray, vis_dict
+from pyaarapsi.core.helper_tools            import formatException, uint8_list_to_np_ndarray
 from pyaarapsi.vpr_simple.vpr_helpers       import VPR_Tolerance_Mode, FeatureType
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
@@ -58,8 +55,6 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.dataset_requests       = []
         self.time_history           = []
-
-        self.bridge                 = CvBridge()
 
         # Process reference data
         try:
@@ -119,22 +114,23 @@ class Main_ROS_Class(Base_ROS_Class):
     def getMatchInd(self, ft_qry: list):
     # top matching reference index for query
 
-        dvc = fastdist.matrix_to_matrix_distance(self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())], \
-                                                 np.matrix(ft_qry),\
-                                                 fastdist.euclidean, "euclidean") # metric: 'euclidean' or 'cosine'
+        _features   = self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())]
+        _px         = self.ip.dataset['dataset']['px']
+        _py         = self.ip.dataset['dataset']['py']
+        _pw         = self.ip.dataset['dataset']['py']
+
+        dvc = fastdist.matrix_to_matrix_distance(_features, np.matrix(ft_qry), fastdist.euclidean, "euclidean").flatten() # metric: 'euclidean' or 'cosine'
 
         if self.ego_known and self.DVC_WEIGHT.get() < 1: # then perform biasing via distance:
-            spd = fastdist.matrix_to_matrix_distance(np.transpose(np.matrix([self.ip.dataset['dataset']['px'], self.ip.dataset['dataset']['py']])), \
-                                                     np.matrix([self.vpr_ego[0], self.vpr_ego[1]]), \
-                                                     fastdist.euclidean, "euclidean")
-            spd_norm = spd/np.max(spd[:]) 
-            dvc_norm = dvc/np.max(dvc[:])
+            spd = fastdist.matrix_to_matrix_distance(np.transpose(np.matrix([_px, _py])), np.matrix([self.vpr_ego[0], self.vpr_ego[1]]), fastdist.euclidean, "euclidean")
+            spd_norm = spd/np.max(spd) 
+            dvc_norm = dvc/np.max(dvc)
             spd_x_dvc = ((1-self.DVC_WEIGHT.get())*spd_norm**2 + (self.DVC_WEIGHT.get())*dvc_norm) # TODO: vary bias with velocity, weighted sum
 
-            mInd = np.argmin(spd_x_dvc[:])
+            mInd = np.argmin(spd_x_dvc)
             return mInd, spd_x_dvc
         else:
-            mInd = np.argmin(dvc[:])
+            mInd = np.argmin(dvc)
             return mInd, dvc
     
     def getTrueInd(self):
@@ -177,7 +173,6 @@ class Main_ROS_Class(Base_ROS_Class):
     def extract(self, query: CompressedImage, feat_type: FeatureType, img_dims: list):
         if not self.main_ready:
             return
-        
         requ            = DoExtractionRequest()
         requ.feat_type  = enum_name(feat_type)
         requ.img_dims   = list(img_dims)
@@ -195,9 +190,10 @@ class Main_ROS_Class(Base_ROS_Class):
         while not rospy.is_shutdown():
             try:
                 self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
             except Exception as e:
                 if self.parameters_ready:
-                    self.print(vis_dict(self.ip.dataset), LogType.DEBUG)
                     raise Exception('Critical failure. ' + formatException()) from e
                 else:
                     self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
@@ -209,7 +205,7 @@ class Main_ROS_Class(Base_ROS_Class):
             self.print("Waiting.", LogType.DEBUG, throttle=60) # print every 60 seconds
             rospy.sleep(0.005)
             return
-        
+
         self.rate_obj.sleep()
         self.new_query  = False
 

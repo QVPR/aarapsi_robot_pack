@@ -8,7 +8,7 @@ Panels:
         - /TF1/Frames1
         - //vpr_nodes/vpr_odom1/Shape1
       Splitter Ratio: 0.5176470875740051
-    Tree Height: 522
+    Tree Height: 703
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -41,8 +41,6 @@ Visualization Manager:
       Frame Timeout: 50
       Frames:
         All Enabled: false
-        ark_enclosure_link:
-          Value: false
         base_link:
           Value: true
         chassis_link:
@@ -59,15 +57,45 @@ Visualization Manager:
           Value: false
         imu_link:
           Value: false
-        left_cam:
-          Value: false
         map:
+          Value: true
+        microstrain_link:
+          Value: true
+        mid_camera0:
+          Value: true
+        mid_camera0_optical:
+          Value: true
+        mid_camera1:
+          Value: true
+        mid_camera1_optical:
+          Value: true
+        mid_camera2:
+          Value: true
+        mid_camera2_optical:
+          Value: true
+        mid_camera3:
+          Value: true
+        mid_camera3_optical:
+          Value: true
+        mid_camera4:
+          Value: true
+        mid_camera4_optical:
           Value: true
         mid_mount:
           Value: false
+        mid_vlp16_leg1:
+          Value: true
+        mid_vlp16_leg2:
+          Value: true
+        mid_vlp16_leg3:
+          Value: true
+        mid_vlp16_leg4:
+          Value: true
+        mid_vlp16_mount:
+          Value: true
+        mid_vlp16_plate:
+          Value: true
         navsat_link:
-          Value: false
-        occam:
           Value: false
         odom:
           Value: true
@@ -81,14 +109,10 @@ Visualization Manager:
           Value: false
         rear_right_wheel_link:
           Value: false
-        right_cam:
-          Value: false
-        sensors_link:
-          Value: false
-        um7_imu_link:
-          Value: false
         velodyne:
           Value: false
+        velodyne_base_link:
+          Value: true
       Marker Alpha: 0.5
       Marker Scale: 4
       Name: TF
@@ -110,22 +134,37 @@ Visualization Manager:
                 imu_link:
                   {}
                 mid_mount:
-                  ark_enclosure_link:
-                    {}
                   front_mount:
-                    left_cam:
-                      {}
-                    right_cam:
-                      {}
-                    um7_imu_link:
-                      {}
-                  occam:
                     {}
+                  mid_camera0:
+                    mid_camera0_optical:
+                      {}
+                  mid_camera1:
+                    mid_camera1_optical:
+                      {}
+                  mid_camera2:
+                    mid_camera2_optical:
+                      {}
+                  mid_camera3:
+                    mid_camera3_optical:
+                      {}
+                  mid_camera4:
+                    mid_camera4_optical:
+                      {}
+                  mid_vlp16_mount:
+                    mid_vlp16_leg1:
+                      {}
+                    mid_vlp16_leg2:
+                      {}
+                    mid_vlp16_leg3:
+                      {}
+                    mid_vlp16_leg4:
+                      {}
+                    mid_vlp16_plate:
+                      velodyne_base_link:
+                        velodyne:
+                          {}
                   rear_mount:
-                    {}
-                  sensors_link:
-                    {}
-                  velodyne:
                     {}
                 navsat_link:
                   {}
@@ -136,6 +175,8 @@ Visualization Manager:
                   {}
                 rear_right_wheel_link:
                   {}
+              microstrain_link:
+                {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -310,7 +351,7 @@ Visualization Manager:
       Marker Topic: /vpr_nodes/confidence
       Name: MarkerArray
       Namespaces:
-        "": true
+        {}
       Queue Size: 100
       Value: true
     - Angle Tolerance: 0.10000000149011612
@@ -362,18 +403,6 @@ Visualization Manager:
       Shaft Radius: 0.05000000074505806
       Shape: Arrow
       Topic: /odom/pose
-      Unreliable: false
-      Value: true
-    - Class: rviz/Image
-      Enabled: true
-      Image Topic: /vpr_nodes/occam/stitched_image0
-      Max Value: 1
-      Median window: 5
-      Min Value: 0
-      Name: /vpr_nodes/occam/stitched_image0
-      Normalize Range: true
-      Queue Size: 2
-      Transport Hint: compressed
       Unreliable: false
       Value: true
     - Class: rviz/Image
@@ -439,14 +468,12 @@ Visualization Manager:
 Window Geometry:
   /ros_indigosdk_occam/stitched_image0:
     collapsed: false
-  /vpr_nodes/occam/stitched_image0:
-    collapsed: false
   Displays:
     collapsed: false
   Height: 1016
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd00000004000000000000019a00000342fc020000000cfb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003d0000028d000000c900fffffffb00000040002f007600700072005f006e006f006400650073002f006f006300630061006d002f00730074006900740063006800650064005f0069006d006100670065003001000002d0000000af0000001600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d00610067006501000001d8000000b40000000000000000fb00000048002f0072006f0073005f0069006e006400690067006f00730064006b005f006f006300630061006d002f00730074006900740063006800650064005f0069006d006100670065003000000002e8000000970000001600fffffffb0000000a0049006d00610067006500000002b9000000c60000000000000000000000010000011a00000342fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003d00000342000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e100000197000000030000078000000056fc0100000002fb0000000800540069006d0065010000000000000780000003bc00fffffffb0000000800540069006d00650100000000000004500000000000000000000004c00000034200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000004000000000000019a00000342fc020000000cfb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003d00000342000000c900fffffffb00000040002f007600700072005f006e006f006400650073002f006f006300630061006d002f00730074006900740063006800650064005f0069006d006100670065003000000002d0000000af0000000000000000fb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d00610067006501000001d8000000b40000000000000000fb00000048002f0072006f0073005f0069006e006400690067006f00730064006b005f006f006300630061006d002f00730074006900740063006800650064005f0069006d006100670065003000000002e8000000970000001600fffffffb0000000a0049006d00610067006500000002b9000000c60000000000000000000000010000011a00000342fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003d00000342000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e100000197000000030000078000000056fc0100000002fb0000000800540069006d0065010000000000000780000003bc00fffffffb0000000800540069006d00650100000000000004500000000000000000000004c00000034200000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:

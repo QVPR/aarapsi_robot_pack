@@ -56,11 +56,25 @@ class Main_ROS_Class(Base_ROS_Class):
         self.gt_odom_pub.publish(gt_odom_msg)
         self.gt_pose_pub.publish(map_pose)
 
+    
     def main(self):
+        # Main loop process
         self.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            self.rate_obj.sleep()
+            try:
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
+
+    def loop_contents(self):
+        self.rate_obj.sleep()
 
 def do_args():
     parser = ap.ArgumentParser(prog="frame_transformer.py", 

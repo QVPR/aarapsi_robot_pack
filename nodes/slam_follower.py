@@ -7,18 +7,16 @@ import numpy as np
 import sys
 import os
 import csv
-import copy
 from fastdist import fastdist
 
 from nav_msgs.msg import Path, Odometry
 from std_msgs.msg import Header, ColorRGBA
-from geometry_msgs.msg import PoseStamped, Point, Twist, Vector3, Quaternion
+from geometry_msgs.msg import PoseStamped, Point, Twist, Vector3
 from visualization_msgs.msg import MarkerArray, Marker
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_string, check_float_list
-from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, q_from_yaw, yaw_from_q, pose2xyw
-from pyaarapsi.core.helper_tools            import formatException, Timer, angle_wrap, normalize_angle
-from pyaarapsi.core.enum_tools              import enum_value_options
+from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, q_from_yaw, pose2xyw
+from pyaarapsi.core.helper_tools            import formatException, Timer, angle_wrap, normalize_angle, vis_dict
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
 
@@ -184,6 +182,7 @@ class Main_ROS_Class(Base_ROS_Class):
             self.speeds.markers.append(new_marker)
 
     def main(self):
+        # Main loop process
         self.set_state(NodeState.MAIN)
 
         self.path_pub.publish(self.path)
@@ -192,11 +191,19 @@ class Main_ROS_Class(Base_ROS_Class):
         while not self.new_ego:
             self.rate_obj.sleep()
             self.print('Waiting for start position...')
-
         self.print('Entering main loop.')
 
         while not rospy.is_shutdown():
-            self.loop_contents()
+            try:
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
 
     def loop_contents(self):
 

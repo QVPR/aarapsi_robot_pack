@@ -15,7 +15,7 @@ from aarapsi_robot_pack.srv import SaveObj, SaveObjResponse
 
 from pyaarapsi.core.argparse_tools      import check_positive_float, check_bool, check_string
 from pyaarapsi.core.ros_tools           import NodeState, roslogger, LogType, pose2xyw, pose_covariance_to_stamped
-from pyaarapsi.core.helper_tools        import formatException
+from pyaarapsi.core.helper_tools        import formatException, vis_dict
 from pyaarapsi.core.enum_tools          import enum_value_options
 from pyaarapsi.core.file_system_tools   import scan_directory
 from pyaarapsi.vpr_classes.base     import Base_ROS_Class, base_optional_args
@@ -143,10 +143,20 @@ class Main_ROS_Class(Base_ROS_Class):
         self.path_pub.publish(self.path)
 
     def main(self):
+        # Main loop process
         self.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            self.loop_contents()
+            try:
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
 
     def loop_contents(self):
         self.rate_obj.sleep()

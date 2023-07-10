@@ -5,10 +5,9 @@ import sys
 import numpy as np
 import argparse as ap
 import cv2
-from cv_bridge import CvBridge
 from sensor_msgs.msg import CompressedImage
 
-from pyaarapsi.core.ros_tools       import LogType, roslogger
+from pyaarapsi.core.ros_tools       import LogType, roslogger, np2compressed, compressed2np, NodeState
 from pyaarapsi.core.helper_tools    import formatException
 from pyaarapsi.vpr_classes.base     import Base_ROS_Class, base_optional_args
 
@@ -32,8 +31,6 @@ class Main_ROS_Class(Base_ROS_Class):
 
     def init_vars(self):
         super().init_vars()
-
-        self.bridge             = CvBridge() # to convert sensor_msgs/CompressedImage to cv2.
 
         # flags to denest main loop:
         self.new_imgs           = [False] * 5
@@ -60,55 +57,64 @@ class Main_ROS_Class(Base_ROS_Class):
         self.cam3_sub           = rospy.Subscriber("/camera%d/image/compressed" % 3, CompressedImage, lambda msg: self.img_callback(3, msg), queue_size=1)
         self.cam4_sub           = rospy.Subscriber("/camera%d/image/compressed" % 4, CompressedImage, lambda msg: self.img_callback(4, msg), queue_size=1)
 
-        self.pano_pub           = rospy.Publisher("/ros_indigosdk_occam/stitched_image0/compressed",    CompressedImage, queue_size=1)
-        self.cam0_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 0,        CompressedImage, queue_size=1)
-        self.cam1_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 1,        CompressedImage, queue_size=1)
-        self.cam2_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 2,        CompressedImage, queue_size=1)
-        self.cam3_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 3,        CompressedImage, queue_size=1)
-        self.cam4_pub           = rospy.Publisher("/ros_indigosdk_occam/image%d/compressed" % 4,        CompressedImage, queue_size=1)
+        self.pano_pub           = self.add_pub("/ros_indigosdk_occam/stitched_image0/compressed",    CompressedImage, queue_size=1)
+        self.cam0_pub           = self.add_pub("/ros_indigosdk_occam/image%d/compressed" % 0,        CompressedImage, queue_size=1)
+        self.cam1_pub           = self.add_pub("/ros_indigosdk_occam/image%d/compressed" % 1,        CompressedImage, queue_size=1)
+        self.cam2_pub           = self.add_pub("/ros_indigosdk_occam/image%d/compressed" % 2,        CompressedImage, queue_size=1)
+        self.cam3_pub           = self.add_pub("/ros_indigosdk_occam/image%d/compressed" % 3,        CompressedImage, queue_size=1)
+        self.cam4_pub           = self.add_pub("/ros_indigosdk_occam/image%d/compressed" % 4,        CompressedImage, queue_size=1)
 
-    def img_callback(self, index, msg):
+    def img_callback(self, index: int, msg: CompressedImage):
     # /ros_indigosdk_occam/image0/compressed (sensor_msgs/CompressedImage)
     # Store newest forward-facing image received
         self.new_imgs[index]    = True
-        self.imgs[index]        = self.bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
+        self.imgs[index]        = compressed2np(msg, "bgr8")
 
+    
     def main(self):
+        # Main loop process
+        self.set_state(NodeState.MAIN)
 
-        rospy.loginfo('Entering main loop.')
-
-        # Main loop:
         while not rospy.is_shutdown():
-
-            if not all(self.new_imgs): # denest
-                rospy.loginfo_throttle(15, 'Waiting... %s' % str(self.new_imgs))
-                rospy.sleep(0.001)
-                continue
             try:
-                self.rate_obj.sleep()
-                self.new_imgs = [False] * 5
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
 
-                ## perform distortion removal:
-                corrected_imgs = [cv2.undistort(i, self.cam, self.distCoeff)[:, 30:-30] for i in self.imgs]
+    def loop_contents(self):
 
-                ## create panoramic image:
-                panorama = np.concatenate(corrected_imgs[3:] + corrected_imgs[:3], axis=1)[:-20,:]
-                corrected_pano = cv2.resize(panorama, (panorama.shape[1], int(panorama.shape[0]*1.5)), interpolation=cv2.INTER_AREA)
-                
-                
-                ## Publish to ROS for viewing pleasure (optional)
-                # convert to ROS message first
-                ros_pano = self.bridge.cv2_to_compressed_imgmsg(corrected_pano, "png")\
-                # publish
-                self.pano_pub.publish(ros_pano)
-                self.cam0_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[0],"png"))
-                self.cam1_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[1],"png"))
-                self.cam2_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[2],"png"))
-                self.cam3_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[3],"png"))
-                self.cam4_pub.publish(self.bridge.cv2_to_compressed_imgmsg(self.imgs[4],"png"))
+        if not all(self.new_imgs): # denest
+            self.print('Waiting... %s' % str(self.new_imgs), LogType.DEBUG, throttle=5)
+            rospy.sleep(0.001)
+            return
+        
+        self.rate_obj.sleep()
+        self.new_imgs = [False] * 5
 
-            except:
-                self.print(formatException(), LogType.WARN)
+        try:
+            ## perform distortion removal:
+            corrected_imgs = [cv2.undistort(i, self.cam, self.distCoeff)[:, 30:-30] for i in self.imgs]
+        except:
+            self.print(formatException(), LogType.WARN)
+            return
+
+        ## create panoramic image:
+        panorama = np.concatenate(corrected_imgs[3:] + corrected_imgs[:3], axis=1)[:-20,:]
+        corrected_pano = cv2.resize(panorama, (panorama.shape[1], int(panorama.shape[0]*1.5)), interpolation=cv2.INTER_AREA)
+        
+        # publish:
+        self.pano_pub.publish(np2compressed(corrected_pano, "png"))
+        self.cam0_pub.publish(np2compressed(self.imgs[0],   "png"))
+        self.cam1_pub.publish(np2compressed(self.imgs[1],   "png"))
+        self.cam2_pub.publish(np2compressed(self.imgs[2],   "png"))
+        self.cam3_pub.publish(np2compressed(self.imgs[3],   "png"))
+        self.cam4_pub.publish(np2compressed(self.imgs[4],   "png"))
 
 def do_args():
     parser = ap.ArgumentParser(prog="multicam_fusion.py", 

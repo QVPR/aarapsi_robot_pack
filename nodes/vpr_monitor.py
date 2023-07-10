@@ -7,14 +7,12 @@ import argparse as ap
 import sys
 
 from rospy_message_converter import message_converter
-
+from std_msgs.msg import String
 from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, ImageLabelDetails, MonitorDetails  # Our custom structures
 
 from pyaarapsi.vpred                        import *
-from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_string
-from pyaarapsi.core.helper_tools            import formatException
+from pyaarapsi.core.helper_tools            import formatException, vis_dict
 from pyaarapsi.core.ros_tools               import roslogger, set_rospy_log_lvl, LogType, NodeState
-from pyaarapsi.core.enum_tools              import enum_value_options
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.svm_model_tool    import SVMModelProcessor
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
@@ -87,11 +85,10 @@ class Main_ROS_Class(Base_ROS_Class):
             self.print("VPR reference data swapped.", LogType.INFO)
             return True
 
-    def svm_request_callback(self, msg):
+    def svm_request_callback(self, msg: ResponseSVM):
         pass
 
-    def label_callback(self, msg):
-    # /vpr_nodes/label (aarapsi_robot_pack/ImageLabelDetails)
+    def label_callback(self, msg: ImageLabelDetails):
     # Store new label message and act as drop-in replacement for odom_callback + img_callback
 
         self.label            = msg
@@ -103,48 +100,45 @@ class Main_ROS_Class(Base_ROS_Class):
         self.new_label        = True
 
 
-    def param_callback(self, msg):
-        self.parameters_ready = False
-        if self.params.exists(msg.data):
-            self.print("Change to parameter [%s]; logged." % msg.data, LogType.DEBUG)
-            self.params.update(msg.data)
-
-            if msg.data == self.LOG_LEVEL.name:
-                set_rospy_log_lvl(self.LOG_LEVEL.get())
-            elif msg.data == self.RATE_NUM.name:
-                self.rate_obj = rospy.Rate(self.RATE_NUM.get())
-
-            svm_data_comp   = [i == msg.data for i in self.SVM_DATA_NAMES]
-            try:
-                param = np.array(self.SVM_DATA_PARAMS)[svm_data_comp][0]
-                self.print("Change to SVM parameters detected.", LogType.WARN)
-                if not self.update_SVM():
-                    param.revert()
-            except IndexError:
-                pass
-            except:
-                self.print(formatException(), LogType.DEBUG)
-
-            ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
-            try:
-                param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
-                self.print("Change to VPR reference data parameters detected.", LogType.WARN)
-                if not self.update_VPR():
-                    param.revert()
-            except IndexError:
-                pass
-            except:
+    def param_helper(self, msg: String):
+        svm_data_comp   = [i == msg.data for i in self.SVM_DATA_NAMES]
+        try:
+            param = np.array(self.SVM_DATA_PARAMS)[svm_data_comp][0]
+            self.print("Change to SVM parameters detected.", LogType.WARN)
+            if not self.update_SVM():
                 param.revert()
-                self.print(formatException(), LogType.ERROR)
-        else:
-            self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
-        self.parameters_ready = True
+        except IndexError:
+            pass
+        except:
+            self.print(formatException(), LogType.DEBUG)
+
+        ref_data_comp   = [i == msg.data for i in self.REF_DATA_NAMES]
+        try:
+            param = np.array(self.REF_DATA_PARAMS)[ref_data_comp][0]
+            self.print("Change to VPR reference data parameters detected.", LogType.WARN)
+            if not self.update_VPR():
+                param.revert()
+        except IndexError:
+            pass
+        except:
+            param.revert()
+            self.print(formatException(), LogType.ERROR)
 
     def main(self):
+        # Main loop process
         self.set_state(NodeState.MAIN)
 
         while not rospy.is_shutdown():
-            self.loop_contents()
+            try:
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
 
     def loop_contents(self):
 
