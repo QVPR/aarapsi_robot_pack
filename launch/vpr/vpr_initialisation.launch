@@ -30,13 +30,13 @@
         <!-- Param Watcher Node: -->
         <node if="$(arg launch_paramwatcher)" pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
                 args="
-                        -N param_watcher -r $(arg throttle_rate) -a $(arg anon)
+                        -N param_watcher -r $(arg init_rate) -a $(arg anon)
                         -V $(arg log_level) -R $(arg reset) -ID 1"/>
 
         <!-- Data Fuser Node: -->
         <node if="$(arg launch_data_fuser)" pkg="aarapsi_robot_pack" type="data_fuser.py" name="data_fuser"  output="screen"
                 args="
-                        -N data_fuser -r $(arg throttle_rate) -a $(arg anon)
+                        -N data_fuser -r $(arg init_rate) -a $(arg anon)
                         -V $(arg log_level) -R $(arg reset) -ID 2" />
 
     </group>
