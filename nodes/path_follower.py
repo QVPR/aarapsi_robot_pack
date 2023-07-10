@@ -713,9 +713,11 @@ class Main_ROS_Class(Base_ROS_Class):
         if self.command_mode == Command_Mode.VPR:
             heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + self.roll_match(), 'RAD'))
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
-            override_svm        = True
+            override_svm        = False
         else:
             ego                 = self.slam_ego
+            override_svm        = True
+        if self.SVM_OVERRIDE.get():
             override_svm        = True
 
         current_ind, zone       = self.calc_current_ind(ego)
