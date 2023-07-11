@@ -50,7 +50,7 @@
         
         <!-- Autonomous Nodes: -->
         <group if="$(arg launch_auto)">
-            <include file="$(find aarapsi_robot_pack)/launch/vpr/path_follower.launch">
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/nodes/path_follower.launch">
                 <arg name="param_file"          value="robot_cfg.yaml"/>
                 <arg name="log_level"           value="$(arg log_level)"/>
                 <arg name="reset"               value="$(arg reset)"/>
