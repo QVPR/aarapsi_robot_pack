@@ -612,13 +612,14 @@ class Main_ROS_Class(Base_ROS_Class):
             ang_max = 0
         
         if self.state_msg.mStateBin or override_svm:
-            new_linear              = np.sign(error_v)   * np.min([abs(error_v),   lin_max])
-            new_angular             = np.sign(error_yaw) * np.min([abs(error_yaw), ang_max])
-            self.old_linear         = new_linear
-            self.old_angular        = new_angular
+            new_linear          = np.sign(error_v)   * np.min([abs(error_v),   lin_max])
+            new_angular         = np.sign(error_yaw) * np.min([abs(error_yaw), ang_max])
         else:
-            new_linear              = self.old_linear / 2
-            new_angular             = self.old_angular / 2
+            new_linear          = self.old_linear / 2
+            new_angular         = self.old_angular / 2
+
+        self.old_linear         = new_linear
+        self.old_angular        = new_angular
 
         new_msg                 = Twist()
         new_msg.linear.x        = new_linear
