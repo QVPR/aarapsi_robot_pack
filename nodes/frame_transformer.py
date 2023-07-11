@@ -63,7 +63,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         while not rospy.is_shutdown():
             try:
-                self.loop_contents()
+                rospy.spin()
             except rospy.exceptions.ROSInterruptException as e:
                 pass
             except Exception as e:
@@ -72,9 +72,6 @@ class Main_ROS_Class(Base_ROS_Class):
                 else:
                     self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
                     rospy.sleep(0.5)
-
-    def loop_contents(self):
-        self.rate_obj.sleep()
 
 def do_args():
     parser = ap.ArgumentParser(prog="frame_transformer.py", 
