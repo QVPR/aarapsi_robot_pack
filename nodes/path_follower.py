@@ -564,6 +564,8 @@ class Main_ROS_Class(Base_ROS_Class):
         while not (self.new_robot_ego and self.new_vpr_ego):
             self.rate_obj.sleep()
             self.print('Waiting for start position information...', throttle=5)
+            if rospy.is_shutdown():
+                return
 
         self.ready          = True
         self.new_vpr_ego    = False
