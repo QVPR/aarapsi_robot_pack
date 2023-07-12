@@ -21,7 +21,7 @@ from nav_msgs.msg           import Path, Odometry
 from std_msgs.msg           import Header, ColorRGBA, String
 from geometry_msgs.msg      import PoseStamped, Point, Twist, Vector3
 from visualization_msgs.msg import MarkerArray, Marker
-from sensor_msgs.msg        import Joy
+from sensor_msgs.msg        import Joy, CompressedImage
 from aarapsi_robot_pack.msg import ControllerStateInfo, MonitorDetails
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_string, check_float_list, check_enum, check_positive_int, check_float
@@ -219,6 +219,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.zones_pub          = self.add_pub(     self.namespace + '/zones',      MarkerArray,                                queue_size=1, latch=True)
         self.cmd_pub            = self.add_pub(     self.CMD_TOPIC.get(),           Twist,                                      queue_size=1)
         self.info_pub           = self.add_pub(     self.nodespace + '/info',       ControllerStateInfo,                        queue_size=1)
+        self.rm_pub             = self.add_pub(     self.nodespace + '/rm_output',  CompressedImage,                            queue_size=1)
         self.state_sub          = rospy.Subscriber( self.namespace + '/state',      MonitorDetails,         self.state_cb,      queue_size=1)
         self.robot_odom_sub     = rospy.Subscriber( self.ROBOT_ODOM_TOPIC.get(),    Odometry,               self.robot_odom_cb, queue_size=1) # wheel encoders fused
         self.slam_odom_sub      = rospy.Subscriber( self.SLAM_ODOM_TOPIC.get(),     Odometry,               self.slam_odom_cb,  queue_size=1)
@@ -595,7 +596,7 @@ class Main_ROS_Class(Base_ROS_Class):
         matches         = m2m_dist(image_to_align.flatten()[np.newaxis, :], options_stacked, True)
         yaw_fix_deg     = np.argpartition(matches, 1)[0:1][0]
         yaw_fix_rad     = yaw_fix_deg * np.pi / 180.0
-        self.print([query_raw.shape, image_to_align.shape, self.ip.dataset['dataset']['RAW'][self.state_msg.data.matchId].shape, against_image.shape])
+        self.rm_pub.publish(np2compressed(cv2.resize(np.concatenate([image_to_align,against_image],axis=0),(360,64))))
         return yaw_fix_rad
 
     def update_position(self, curr_ind: int) -> None:
