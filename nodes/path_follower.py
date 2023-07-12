@@ -116,6 +116,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.ROBOT_ODOM_TOPIC       = self.params.add(self.namespace + "/robot_odom_topic",         None,               check_string,                           force=False)
         self.VPR_ODOM_TOPIC         = self.params.add(self.namespace + "/vpr_odom_topic",           None,               check_string,                           force=False)
 
+        self.PRINT_DISPLAY          = self.params.add(self.nodespace + "/print_display",            True,               check_bool,                             force=reset)
         self.USE_NOISE              = self.params.add(self.nodespace + "/noise/enable",             False,              check_bool,                             force=reset)
         self.NOISE_VALS             = self.params.add(self.nodespace + "/noise/vals",               [0.1]*3,            lambda x: check_float_list(x, 3),       force=reset)
         self.PUB_INFO               = self.params.add(self.nodespace + "/publish_info",             True,               check_bool,                             force=reset)
