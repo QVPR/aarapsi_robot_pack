@@ -388,7 +388,7 @@ class Main_ROS_Class(Base_ROS_Class):
     
     def calc_current_ind(self, ego):
         current_ind         = np.argmin(m2m_dist(self.path_xyws[:,0:2], ego[0:2], True), axis=0)
-        zone                = np.max(np.arange(self.num_zones+1)[np.array(self.zone_indices) < current_ind])
+        zone                = np.max(np.arange(self.num_zones)[np.array(self.zone_indices) < current_ind] + 1)
         return current_ind, zone
 
     def calc_errors(self, ego, target_ind: int = None):
