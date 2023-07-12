@@ -388,7 +388,7 @@ class Main_ROS_Class(Base_ROS_Class):
     
     def calc_current_ind(self, ego):
         current_ind         = np.argmin(m2m_dist(self.path_xyws[:,0:2], ego[0:2], True), axis=0)
-        zone                = np.max(np.arange(self.num_zones)[np.array(self.zone_indices[0:-1]) < current_ind] + 1)
+        zone                = np.max(np.arange(self.num_zones)[np.array(self.zone_indices[0:-1]) <= current_ind] + 1)
         return current_ind, zone
 
     def calc_errors(self, ego, target_ind: int = None):
@@ -714,7 +714,9 @@ class Main_ROS_Class(Base_ROS_Class):
         self.new_robot_ego  = False
 
         if self.command_mode == Command_Mode.VPR:
-            heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + self.roll_match(), 'RAD'))
+            rm_corr             = self.roll_match()
+            heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
+            print([self.vpr_ego[2], rm_corr, heading_fixed, self.slam_ego[2]])
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
             override_svm        = False
         else:
