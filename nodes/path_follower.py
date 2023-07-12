@@ -716,8 +716,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         if self.command_mode == Command_Mode.VPR:
             rm_corr             = self.roll_match()
-            heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
-            print([self.vpr_ego[2], rm_corr, heading_fixed, self.slam_ego[2]])
+            heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] - rm_corr, 'RAD'))
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
             override_svm        = False
         else:
