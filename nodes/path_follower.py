@@ -732,7 +732,8 @@ class Main_ROS_Class(Base_ROS_Class):
         if self.command_mode == Command_Mode.ZONE_RETURN:
             self.zone_return(ego, current_ind)
 
-        self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, **errs)
+        if self.PRINT_DISPLAY.get():
+            self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, **errs)
 
 def do_args():
     parser = ap.ArgumentParser(prog="path_follower.py", 
