@@ -219,7 +219,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.zones_pub          = self.add_pub(     self.namespace + '/zones',      MarkerArray,                                queue_size=1, latch=True)
         self.cmd_pub            = self.add_pub(     self.CMD_TOPIC.get(),           Twist,                                      queue_size=1)
         self.info_pub           = self.add_pub(     self.nodespace + '/info',       ControllerStateInfo,                        queue_size=1)
-        self.rm_pub             = self.add_pub(     self.nodespace + '/rm_output',  CompressedImage,                            queue_size=1)
+        self.rm_pub             = self.add_pub(     '/rm_output/compressed',        CompressedImage,                            queue_size=1)
         self.state_sub          = rospy.Subscriber( self.namespace + '/state',      MonitorDetails,         self.state_cb,      queue_size=1)
         self.robot_odom_sub     = rospy.Subscriber( self.ROBOT_ODOM_TOPIC.get(),    Odometry,               self.robot_odom_cb, queue_size=1) # wheel encoders fused
         self.slam_odom_sub      = rospy.Subscriber( self.SLAM_ODOM_TOPIC.get(),     Odometry,               self.slam_odom_cb,  queue_size=1)
