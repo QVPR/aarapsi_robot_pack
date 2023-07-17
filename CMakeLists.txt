@@ -19,6 +19,9 @@ find_package(catkin REQUIRED COMPONENTS
   tf2
   message_generation
   robot_localization
+  joy
+  interactive_marker_twist_server
+  teleop_twist_joy
 )
 
 ## System dependencies are found with CMake's conventions
