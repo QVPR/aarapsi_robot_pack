@@ -228,6 +228,8 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.sublis.add_operation(self.namespace + '/path',     method_sub=self.path_peer_subscribe)
         self.sublis.add_operation(self.namespace + '/ref/path', method_sub=self.path_peer_subscribe)
+        self.sublis.add_operation(self.namespace + '/zones',    method_sub=self.path_peer_subscribe)
+        self.sublis.add_operation(self.namespace + '/speeds',   method_sub=self.path_peer_subscribe)
 
     def param_helper(self, msg: String):
         if msg.data == self.AUTONOMOUS_OVERRIDE.name:
@@ -362,9 +364,12 @@ class Main_ROS_Class(Base_ROS_Class):
         if topic_name == self.namespace + '/path':
             self.path_pub.publish(self.plan_path)
             self.speed_pub.publish(self.plan_speeds)
-            self.zones_pub.publish(self.zones)
         elif topic_name == self.namespace + '/ref/path':
             self.ref_path_pub.publish(self.ref_path)
+        elif topic_name == self.namespace + '/zones':
+            self.zones_pub.publish(self.zones)
+        elif topic_name == self.namespace + '/speeds':
+            self.speed_pub.publish(self.plan_speeds)
         else:
             raise Exception('Unknown path_peer_subscribe topic: %s' % str(topic_name))
 
