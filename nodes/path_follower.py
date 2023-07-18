@@ -620,8 +620,8 @@ class Main_ROS_Class(Base_ROS_Class):
             new_linear          = np.sign(error_v)   * np.min([abs(error_v),   lin_max])
             new_angular         = np.sign(error_yaw) * np.min([abs(error_yaw), ang_max])
         else:
-            new_linear          = self.old_linear / 2
-            new_angular         = self.old_angular / 2
+            new_linear          = self.old_linear
+            new_angular         = self.old_angular
 
         self.old_linear         = new_linear
         self.old_angular        = new_angular
