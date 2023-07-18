@@ -363,7 +363,6 @@ class Main_ROS_Class(Base_ROS_Class):
     def path_peer_subscribe(self, topic_name):
         if topic_name == self.namespace + '/path':
             self.path_pub.publish(self.plan_path)
-            self.speed_pub.publish(self.plan_speeds)
         elif topic_name == self.namespace + '/ref/path':
             self.ref_path_pub.publish(self.ref_path)
         elif topic_name == self.namespace + '/zones':
