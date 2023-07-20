@@ -14,7 +14,7 @@ import warnings
 import matplotlib.pyplot as plt
 
 from enum                   import Enum
-
+from rospy_message_converter import message_converter
 from scipy.interpolate      import splprep, splev
 
 from nav_msgs.msg           import Path, Odometry
@@ -22,7 +22,7 @@ from std_msgs.msg           import Header, ColorRGBA, String
 from geometry_msgs.msg      import PoseStamped, Point, Twist, Vector3
 from visualization_msgs.msg import MarkerArray, Marker
 from sensor_msgs.msg        import Joy, CompressedImage
-from aarapsi_robot_pack.msg import ControllerStateInfo, MonitorDetails
+from aarapsi_robot_pack.msg import ControllerStateInfo, MonitorDetails, RequestDataset, ResponseDataset
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_string, check_float_list, check_enum, check_positive_int, check_float
 from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, q_from_yaw, pose2xyw, compressed2np, np2compressed, q_from_rpy
@@ -153,6 +153,9 @@ class Main_ROS_Class(Base_ROS_Class):
         self.new_slam_ego       = False
         self.new_vpr_ego        = False
 
+        self.dataset_queue      = []
+        self.datasets_loaded    = [False, False, False]
+
         self.command_mode       = Command_Mode.STOP
 
         self.safety_mode        = Safety_Mode.STOP
@@ -192,25 +195,11 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.print(formatException(), LogType.DEBUG)
                 self.exit()
 
-        # Process path data:
-        try:
-            self.ip                 = VPRDatasetProcessor(self.make_dataset_dict(path=True), try_gen=False, ros=True, printer=self.print)
-            self.path_dataset       = copy.deepcopy(self.ip.dataset)
-            self.ip.load_dataset(self.make_dataset_dict(path=False))
-            if not self.FEAT_TYPE.get() == FeatureType.RAW:
-                self.ip.extend_dataset(FeatureType.RAW, try_gen=True, save=True)
-        except:
-            self.print(formatException(), LogType.ERROR)
-            self.exit()        
-
-        self.plan_path, self.plan_speeds, self.zones = self.make_path()
-        self.ref_path = self.generate_path(dataset = self.ip.dataset)
-
     def init_rospy(self):
         super().init_rospy()
 
         self.time               = rospy.Time.now().to_sec()
-
+        ds_requ                 = self.namespace + "/requests/dataset/"
         self.path_pub           = self.add_pub(     self.namespace + '/path',       Path,                                       queue_size=1, latch=True, subscriber_listener=self.sublis)
         self.ref_path_pub       = self.add_pub(     self.namespace + '/ref/path',   Path,                                       queue_size=1, latch=True, subscriber_listener=self.sublis)
         self.COR_pub            = self.add_pub(     self.namespace + '/cor',        PoseStamped,                                queue_size=1)
@@ -220,6 +209,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.cmd_pub            = self.add_pub(     self.CMD_TOPIC.get(),           Twist,                                      queue_size=1)
         self.info_pub           = self.add_pub(     self.nodespace + '/info',       ControllerStateInfo,                        queue_size=1)
         self.rm_pub             = self.add_pub(     '/rm_output/compressed',        CompressedImage,                            queue_size=1)
+        self.ds_requ_pub        = self.add_pub(     ds_requ + "request",            RequestDataset,                             queue_size=1)
+        self.ds_requ_sub        = rospy.Subscriber( ds_requ + "ready",              ResponseDataset,        self.ds_requ_cb,    queue_size=1)
         self.state_sub          = rospy.Subscriber( self.namespace + '/state',      MonitorDetails,         self.state_cb,      queue_size=1)
         self.robot_odom_sub     = rospy.Subscriber( self.ROBOT_ODOM_TOPIC.get(),    Odometry,               self.robot_odom_cb, queue_size=1) # wheel encoders fused
         self.slam_odom_sub      = rospy.Subscriber( self.SLAM_ODOM_TOPIC.get(),     Odometry,               self.slam_odom_cb,  queue_size=1)
@@ -230,6 +221,91 @@ class Main_ROS_Class(Base_ROS_Class):
         self.sublis.add_operation(self.namespace + '/ref/path', method_sub=self.path_peer_subscribe)
         self.sublis.add_operation(self.namespace + '/zones',    method_sub=self.path_peer_subscribe)
         self.sublis.add_operation(self.namespace + '/speeds',   method_sub=self.path_peer_subscribe)
+
+    def try_load_datasets(self, dp1, dp2):
+        if not self.datasets_loaded[0]:
+            try:
+                self.ip.load_dataset(dp1)
+                self.path_dataset       = copy.deepcopy(self.ip.dataset)
+                self.datasets_loaded[0] = True
+            except:
+                self.datasets_loaded[0] = False
+
+        if not self.datasets_loaded[1]:
+            try:
+                self.ip.load_dataset(dp2)
+                self.norm_dataset       = copy.deepcopy(self.ip.dataset)
+                self.datasets_loaded[1] = True
+
+                if not self.datasets_loaded[2] and not self.FEAT_TYPE.get() == FeatureType.RAW:
+                    try:
+                        self.ip.extend_dataset(FeatureType.RAW)
+                        self.datasets_loaded[2] = True
+                    except:
+                        self.datasets_loaded[2] = False
+
+            except:
+                self.datasets_loaded[1] = False
+        
+    def ds_requ_cb(self, msg: ResponseDataset):
+        if msg.success == False:
+            self.print('Dataset request processed, error. Parameters: %s' % str(msg.params), LogType.ERROR)
+        try:
+            index = self.dataset_queue.index(msg.params)
+            self.print('Dataset request processed, success. Removing from dataset queue.')
+            self.dataset_queue.pop(index)
+
+        except ValueError:
+            pass
+
+    def load_datasets(self):
+        # Process path data:
+        self.ip  = VPRDatasetProcessor(None, try_gen=False, ros=True, printer=self.print)
+
+        dp1 = self.make_dataset_dict(path=True)
+        dp2 = self.make_dataset_dict(path=False)
+
+        if self.FEAT_TYPE.get() == FeatureType.RAW:
+            self.datasets_loaded[2] = True
+        else:
+            dp3 = self.make_dataset_dict(path=True)
+            dp3['ft_types'] = enum_name(FeatureType.RAW, wrap=True)
+
+        self.try_load_datasets(dp1, dp2)
+
+        if not all(self.datasets_loaded): # if the model failed to generate, datasets not ready, therefore...
+            
+            # ...check what failed, and queue these datasets to be built:
+            if not self.datasets_loaded[0]: # qry set failed to generate:
+                dataset_msg = message_converter.convert_dictionary_to_ros_message('aarapsi_robot_pack/RequestDataset', dp1)
+                self.dataset_queue.append(dataset_msg)
+            if not self.datasets_loaded[1]: # ref set failed to generate:
+                dataset_msg = message_converter.convert_dictionary_to_ros_message('aarapsi_robot_pack/RequestDataset', dp2)
+                self.dataset_queue.append(dataset_msg)
+            if not self.datasets_loaded[2]: # ref set failed to generate:
+                dataset_msg = message_converter.convert_dictionary_to_ros_message('aarapsi_robot_pack/RequestDataset', dp3)
+                self.dataset_queue.append(dataset_msg)
+
+            self.ds_requ_pub.publish(self.dataset_queue[0])
+
+            wait_intervals = 0
+            while len(self.dataset_queue):
+                if rospy.is_shutdown():
+                    sys.exit()
+                self.print('Waiting for path dataset construction...', throttle=5)
+                self.rate_obj.sleep()
+                wait_intervals += 1
+                if wait_intervals > 10 / (1/self.RATE_NUM.get()):
+                    # Resend the oldest queue'd element every 10 seconds
+                    try:
+                        self.ds_requ_pub.publish(self.dataset_queue[0])
+                    except:
+                        pass
+                    wait_intervals = 0
+
+            self.try_load_datasets(dp1, dp2)
+            if not all(self.datasets_loaded):
+                raise Exception('Datasets were constructed, but could not be loaded!')
 
     def param_helper(self, msg: String):
         if msg.data == self.AUTONOMOUS_OVERRIDE.name:
@@ -566,6 +642,11 @@ class Main_ROS_Class(Base_ROS_Class):
     def main(self):
         # Main loop process
         self.set_state(NodeState.MAIN)
+
+        self.load_datasets()       
+
+        self.plan_path, self.plan_speeds, self.zones = self.make_path()
+        self.ref_path = self.generate_path(dataset = self.ip.dataset)
 
         self.path_pub.publish(self.plan_path)
         self.speed_pub.publish(self.plan_speeds)
