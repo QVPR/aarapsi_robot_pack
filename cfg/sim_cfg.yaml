@@ -32,7 +32,7 @@ vpr_nodes:
 
   groundtruth: true
   path: 
-    bag_name: sim_ccw_1
+    bag_name: sim_path
     odom_topic: /odom/true
     img_topic: /ros_indigosdk_occam/stitched_image0/compressed
     density: 0.2
