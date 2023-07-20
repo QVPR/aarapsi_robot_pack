@@ -689,10 +689,10 @@ class Main_ROS_Class(Base_ROS_Class):
         self.rm_pub.publish(np2compressed(cv2.resize(np.concatenate([image_to_align,against_image],axis=0),(360,64))))
         return yaw_fix_rad
 
-    def update_position(self, curr_ind: int) -> None:
+    def update_position(self, goal_ind: int) -> None:
         goal                    = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id='map'))
-        goal.pose.position      = Point(x=self.path_xyws[curr_ind,0], y=self.path_xyws[curr_ind,1], z=0.0)
-        goal.pose.orientation   = q_from_yaw(self.path_xyws[curr_ind,2])
+        goal.pose.position      = Point(x=self.path_xyws[goal_ind,0], y=self.path_xyws[goal_ind,1], z=0.0)
+        goal.pose.orientation   = q_from_yaw(self.path_xyws[goal_ind,2])
         self.goal_pub.publish(goal)
 
     def make_new_command(self, error_v: float, error_y: float, error_yaw: float, override_svm: bool = False) -> Twist:
@@ -724,7 +724,7 @@ class Main_ROS_Class(Base_ROS_Class):
     def path_follow(self, ego, current_ind, override_svm):
         errors, target_ind = self.calc_vpr_errors(ego, current_ind)
 
-        self.update_position(current_ind)
+        self.update_position(target_ind)
         new_msg = self.make_new_command(override_svm=override_svm, **errors)
         new_linear = new_msg.linear.x
         new_angular = new_msg.angular.z
@@ -801,7 +801,6 @@ class Main_ROS_Class(Base_ROS_Class):
         if self.command_mode == Command_Mode.VPR:
             rm_corr             = self.roll_match()
             heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
-            self.print({'vpr': self.vpr_ego[2], 'slam': self.slam_ego[2], 'corr': rm_corr, 'true_corr': self.slam_ego[2] - self.vpr_ego[2]})
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
             override_svm        = False
         else:
