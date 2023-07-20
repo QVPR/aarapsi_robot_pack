@@ -22,7 +22,7 @@ from std_msgs.msg           import Header, ColorRGBA, String
 from geometry_msgs.msg      import PoseStamped, Point, Twist, Vector3
 from visualization_msgs.msg import MarkerArray, Marker
 from sensor_msgs.msg        import Joy, CompressedImage
-from aarapsi_robot_pack.msg import ControllerStateInfo, MonitorDetails, RequestDataset, ResponseDataset
+from aarapsi_robot_pack.msg import ControllerStateInfo, MonitorDetails, RequestDataset, ResponseDataset, xyw
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_string, check_float_list, check_enum, check_positive_int, check_float
 from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, q_from_yaw, pose2xyw, compressed2np, np2compressed, q_from_rpy
@@ -327,27 +327,27 @@ class Main_ROS_Class(Base_ROS_Class):
         msg.query_image             = self.state_msg.queryImage
         # Extract Label Details:
         msg.dvc                     = self.state_msg.data.dvc
-        msg.group.gt_ego            = self.state_msg.data.gt_ego
-        msg.group.vpr_ego           = self.state_msg.data.vpr_ego
+        msg.group.gt_ego            = xyw(**{i: np.round(self.state_msg.data.gt_ego.__getattribute__(i),3) for i in ['x', 'y', 'w']})
+        msg.group.vpr_ego           = xyw(**{i: np.round(self.state_msg.data.vpr_ego.__getattribute__(i),3) for i in ['x', 'y', 'w']})
         msg.group.matchId           = self.state_msg.data.matchId
         msg.group.trueId            = self.state_msg.data.trueId
         msg.group.gt_state          = self.state_msg.data.gt_state
-        msg.group.gt_error          = self.state_msg.data.gt_error
+        msg.group.gt_error          = np.round(self.state_msg.data.gt_error, 3)
         # Extract (remaining) Monitor Details:
-        msg.group.mState            = self.state_msg.mState
-        msg.group.prob              = self.state_msg.prob
+        msg.group.mState            = np.round(self.state_msg.mState, 3)
+        msg.group.prob              = np.round(self.state_msg.prob, 3)
         msg.group.mStateBin         = self.state_msg.mStateBin
-        msg.group.factors           = self.state_msg.factors
+        msg.group.factors           = [np.round(i,3) for i in self.state_msg.factors]
 
         msg.group.safety_mode       = enum_name(self.safety_mode)
         msg.group.command_mode      = enum_name(self.command_mode)
 
-        msg.group.current_yaw       = current_yaw
-        msg.group.target_yaw        = target_yaw
+        msg.group.current_yaw       = np.round(current_yaw, 3)
+        msg.group.target_yaw        = np.round(target_yaw, 3)
 
         try:
-            msg.group.true_yaw      = self.slam_ego[2]
-            msg.group.delta_yaw     = self.slam_ego[2] - self.vpr_ego[2]
+            msg.group.true_yaw      = np.round(self.slam_ego[2], 3)
+            msg.group.delta_yaw     = np.round(self.slam_ego[2] - self.vpr_ego[2], 3)
         except:
             pass
         self.new_slam_ego = False
