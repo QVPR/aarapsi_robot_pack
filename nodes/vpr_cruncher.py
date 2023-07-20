@@ -173,11 +173,13 @@ class Main_ROS_Class(Base_ROS_Class):
     def extract(self, query: CompressedImage, feat_type: FeatureType, img_dims: list):
         if not self.main_ready:
             return
+        
         requ            = DoExtractionRequest()
         requ.feat_type  = enum_name(feat_type)
         requ.img_dims   = list(img_dims)
         requ.input      = query
         resp            = self.srv_extraction(requ)
+
         if resp.success == False:
             raise Exception('[extract] Service executed, success=False!')
         out = uint8_list_to_np_ndarray(resp.output)
@@ -209,7 +211,12 @@ class Main_ROS_Class(Base_ROS_Class):
         self.rate_obj.sleep()
         self.new_query  = False
 
-        ft_qry          = self.extract(self.store_query, self.FEAT_TYPE.get(), self.IMG_DIMS.get())
+        try:
+            ft_qry      = self.extract(self.store_query, self.FEAT_TYPE.get(), self.IMG_DIMS.get())
+        except rospy.service.ServiceException:
+            self.print('Service not reachable; is dataset_trainer overloaded? Skipping this iteration...', LogType.WARN, throttle=2)
+            return
+        
         matchInd, dvc   = self.getMatchInd(ft_qry) # Find match
         trueInd         = self.getTrueInd() # find correct match based on shortest difference to measured odometry
         tolMode         = self.TOL_MODE.get()
