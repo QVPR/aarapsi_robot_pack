@@ -722,6 +722,7 @@ class Main_ROS_Class(Base_ROS_Class):
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
             override_svm        = False
         else:
+            heading_fixed       = self.slam_ego[2]
             ego                 = self.slam_ego
             override_svm        = True
             

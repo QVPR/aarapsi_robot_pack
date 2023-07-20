@@ -3,7 +3,7 @@ vpr_nodes:
 
   simulation: true
   launch_step: 1
-  feature_type: NETVLAD
+  feature_type: RAW
   img_dims:
   - 64
   - 64
