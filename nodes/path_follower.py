@@ -244,9 +244,10 @@ class Main_ROS_Class(Base_ROS_Class):
             else:
                 self.safety_mode = Safety_Mode.STOP
 
-    def publish_controller_info(self, target_yaw: float):
+    def publish_controller_info(self, target_yaw: float, current_yaw: float):
         msg                         = ControllerStateInfo()
-
+        msg.header.stamp            = rospy.Time.now()
+        msg.header.frame_id         = 'map'
         msg.query_image             = self.state_msg.queryImage
         # Extract Label Details:
         msg.dvc                     = self.state_msg.data.dvc
@@ -265,12 +266,14 @@ class Main_ROS_Class(Base_ROS_Class):
         msg.group.safety_mode       = enum_name(self.safety_mode)
         msg.group.command_mode      = enum_name(self.command_mode)
 
-        msg.group.current_yaw       = self.vpr_ego[2]
+        msg.group.current_yaw       = current_yaw
         msg.group.target_yaw        = target_yaw
 
-        if self.new_slam_ego:
+        try:
             msg.group.true_yaw      = self.slam_ego[2]
             msg.group.delta_yaw     = self.slam_ego[2] - self.vpr_ego[2]
+        except:
+            pass
         self.new_slam_ego = False
 
         msg.group.lookahead         = self.lookahead
@@ -636,25 +639,17 @@ class Main_ROS_Class(Base_ROS_Class):
         return new_msg
 
     def path_follow(self, ego, current_ind, override_svm):
-        if self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM]:
-            errors, target_ind = self.calc_vpr_errors(ego, current_ind)
+        errors, target_ind = self.calc_vpr_errors(ego, current_ind)
 
-            self.update_position(current_ind)
-            new_msg = self.make_new_command(override_svm=override_svm, **errors)
-            new_linear = new_msg.linear.x
-            new_angular = new_msg.angular.z
+        self.update_position(current_ind)
+        new_msg = self.make_new_command(override_svm=override_svm, **errors)
+        new_linear = new_msg.linear.x
+        new_angular = new_msg.angular.z
 
-            self.publish_controller_info(self.path_xyws[target_ind,2])
+        if (not self.command_mode == Command_Mode.STOP) and (not self.safety_mode == Safety_Mode.STOP):
+            self.cmd_pub.publish(new_msg)
 
-            if (not self.command_mode == Command_Mode.STOP) and (not self.safety_mode == Safety_Mode.STOP):
-                self.cmd_pub.publish(new_msg)
-
-        else:
-            new_linear  = 0
-            new_angular = 0
-            errors      = {'error_yaw': 0, 'error_y': 0, 'error_v': 0}
-
-        return new_linear, new_angular, errors
+        return new_linear, new_angular, errors, target_ind
     
     def zone_return(self, ego, current_ind):
         if self.return_stage == Return_Stage.DONE:
@@ -734,13 +729,22 @@ class Main_ROS_Class(Base_ROS_Class):
             override_svm        = True
 
         current_ind, zone       = self.calc_current_ind(ego)
-        lin_cmd, ang_cmd, errs  = self.path_follow(ego, current_ind, override_svm)
+
+        if self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM]:
+            lin_cmd, ang_cmd, errs, target_ind = self.path_follow(ego, current_ind, override_svm)
+        else:
+            lin_cmd     = 0
+            ang_cmd     = 0
+            errs        = {'error_yaw': 0, 'error_y': 0, 'error_v': 0}
+            target_ind  = 0
 
         if self.command_mode == Command_Mode.ZONE_RETURN:
             self.zone_return(ego, current_ind)
 
         if self.PRINT_DISPLAY.get():
             self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, **errs)
+
+        self.publish_controller_info(self.path_xyws[target_ind,2], heading_fixed)
 
 def do_args():
     parser = ap.ArgumentParser(prog="path_follower.py", 
