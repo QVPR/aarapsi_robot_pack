@@ -204,8 +204,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.ref_path_pub       = self.add_pub(     self.namespace + '/ref/path',   Path,                                       queue_size=1, latch=True, subscriber_listener=self.sublis)
         self.COR_pub            = self.add_pub(     self.namespace + '/cor',        PoseStamped,                                queue_size=1)
         self.goal_pub           = self.add_pub(     self.namespace + '/path_goal',  PoseStamped,                                queue_size=1)
-        self.speed_pub          = self.add_pub(     self.namespace + '/speeds',     MarkerArray,                                queue_size=1, latch=True)
-        self.zones_pub          = self.add_pub(     self.namespace + '/zones',      MarkerArray,                                queue_size=1, latch=True)
+        self.speed_pub          = self.add_pub(     self.namespace + '/speeds',     MarkerArray,                                queue_size=1, latch=True, subscriber_listener=self.sublis)
+        self.zones_pub          = self.add_pub(     self.namespace + '/zones',      MarkerArray,                                queue_size=1, latch=True, subscriber_listener=self.sublis)
         self.cmd_pub            = self.add_pub(     self.CMD_TOPIC.get(),           Twist,                                      queue_size=1)
         self.info_pub           = self.add_pub(     self.nodespace + '/info',       ControllerStateInfo,                        queue_size=1)
         self.rm_pub             = self.add_pub(     '/rm_output/compressed',        CompressedImage,                            queue_size=1)
@@ -234,15 +234,17 @@ class Main_ROS_Class(Base_ROS_Class):
         if not self.datasets_loaded[1]:
             try:
                 self.ip.load_dataset(dp2)
-                self.norm_dataset       = copy.deepcopy(self.ip.dataset)
                 self.datasets_loaded[1] = True
 
                 if not self.datasets_loaded[2] and not self.FEAT_TYPE.get() == FeatureType.RAW:
                     try:
                         self.ip.extend_dataset(FeatureType.RAW)
+                        self.norm_dataset       = copy.deepcopy(self.ip.dataset)
                         self.datasets_loaded[2] = True
                     except:
                         self.datasets_loaded[2] = False
+                else:
+                    self.norm_dataset           = copy.deepcopy(self.ip.dataset)
 
             except:
                 self.datasets_loaded[1] = False
@@ -646,7 +648,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.load_datasets()       
 
         self.plan_path, self.plan_speeds, self.zones = self.make_path()
-        self.ref_path = self.generate_path(dataset = self.ip.dataset)
+        self.ref_path = self.generate_path(dataset = self.norm_dataset)
 
         self.path_pub.publish(self.plan_path)
         self.speed_pub.publish(self.plan_speeds)
@@ -679,7 +681,7 @@ class Main_ROS_Class(Base_ROS_Class):
         img_dims        = self.IMG_DIMS.get()
         query_raw       = cv2.cvtColor(compressed2np(self.state_msg.queryImage), cv2.COLOR_BGR2GRAY)
         image_to_align  = cv2.resize(query_raw, resize)
-        against_image   = cv2.resize(np.reshape(self.ip.dataset['dataset']['RAW'][self.state_msg.data.matchId], [img_dims[1], img_dims[0]]), resize)
+        against_image   = cv2.resize(np.reshape(self.norm_dataset['dataset']['RAW'][self.state_msg.data.matchId], [img_dims[1], img_dims[0]]), resize)
         options_stacked = np.stack([np.roll(against_image, i, 1).flatten() for i in range(against_image.shape[1])])
         matches         = m2m_dist(image_to_align.flatten()[np.newaxis, :], options_stacked, True)
         yaw_fix_deg     = np.argpartition(matches, 1)[0:1][0]
