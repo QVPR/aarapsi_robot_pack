@@ -2,6 +2,7 @@
 <launch>
     <arg name="launch_slam"             default="true" />
     <arg name="launch_feedfuse"         default="true" />
+    <arg name="launch_rviz"             default="true" />
     <arg name="joystick"                default="true" />
     <arg name="use_sim_time"            default="true" />
     <arg name="gui"                     default="true" />
@@ -29,7 +30,7 @@
         <arg name="headless"              value="$(arg headless)" />
     </include>
 
-    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find aarapsi_robot_pack)/rviz/sim_control.rviz" />
+    <node if="$(arg launch_rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find aarapsi_robot_pack)/rviz/sim_control.rviz" />
 
     <include if="$(arg launch_slam)" file="$(find aarapsi_robot_pack)/launch/slam.launch">
         <arg name="param_file"            value="sim_cfg.yaml" />
@@ -37,6 +38,10 @@
         <arg name="log_level"             value="$(arg log_level)"/>
         <arg name="reset"                 value="$(arg reset)"/>
     </include>
+
+    <group unless="$(arg launch_slam)">
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/sim_cfg.yaml"/> 
+    </group>
 
     <node if="$(arg launch_feedfuse)" name="multicam_fusion" pkg="aarapsi_robot_pack" type="multicam_fusion.py" output="screen"
         args="

@@ -18,7 +18,7 @@ vpr_nodes:
   joy_topic: /bluetooth_teleop/joy
   cmd_topic: /joy_teleop/cmd_vel
 
-  slam_map: cpr_office_0_01res.pcd
+  slam_map: cpr_oe_0_01res.pcd
   controller_mac: '1C:A0:B8:EC:59:05'
 
   limits:
@@ -32,7 +32,7 @@ vpr_nodes:
 
   groundtruth: true
   path: 
-    bag_name: sim_path
+    bag_name: sim_ccw_1
     odom_topic: /odom/true
     img_topic: /ros_indigosdk_occam/stitched_image0/compressed
     density: 0.2
@@ -42,11 +42,11 @@ vpr_nodes:
 
   svm:
     qry:
-      bag_name: sim1_cw1
+      bag_name: sim_cw_1
       filters: '{}'
       sample_rate: 10.0
     ref:
-      bag_name: sim1_cw2
+      bag_name: sim_cw_2
       filters: '{}'
       sample_rate: 10.0
     factors:
@@ -57,7 +57,7 @@ vpr_nodes:
       threshold: 0.2
 
   ref:
-    bag_name: sim_path
+    bag_name: sim_ccw_1
     filters: '{}'
     sample_rate: 10.0
 
