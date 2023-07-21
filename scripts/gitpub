@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+
+import subprocess
+import rospy
+
+try:
+    gcid_aarapsi_rospack    = subprocess.check_output("cd $(rospack find aarapsi_robot_pack); git rev-parse HEAD", shell=True).decode().strip()
+except:
+    gcid_aarapsi_rospack    = ''
+try:
+    gcid_aarapsi_pypack     = subprocess.check_output("cd $(rospack find aarapsi_robot_pack)/src/pyaarapsi; git rev-parse HEAD", shell=True).decode().strip()
+except:
+    gcid_aarapsi_pypack     = ''
+try:
+    gcid_aarapsi_ws         = subprocess.check_output("cd $(rospack find aarapsi_robot_pack)/../../; git rev-parse HEAD", shell=True).decode().strip()
+except:
+    gcid_aarapsi_ws         = ''
+try:
+    gcid_aarapsi_cpr        = subprocess.check_output("cd $(rospack find aarapsi_robot_pack)/../cpr_office_extension_gazebo; git rev-parse HEAD", shell=True).decode().strip()
+except:
+    gcid_aarapsi_cpr        = ''
+    
+rospy.set_param('/vpr_nodes/git/aarapsi_robot_pack', gcid_aarapsi_rospack)
+rospy.set_param('/vpr_nodes/git/aarapsi_offrobot_ws', gcid_aarapsi_ws)
+rospy.set_param('/vpr_nodes/git/pyaarapsi', gcid_aarapsi_pypack)
+rospy.set_param('/vpr_nodes/git/cpr_office_extension_gazebo', gcid_aarapsi_cpr)
