@@ -22,3 +22,7 @@ float64 mState
 float64 prob
 bool mStateBin
 float64[] factors
+
+int64 current_ind
+int64 target_ind
+bool svm_override

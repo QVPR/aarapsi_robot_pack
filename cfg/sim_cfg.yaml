@@ -5,8 +5,8 @@ vpr_nodes:
   launch_step: 1
   feature_type: RAW
   img_dims:
-  - 64
-  - 64
+  - 32
+  - 32
   npz_dbp: /data/compressed_sets
   svm_dbp: /cfg/svm_models
   bag_dbp: /data/rosbags
@@ -14,7 +14,7 @@ vpr_nodes:
   slam_odom_topic: /odom/true
   robot_odom_topic: /jackal_velocity_controller/odom
   vpr_odom_topic: /vpr_odom
-  img_topic: /ros_indigosdk_occam/stitched_image0/compressed
+  img_topic: /ros_indigosdk_occam/image0/compressed
   joy_topic: /bluetooth_teleop/joy
   cmd_topic: /joy_teleop/cmd_vel
 
@@ -34,7 +34,7 @@ vpr_nodes:
   path: 
     bag_name: sim_path
     odom_topic: /odom/true
-    img_topic: /ros_indigosdk_occam/stitched_image0/compressed
+    img_topic: /ros_indigosdk_occam/image0/compressed
     density: 0.2
     zones:
       length: 5

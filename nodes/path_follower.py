@@ -116,12 +116,15 @@ class Main_ROS_Class(Base_ROS_Class):
         self.ROBOT_ODOM_TOPIC       = self.params.add(self.namespace + "/robot_odom_topic",         None,               check_string,                           force=False)
         self.VPR_ODOM_TOPIC         = self.params.add(self.namespace + "/vpr_odom_topic",           None,               check_string,                           force=False)
 
+        self.SMOOTH_PATH            = self.params.add(self.nodespace + "/smooth_path",              False,              check_bool,                             force=reset)
         self.PRINT_DISPLAY          = self.params.add(self.nodespace + "/print_display",            True,               check_bool,                             force=reset)
         self.USE_NOISE              = self.params.add(self.nodespace + "/noise/enable",             False,              check_bool,                             force=reset)
         self.NOISE_VALS             = self.params.add(self.nodespace + "/noise/vals",               [0.1]*3,            lambda x: check_float_list(x, 3),       force=reset)
         self.PUB_INFO               = self.params.add(self.nodespace + "/publish_info",             True,               check_bool,                             force=reset)
         self.SVM_OVERRIDE           = self.params.add(self.nodespace + "/svm_override",             False,              check_bool,                             force=reset)
         self.REVERSE                = self.params.add(self.nodespace + "/reverse",                  False,              check_bool,                             force=reset)
+        self.LINSTOP_OVERRIDE       = self.params.add(self.nodespace + "/override/lin_error",       0.5,                check_positive_float,                   force=reset)
+        self.ANGSTOP_OVERRIDE       = self.params.add(self.nodespace + "/override/ang_error",       20*np.pi/180,       check_positive_float,                   force=reset)
         self.SAFETY_OVERRIDE        = self.params.add(self.nodespace + "/override/safety",          Safety_Mode.UNSET,  lambda x: check_enum(x, Safety_Mode),   force=reset)
         self.AUTONOMOUS_OVERRIDE    = self.params.add(self.nodespace + "/override/autonomous",      Command_Mode.UNSET, lambda x: check_enum(x, Command_Mode),  force=reset)
 
@@ -133,8 +136,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.slam_ego           = []
         self.robot_ego          = []
         self.old_robot_ego      = []
-        self.lookahead          = 4
-        self.lookahead_mode     = Lookahead_Mode.INDEX
+        self.lookahead          = 1
+        self.lookahead_mode     = Lookahead_Mode.DISTANCE
         self.dt                 = 1/self.RATE_NUM.get()
         self.print_lines        = 0
 
@@ -322,7 +325,7 @@ class Main_ROS_Class(Base_ROS_Class):
             else:
                 self.safety_mode = Safety_Mode.STOP
 
-    def publish_controller_info(self, target_yaw: float, current_yaw: float):
+    def publish_controller_info(self, current_ind: int, target_ind: int, current_yaw: float):
         msg                         = ControllerStateInfo()
         msg.header.stamp            = rospy.Time.now()
         msg.header.frame_id         = 'map'
@@ -345,7 +348,11 @@ class Main_ROS_Class(Base_ROS_Class):
         msg.group.command_mode      = enum_name(self.command_mode)
 
         msg.group.current_yaw       = np.round(current_yaw, 3)
-        msg.group.target_yaw        = np.round(target_yaw, 3)
+        msg.group.target_yaw        = np.round(self.path_xyws[target_ind,2], 3)
+
+        msg.group.current_ind       = current_ind
+        msg.group.target_ind        = target_ind
+        msg.group.svm_override      = self.SVM_OVERRIDE.get()
 
         try:
             msg.group.true_yaw      = np.round(self.slam_ego[2], 3)
@@ -424,8 +431,8 @@ class Main_ROS_Class(Base_ROS_Class):
                     rospy.set_param(self.namespace + '/feature_type', enum_name(FeatureType.RAW))
                     self.print("Switched to %s." % enum_name(self.FEAT_TYPE.get()), LogType.INFO)
                     break
-        except:
-            self.print("Param switching is disabled for rosbags :-(", LogType.WARN, throttle=60)
+        except IndexError:
+            pass
 
         # Toggle speed safety mode:
         if msg.buttons[self.fast_mode_ind] > 0:
@@ -442,6 +449,8 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.print('Safety released.', LogType.INFO)
 
     def path_peer_subscribe(self, topic_name):
+        if not self.ready:
+            return
         if topic_name == self.namespace + '/path':
             self.path_pub.publish(self.plan_path)
         elif topic_name == self.namespace + '/ref/path':
@@ -486,7 +495,16 @@ class Main_ROS_Class(Base_ROS_Class):
         return errors
     
     def calc_vpr_errors(self, ego, current_ind):
-        target_ind      = (current_ind + self.lookahead) % self.path_xyws.shape[0]
+        if self.lookahead_mode == Lookahead_Mode.INDEX:
+            target_ind  = (current_ind + self.lookahead) % self.path_xyws.shape[0]
+        elif self.lookahead_mode == Lookahead_Mode.DISTANCE:
+            target_ind  = current_ind
+            dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
+            while dist < self.lookahead:
+                target_ind  = (target_ind + 1) % self.path_xyws.shape[0] 
+                dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
+        else:
+            raise Exception('Unknown lookahead_mode: %s' % str(self.lookahead_mode))
         error_v         = self.path_xyws[current_ind, 3]
         errors          = self.calc_errors(ego, target_ind)
         errors.update({'error_v': error_v})
@@ -502,25 +520,36 @@ class Main_ROS_Class(Base_ROS_Class):
             self.vpr_points = np.flipud(self.vpr_points)
 
         vpr_path_distances  = np.sqrt( \
-                                np.square(self.vpr_points[:,0] - np.roll(self.vpr_points[:,0], 1)) + \
-                                np.square(self.vpr_points[:,1] - np.roll(self.vpr_points[:,1], 1)) \
-                            )
-        vpr_path_length     = np.sum(vpr_path_distances)
-        num_interp_points   = int(vpr_path_length / self.PATH_DENSITY.get())
+                                        np.square(self.vpr_points[:,0] - np.roll(self.vpr_points[:,0], 1)) + \
+                                        np.square(self.vpr_points[:,1] - np.roll(self.vpr_points[:,1], 1)) \
+                                    )
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore')#, r'/usr/lib/python2.7/dist-packages/scipy/interpolate/_fitpack_impl.py:227')
-            rolled_xy = np.transpose(np.roll(self.vpr_points[:,0:2], int(self.vpr_points.shape[0]/2), 0))
-            tck, u = splprep(rolled_xy, u=None, s=1.0, per=1) 
-            u_dense = np.linspace(u.min(), u.max(), num_interp_points + 1)
-            x_interp, y_interp = splev(u_dense, tck, der=0)
-            x_interp = np.delete(x_interp, -1)
-            y_interp = np.delete(y_interp, -1)
-            w_interp = np.arctan2(y_interp - np.roll(y_interp, 1), x_interp - np.roll(x_interp, 1))
+        if self.SMOOTH_PATH.get():
+            vpr_path_length     = np.sum(vpr_path_distances)
+            num_interp_points   = int(vpr_path_length / self.PATH_DENSITY.get())
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore')#, r'/usr/lib/python2.7/dist-packages/scipy/interpolate/_fitpack_impl.py:227')
+                rolled_xy = np.transpose(np.roll(self.vpr_points[:,0:2], int(self.vpr_points.shape[0]/2), 0))
+                tck, u = splprep(rolled_xy, u=None, s=1.0, per=1) 
+                u_dense = np.linspace(u.min(), u.max(), num_interp_points + 1)
+                x_interp, y_interp = splev(u_dense, tck, der=0)
+                x_interp = np.delete(x_interp, -1)
+                y_interp = np.delete(y_interp, -1)
+                w_interp = np.arctan2(y_interp - np.roll(y_interp, 1), x_interp - np.roll(x_interp, 1))
+
+        else:
+            x_interp    = self.vpr_points[:, 0]
+            y_interp    = self.vpr_points[:, 1]
+            w_interp    = self.vpr_points[:, 2]
 
         # Generate speed profile based on curvature of track:
         points_diff     = np.abs(angle_wrap(np.roll(w_interp, 1, 0) - np.roll(w_interp, -1, 0), mode='RAD'))
-        points_smooth   = np.sum([np.roll(points_diff, i, 0) for i in np.arange(11)-5], axis=0)
+        path_density    = np.mean(np.sum([np.roll(points_diff, i, 0) for i in [-1,0,1]], axis=0))
+        k = int(2 / path_density)
+        if k % 2 == 1:
+            k = k + 1
+        points_smooth   = np.sum([np.roll(points_diff, i, 0) for i in np.arange(k + 1)-int(k/2)], axis=0)
         s_interp        = (1 - ((points_smooth - np.min(points_smooth)) / (np.max(points_smooth) - np.min(points_smooth)))) **2
         s_interp[s_interp<np.mean(s_interp)/2] = np.mean(s_interp)/2
             
@@ -534,48 +563,59 @@ class Main_ROS_Class(Base_ROS_Class):
                                 np.square(self.path_xyws[:,0] - np.roll(self.path_xyws[:,0], 1)) + \
                                 np.square(self.path_xyws[:,1] - np.roll(self.path_xyws[:,1], 1)) \
                             )
-        plan_path_length    = np.sum(plan_path_distances)
+        plan_path_sum       = [0]
+        for i in np.arange(len(plan_path_distances)):
+            plan_path_sum.append(np.sum([plan_path_sum[-1], plan_path_distances[i]]))
+        plan_path_length    = plan_path_sum[-1]#np.sum(plan_path_distances)
+
         if plan_path_length / self.ZONE_LENGTH.get() > self.ZONE_NUMBER.get():
-            self.num_zones = int(self.ZONE_NUMBER.get())
+            self.num_zones      = int(self.ZONE_NUMBER.get())
         else:
-            self.num_zones = int(plan_path_length / self.ZONE_LENGTH.get())
-        _len = self.path_xyws.shape[0]
-        self.zone_indices = [int(((_len - self.num_zones) / self.num_zones) * i + np.floor(i)) for i in range(self.num_zones + 1)]
+            self.num_zones      = int(plan_path_length / self.ZONE_LENGTH.get())
+        self.zone_length    = plan_path_length / self.num_zones
+
+        self.zone_indices = [np.argmin(np.abs(plan_path_sum-(self.zone_length*i))) for i in np.arange(self.num_zones)] + [len(plan_path_distances)]
+        self.path_indices = [np.argmin(np.abs(plan_path_sum-(0.2*i))) for i in np.arange(5 * int(plan_path_length))]
 
         path       = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
         speeds     = MarkerArray()
         zones      = MarkerArray()
+
+        direction  = np.sign(np.sum(self.path_xyws[:,2]))
+
         for i in range(self.path_xyws.shape[0]):
-            new_pose                        = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id="map"))
-            new_pose.pose.position          = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
-            new_pose.pose.orientation       = q_from_yaw(self.path_xyws[i,2])
 
-            new_speed                       = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
-            new_speed.type                  = new_speed.ARROW
-            new_speed.action                = new_speed.ADD
-            new_speed.id                    = i
-            new_speed.color                 = ColorRGBA(r=0.859, g=0.094, b=0.220, a=0.5)
-            new_speed.scale                 = Vector3(x=self.path_xyws[i,3], y=0.05, z=0.05)
-            new_speed.pose.position         = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
-            if not self.REVERSE.get():
-                yaw = q_from_yaw(self.path_xyws[i,2] + np.pi/2)
-            else:
-                yaw = q_from_yaw(self.path_xyws[i,2] - np.pi/2)
+            if i in self.path_indices:
+                new_pose                        = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id="map"))
+                new_pose.pose.position          = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
+                new_pose.pose.orientation       = q_from_yaw(self.path_xyws[i,2])
 
-            new_speed.pose.orientation      = yaw
+                new_speed                       = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
+                new_speed.type                  = new_speed.ARROW
+                new_speed.action                = new_speed.ADD
+                new_speed.id                    = i
+                new_speed.color                 = ColorRGBA(r=0.859, g=0.094, b=0.220, a=0.5)
+                new_speed.scale                 = Vector3(x=self.path_xyws[i,3], y=0.05, z=0.05)
+                new_speed.pose.position         = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
+                if not self.REVERSE.get():
+                    yaw = q_from_yaw(self.path_xyws[i,2] + direction * np.pi/2)
+                else:
+                    yaw = q_from_yaw(self.path_xyws[i,2] - direction * np.pi/2)
+                new_speed.pose.orientation      = yaw
+
+                path.poses.append(new_pose)
+                speeds.markers.append(new_speed)
+            
             if i in self.zone_indices:
                 new_zone                    = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
                 new_zone.type               = new_zone.CUBE
                 new_zone.action             = new_zone.ADD
                 new_zone.id                 = i
                 new_zone.color              = ColorRGBA(r=1.000, g=0.616, b=0.000, a=0.5)
-                new_zone.scale              = Vector3(x=0.0, y=1.0, z=1.0)
+                new_zone.scale              = Vector3(x=0.05, y=1.0, z=1.0)
                 new_zone.pose.position      = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
-                new_zone.pose.orientation   = new_pose.pose.orientation
-
-            path.poses.append(new_pose)
-            speeds.markers.append(new_speed)
-            zones.markers.append(new_zone)
+                new_zone.pose.orientation   = q_from_yaw(self.path_xyws[i,2])
+                zones.markers.append(new_zone)
 
         return path, speeds, zones
 
@@ -585,7 +625,7 @@ class Main_ROS_Class(Base_ROS_Class):
     def vpr2path(self, vpr_ind):
         return self.vpr2path_inds[vpr_ind]
 
-    def print_display(self, new_linear, new_angular, current_ind, error_v, error_y, error_yaw, zone):
+    def print_display(self, new_linear, new_angular, current_ind, error_v, error_y, error_yaw, zone, lin_path_err, ang_path_err):
 
         if self.command_mode == Command_Mode.STOP:
             command_mode_string = C_I_GREEN + 'STOPPED' + C_RESET
@@ -616,6 +656,7 @@ class Main_ROS_Class(Base_ROS_Class):
         speed_string    = base_vel_string % (new_linear, new_angular)
         errors_string   = base_err_string % (error_v, error_y, error_yaw)
         index_string    = base_ind_string % (current_ind)
+        path_err_string = base_vel_string % (lin_path_err, ang_path_err)
         TAB = ' ' * 8
         lines = [
                  '',
@@ -626,8 +667,9 @@ class Main_ROS_Class(Base_ROS_Class):
                  TAB + '  SLAM Position: %s' % slam_pos_string,
                  TAB + ' Speed Commands: %s' % speed_string,
                  TAB + '         Errors: %s' % errors_string,
+                 TAB + '     Index Info: %s' % index_string,
                  TAB + '    Zone Number: %d' % zone,
-                 TAB + '     Index Info: %s' % index_string
+                 TAB + '     Path Error: %s' % path_err_string
                 ]
         print(''.join([C_CLEAR + line + '\n' for line in lines]) + (C_UP_N%1)*(len(lines)), end='')
 
@@ -721,11 +763,11 @@ class Main_ROS_Class(Base_ROS_Class):
         new_msg.angular.z       = new_angular
         return new_msg
 
-    def path_follow(self, ego, current_ind, override_svm):
+    def path_follow(self, ego, current_ind, svm_override):
         errors, target_ind = self.calc_vpr_errors(ego, current_ind)
 
         self.update_position(target_ind)
-        new_msg = self.make_new_command(override_svm=override_svm, **errors)
+        new_msg = self.make_new_command(override_svm=svm_override, **errors)
         new_linear = new_msg.linear.x
         new_angular = new_msg.angular.z
 
@@ -802,32 +844,45 @@ class Main_ROS_Class(Base_ROS_Class):
             rm_corr             = self.roll_match()
             heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
-            override_svm        = False
+            svm_override        = False or self.SVM_OVERRIDE.get()
         else:
             heading_fixed       = self.slam_ego[2]
             ego                 = self.slam_ego
-            override_svm        = True
-            
-        if self.SVM_OVERRIDE.get():
-            override_svm        = True
+            svm_override        = True or self.SVM_OVERRIDE.get()
 
         current_ind, zone       = self.calc_current_ind(ego)
 
+        # Calculate perpendicular error:
+        t_current_ind, _   = self.calc_current_ind(self.slam_ego)
+        _dx             = self.slam_ego[0] - self.path_xyws[t_current_ind, 0]
+        _dy             = self.slam_ego[1] - self.path_xyws[t_current_ind, 1]
+        _dw             = np.arctan2(_dy, _dx)
+        _dr             = np.sqrt(np.square(_dx) + np.square(_dy))
+        lin_path_err    = abs(_dr * np.sin(self.path_xyws[t_current_ind, 2] - _dw))
+        ang_path_err    = abs(angle_wrap(self.path_xyws[t_current_ind, 2] - self.slam_ego[2], 'RAD'))
+
+        lin_cmd         = 0
+        ang_cmd         = 0
+        errs            = {'error_yaw': 0, 'error_y': 0, 'error_v': 0}
+        target_ind      = 0
+
         if self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM]:
-            lin_cmd, ang_cmd, errs, target_ind = self.path_follow(ego, current_ind, override_svm)
-        else:
-            lin_cmd     = 0
-            ang_cmd     = 0
-            errs        = {'error_yaw': 0, 'error_y': 0, 'error_v': 0}
-            target_ind  = 0
+            if lin_path_err > self.LINSTOP_OVERRIDE.get() and self.LINSTOP_OVERRIDE.get() > 0:
+                self.command_mode = Command_Mode.STOP
+            elif ang_path_err > self.ANGSTOP_OVERRIDE.get() and self.ANGSTOP_OVERRIDE.get() > 0:
+                self.command_mode = Command_Mode.STOP
+            else:
+                lin_cmd, ang_cmd, errs, target_ind = self.path_follow(ego, current_ind, svm_override)
 
         if self.command_mode == Command_Mode.ZONE_RETURN:
             self.zone_return(ego, current_ind)
 
+        errs.update(dict(lin_path_err=lin_path_err, ang_path_err=ang_path_err))
+
         if self.PRINT_DISPLAY.get():
             self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, **errs)
 
-        self.publish_controller_info(self.path_xyws[target_ind,2], heading_fixed)
+        self.publish_controller_info(current_ind, target_ind, heading_fixed)
 
 def do_args():
     parser = ap.ArgumentParser(prog="path_follower.py", 
