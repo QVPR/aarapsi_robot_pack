@@ -7,6 +7,7 @@
     <arg name="use_sim_time"            default="true" />
     <arg name="gui"                     default="true" />
     <arg name="headless"                default="false"/>
+    <arg name="param_file"              default="sim_cfg.yaml"/>
 
     <arg name="namespace"               default="/vpr_nodes"/>
     <arg name="anon"                    default="True"/>
@@ -40,7 +41,7 @@
     </include>
 
     <group unless="$(arg launch_slam)">
-        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/sim_cfg.yaml"/> 
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
     </group>
 
     <node if="$(arg launch_feedfuse)" name="multicam_fusion" pkg="aarapsi_robot_pack" type="multicam_fusion.py" output="screen"

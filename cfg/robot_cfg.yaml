@@ -1,3 +1,4 @@
+use_sim_time: false
 vpr_nodes:
   z_config_file_name: "robot_cfg"
 
@@ -19,7 +20,8 @@ vpr_nodes:
   cmd_topic: /joy_teleop/cmd_vel
 
   slam_map: s11_center_map.pcd
-  controller_mac: '1C:A0:B8:EC:59:05'
+  controller_mac: '1C:A0:B8:EC:59:05' #'58:10:31:03:8F:E8'
+  cor_offset: 0.045
 
   limits:
     slow:
@@ -57,13 +59,21 @@ vpr_nodes:
       threshold: 0.5
 
   ref:
-    bag_name: s4_ccw_2
+    bag_name: s4_ccw_1
     filters: '{}'
     sample_rate: 10.0
 
   tolerance:
     mode: METRE_LINE
     threshold: 0.2
+
+  frame_transformer:
+    log_level: 2
+    rate: 10.0
+
+  multicam_fusion:
+    log_level: INFO
+    rate: 15.0
 
   svm_trainer:
     log_level: 2
@@ -77,9 +87,9 @@ vpr_nodes:
     log_level: 2
     rate: 2.0
 
-  img_odom_agg:
+  data_fuser:
     log_level: 2
-    rate: 10.0
+    rate: 15.0
 
   vpr_cruncher:
     log_level: 2
@@ -96,11 +106,6 @@ vpr_nodes:
     log_level: 2
     rate: 12.0
 
-  follower:
-    log_level: 2
-    rate: 12.0
-    publish_info: true
-
   slam_follower:
     log_level: 2
     rate: 12.0
@@ -111,6 +116,12 @@ vpr_nodes:
       - 0.1
       - 0.1
       reverse: false
+
+  visualiser:
+    log_level: 2
+    num_markers: 100
+    rate: 12.0
+    svm_mode: false
 
   path_follower:
     log_level: 2
@@ -123,5 +134,12 @@ vpr_nodes:
       - 0.1
       reverse: false
     override:
-      safety: -1
-      autonomous: -1
+      safety: UNSET
+      autonomous: UNSET
+      ang_error: 0.3490658503988659
+      lin_error: 0.5
+    print_display: true
+    publish_info: true
+    reverse: false
+    smooth_path: false
+    svm_override: false
