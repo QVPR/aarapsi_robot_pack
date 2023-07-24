@@ -574,7 +574,7 @@ class Main_ROS_Class(Base_ROS_Class):
             self.num_zones      = int(plan_path_length / self.ZONE_LENGTH.get())
         self.zone_length    = plan_path_length / self.num_zones
 
-        self.zone_indices = [np.argmin(np.abs(plan_path_sum-(self.zone_length*i))) for i in np.arange(self.num_zones)] + [len(plan_path_distances)]
+        self.zone_indices = [np.argmin(np.abs(plan_path_sum-(self.zone_length*i))) for i in np.arange(self.num_zones)] + [len(plan_path_distances) - 1]
         self.path_indices = [np.argmin(np.abs(plan_path_sum-(0.2*i))) for i in np.arange(5 * int(plan_path_length))]
 
         path       = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
@@ -625,7 +625,7 @@ class Main_ROS_Class(Base_ROS_Class):
     def vpr2path(self, vpr_ind):
         return self.vpr2path_inds[vpr_ind]
 
-    def print_display(self, new_linear, new_angular, current_ind, error_v, error_y, error_yaw, zone, lin_path_err, ang_path_err):
+    def print_display(self, new_linear, new_angular, current_ind, error_v, error_y, error_yaw, zone, lin_path_err, ang_path_err, svm_override):
 
         if self.command_mode == Command_Mode.STOP:
             command_mode_string = C_I_GREEN + 'STOPPED' + C_RESET
@@ -669,7 +669,8 @@ class Main_ROS_Class(Base_ROS_Class):
                  TAB + '         Errors: %s' % errors_string,
                  TAB + '     Index Info: %s' % index_string,
                  TAB + '    Zone Number: %d' % zone,
-                 TAB + '     Path Error: %s' % path_err_string
+                 TAB + '     Path Error: %s' % path_err_string,
+                 TAB + '   SVM Override: %s' % str(svm_override)
                 ]
         print(''.join([C_CLEAR + line + '\n' for line in lines]) + (C_UP_N%1)*(len(lines)), end='')
 
@@ -694,6 +695,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.path_pub.publish(self.plan_path)
         self.speed_pub.publish(self.plan_speeds)
+        self.zones_pub.publish(self.zones)
 
         while not (self.new_robot_ego and self.new_vpr_ego):
             self.rate_obj.sleep()
@@ -880,7 +882,7 @@ class Main_ROS_Class(Base_ROS_Class):
         errs.update(dict(lin_path_err=lin_path_err, ang_path_err=ang_path_err))
 
         if self.PRINT_DISPLAY.get():
-            self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, **errs)
+            self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, svm_override=svm_override, **errs)
 
         self.publish_controller_info(current_ind, target_ind, heading_fixed)
 
