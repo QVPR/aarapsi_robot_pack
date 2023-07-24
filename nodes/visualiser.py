@@ -7,7 +7,6 @@ import numpy as np
 import sys
 import os
 import cv2
-from cv_bridge import CvBridge
 
 from std_msgs.msg           import String, ColorRGBA, Header
 from geometry_msgs.msg      import Point, Vector3
@@ -15,10 +14,10 @@ from visualization_msgs.msg import MarkerArray, Marker
 from aarapsi_robot_pack.msg import ControllerStateInfo
 from sensor_msgs.msg        import CompressedImage
 
-from pyaarapsi.core.argparse_tools          import check_positive_float, check_positive_int, check_bool, check_string
-from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, set_rospy_log_lvl, q_from_yaw
-from pyaarapsi.core.helper_tools            import formatException, angle_wrap, uint8_list_to_np_ndarray, vis_dict
-from pyaarapsi.core.enum_tools              import enum_name, enum_value_options
+from pyaarapsi.core.argparse_tools          import check_positive_int, check_bool
+from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, set_rospy_log_lvl, q_from_yaw, compressed2np, np2compressed
+from pyaarapsi.core.helper_tools            import formatException, angle_wrap
+from pyaarapsi.core.enum_tools              import enum_name
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.vpr_image_methods import convert_img_to_uint8, label_image, apply_icon
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
@@ -78,8 +77,6 @@ class Main_ROS_Class(Base_ROS_Class):
         self.colour_bad         = ColorRGBA(r=0.9, g=0.2, b=0.1, a=0.20)
         self.colour_lost        = ColorRGBA(r=0.1, g=0.1, b=0.1, a=0.08)
 
-        self.bridge             = CvBridge()
-
         self.tol_hist           = np.zeros((100, 8))
         
         try:
@@ -93,11 +90,11 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_rospy(self):
         super().init_rospy()
         
-        self.control_sub     = rospy.Subscriber(self.namespace + "/follower/info",     ControllerStateInfo, self.control_callback, queue_size=1)
-        self.confidence_pub  = self.add_pub(self.namespace + '/confidence',            MarkerArray,                                queue_size=1)
-        self.display_pub     = self.add_pub(self.namespace + '/display/compressed',    CompressedImage,                            queue_size=1)
+        self.control_sub     = rospy.Subscriber(self.namespace + "/path_follower/info", ControllerStateInfo, self.control_callback, queue_size=1)
+        self.confidence_pub  = self.add_pub(self.namespace + '/confidence',             MarkerArray,                                queue_size=1)
+        self.display_pub     = self.add_pub(self.namespace + '/display/compressed',     CompressedImage,                            queue_size=1)
 
-    def control_callback(self, msg):
+    def control_callback(self, msg: ControllerStateInfo):
         self.control_msg     = msg
         self.new_control_msg = True
 
@@ -113,7 +110,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.in_gt_tolerance    = self.control_msg.group.gt_state > 0
         self.gt_error           = self.control_msg.group.gt_error
         self.in_svm_tolerance   = self.control_msg.group.mStateBin
-        self.auto_mode          = self.control_msg.group.safety_states.autonomous
+        self.command_mode       = self.control_msg.group.command_mode
+        self.safety_mode        = self.control_msg.group.safety_mode
 
         self.svm_prob           = self.control_msg.group.prob
         self.svm_zvalue         = self.control_msg.group.mState
@@ -256,7 +254,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         ref_match_raw   = self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.vpr_ind]
         ref_true_raw    = self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.gt_ind]
-        qry_raw         = uint8_list_to_np_ndarray(self.control_msg.query_image)
+        qry_raw         = compressed2np(self.control_msg.query_image)
         ref_match       = convert_img_to_uint8(ref_match_raw,   resize=(250,250), dstack=(not len(ref_match_raw.shape) == 3))
         ref_true        = convert_img_to_uint8(ref_true_raw,    resize=(250,250), dstack=(not len(ref_true_raw.shape) == 3))
         qry             = convert_img_to_uint8(qry_raw,         resize=(250,250), dstack=(not len(qry_raw.shape) == 3))
@@ -301,7 +299,7 @@ class Main_ROS_Class(Base_ROS_Class):
         label_image(feed, 'SVM Z:',       ( 10, 175), colour=(255,255,255), border=None, make_copy=False)
         label_image(feed, '% 6.2f'       % (self.svm_zvalue), (250, 175), colour=(255,255,255), border=None, make_copy=False)
 
-        ros_msg                 = self.bridge.cv2_to_compressed_imgmsg(feed, 'jpeg')
+        ros_msg                 = np2compressed(feed)
         ros_msg.header.stamp    = rospy.Time.now()
         ros_msg.header.frame_id = 'map'
 
