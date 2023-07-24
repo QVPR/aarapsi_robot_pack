@@ -15,7 +15,7 @@ vpr_nodes:
   slam_odom_topic: /odom/true
   robot_odom_topic: /jackal_velocity_controller/odom
   vpr_odom_topic: /vpr_odom
-  img_topic: /ros_indigosdk_occam/stitched_image0/compressed
+  img_topic: /ros_indigosdk_occam/image0/compressed
   joy_topic: /bluetooth_teleop/joy
   cmd_topic: /joy_teleop/cmd_vel
 
@@ -36,7 +36,7 @@ vpr_nodes:
   path: 
     bag_name: s4_ccw_1
     odom_topic: /odom/true
-    img_topic: /ros_indigosdk_occam/stitched_image0/compressed
+    img_topic: /ros_indigosdk_occam/image0/compressed
     density: 0.2
     zones:
       length: 5
