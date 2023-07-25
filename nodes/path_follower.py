@@ -325,7 +325,7 @@ class Main_ROS_Class(Base_ROS_Class):
             else:
                 self.safety_mode = Safety_Mode.STOP
 
-    def publish_controller_info(self, current_ind: int, target_ind: int, current_yaw: float):
+    def publish_controller_info(self, current_ind: int, target_ind: int, current_yaw: float, zone: int):
         msg                         = ControllerStateInfo()
         msg.header.stamp            = rospy.Time.now()
         msg.header.frame_id         = 'map'
@@ -363,6 +363,11 @@ class Main_ROS_Class(Base_ROS_Class):
 
         msg.group.lookahead         = self.lookahead
         msg.group.lookahead_mode    = enum_name(self.lookahead_mode)
+
+        msg.group.zone_indices      = self.zone_indices
+        msg.group.zone_length       = self.zone_length
+        msg.group.zone_count        = self.num_zones
+        msg.group.zone_current      = zone
 
         self.info_pub.publish(msg)
 
@@ -448,7 +453,7 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.safety_mode = Safety_Mode.STOP
                 self.print('Safety released.', LogType.INFO)
 
-    def path_peer_subscribe(self, topic_name):
+    def path_peer_subscribe(self, topic_name: str):
         if not self.ready:
             return
         if topic_name == self.namespace + '/path':
@@ -494,7 +499,7 @@ class Main_ROS_Class(Base_ROS_Class):
         errors          = {'error_yaw': error_yaw, 'error_y': error_y}
         return errors
     
-    def calc_vpr_errors(self, ego, current_ind):
+    def calc_vpr_errors(self, ego, current_ind: int):
         if self.lookahead_mode == Lookahead_Mode.INDEX:
             target_ind  = (current_ind + self.lookahead) % self.path_xyws.shape[0]
         elif self.lookahead_mode == Lookahead_Mode.DISTANCE:
@@ -562,11 +567,11 @@ class Main_ROS_Class(Base_ROS_Class):
         plan_path_distances = np.sqrt( \
                                 np.square(self.path_xyws[:,0] - np.roll(self.path_xyws[:,0], 1)) + \
                                 np.square(self.path_xyws[:,1] - np.roll(self.path_xyws[:,1], 1)) \
-                            )
+                            )[1:]
         plan_path_sum       = [0]
         for i in np.arange(len(plan_path_distances)):
             plan_path_sum.append(np.sum([plan_path_sum[-1], plan_path_distances[i]]))
-        plan_path_length    = plan_path_sum[-1]#np.sum(plan_path_distances)
+        plan_path_length    = plan_path_sum[-1]
 
         if plan_path_length / self.ZONE_LENGTH.get() > self.ZONE_NUMBER.get():
             self.num_zones      = int(self.ZONE_NUMBER.get())
@@ -575,7 +580,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.zone_length    = plan_path_length / self.num_zones
 
         self.zone_indices = [np.argmin(np.abs(plan_path_sum-(self.zone_length*i))) for i in np.arange(self.num_zones)] + [len(plan_path_distances) - 1]
-        self.path_indices = [np.argmin(np.abs(plan_path_sum-(0.2*i))) for i in np.arange(5 * int(plan_path_length))]
+        self.path_indices = [np.argmin(np.abs(plan_path_sum-(0.2*i))) for i in np.arange(int(5 * plan_path_length))]
 
         path       = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
         speeds     = MarkerArray()
@@ -585,7 +590,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         for i in range(self.path_xyws.shape[0]):
 
-            if i in self.path_indices:
+            if i in self.path_indices or i in self.zone_indices:
                 new_pose                        = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id="map"))
                 new_pose.pose.position          = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
                 new_pose.pose.orientation       = q_from_yaw(self.path_xyws[i,2])
@@ -694,6 +699,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.ref_path = self.generate_path(dataset = self.norm_dataset)
 
         self.path_pub.publish(self.plan_path)
+        self.ref_path_pub.publish(self.ref_path)
         self.speed_pub.publish(self.plan_speeds)
         self.zones_pub.publish(self.zones)
 
@@ -796,8 +802,8 @@ class Main_ROS_Class(Base_ROS_Class):
 
         if self.return_stage == Return_Stage.DIST:
             if abs(yaw_err) < np.pi/6:
-                ang_err = np.sign(yaw_err) * np.max([0, -0.19*abs(yaw_err)**2 + 0.4*abs(yaw_err) - 0.007])
                 lin_err = np.max([0.1, -(1/3)*dist**2 + (19/30)*dist - 0.06]) 
+                ang_err = np.sign(yaw_err) * np.max([0.1, -0.19*abs(yaw_err)**2 + 0.4*abs(yaw_err) - 0.007])
             else:
                 lin_err = 0
                 ang_err = np.sign(yaw_err) * 0.2
@@ -813,7 +819,7 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.AUTONOMOUS_OVERRIDE.set(Command_Mode.UNSET)
                 ang_err = 0
             else:
-                ang_err = head_err
+                ang_err = np.sign(head_err) * np.max([0.1, abs(head_err)])
         else:
             raise Exception('Bad return stage [%s].' % str(self.return_stage))
 
@@ -854,8 +860,8 @@ class Main_ROS_Class(Base_ROS_Class):
 
         current_ind, zone       = self.calc_current_ind(ego)
 
-        # Calculate perpendicular error:
-        t_current_ind, _   = self.calc_current_ind(self.slam_ego)
+        # Calculate perpendicular (lin) and angular (ang) path errors:
+        t_current_ind, t_zone   = self.calc_current_ind(self.slam_ego)
         _dx             = self.slam_ego[0] - self.path_xyws[t_current_ind, 0]
         _dy             = self.slam_ego[1] - self.path_xyws[t_current_ind, 1]
         _dw             = np.arctan2(_dy, _dx)
@@ -884,7 +890,7 @@ class Main_ROS_Class(Base_ROS_Class):
         if self.PRINT_DISPLAY.get():
             self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, svm_override=svm_override, **errs)
 
-        self.publish_controller_info(current_ind, target_ind, heading_fixed)
+        self.publish_controller_info(current_ind, target_ind, heading_fixed, t_zone)
 
 def do_args():
     parser = ap.ArgumentParser(prog="path_follower.py", 

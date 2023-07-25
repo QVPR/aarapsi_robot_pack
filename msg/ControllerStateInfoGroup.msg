@@ -26,3 +26,8 @@ float64[] factors
 int64 current_ind
 int64 target_ind
 bool svm_override
+
+int64[] zone_indices
+float64 zone_length
+int8 zone_count
+int8 zone_current
