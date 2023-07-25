@@ -14,6 +14,8 @@
     <arg name="reset"                   default="True"/>
     <arg name="log_level"               default="2"/>
 
+    <node pkg="aarapsi_robot_pack" type="gitpub" name="gitpub" output="screen"/>
+
     <!-- Load Jackal's description, controllers, and teleop nodes. -->
     <param name="robot_description"
         command="$(find aarapsi_robot_pack)/exe/env_run
