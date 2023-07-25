@@ -18,6 +18,8 @@
     <!-- Load in params; must be done outside of a namespace -->
     <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
 
+    <node pkg="aarapsi_robot_pack" type="gitpub" name="gitpub" output="screen"/>
+
     <group ns="$(arg namespace)">
         <!-- SLAM Nodes: -->
         <group if="$(arg launch_slam)">
