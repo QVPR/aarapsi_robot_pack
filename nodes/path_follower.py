@@ -500,12 +500,13 @@ class Main_ROS_Class(Base_ROS_Class):
         return errors
     
     def calc_vpr_errors(self, ego, current_ind: int):
+        lookahead_scaled = self.lookahead * (self.path_xyws[current_ind,3] / self.speed_lims[1])
         if self.lookahead_mode == Lookahead_Mode.INDEX:
-            target_ind  = (current_ind + self.lookahead) % self.path_xyws.shape[0]
+            target_ind  = (current_ind + int(np.round(lookahead_scaled))) % self.path_xyws.shape[0]
         elif self.lookahead_mode == Lookahead_Mode.DISTANCE:
             target_ind  = current_ind
             dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
-            while dist < self.lookahead:
+            while dist < lookahead_scaled:
                 target_ind  = (target_ind + 1) % self.path_xyws.shape[0] 
                 dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
         else:
@@ -557,6 +558,7 @@ class Main_ROS_Class(Base_ROS_Class):
         points_smooth   = np.sum([np.roll(points_diff, i, 0) for i in np.arange(k + 1)-int(k/2)], axis=0)
         s_interp        = (1 - ((points_smooth - np.min(points_smooth)) / (np.max(points_smooth) - np.min(points_smooth)))) **2
         s_interp[s_interp<np.mean(s_interp)/2] = np.mean(s_interp)/2
+        self.speed_lims = [np.min(s_interp), np.max(s_interp)]
             
         self.path_xyws  = np.transpose(np.stack([x_interp, y_interp, w_interp, s_interp]))
 
