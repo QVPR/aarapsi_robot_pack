@@ -571,8 +571,8 @@ class Main_ROS_Class(Base_ROS_Class):
                                 np.square(self.path_xyws[:,1] - np.roll(self.path_xyws[:,1], 1)) \
                             )[1:]
         plan_path_sum       = [0]
-        for i in np.arange(self.path_xyws.shape[0]):
-            plan_path_sum.append(np.sum([plan_path_sum[-1], plan_path_distances[i]]))
+        for i in plan_path_distances:
+            plan_path_sum.append(np.sum([plan_path_sum[-1], i]))
         plan_path_length    = plan_path_sum[-1]
 
         if plan_path_length / self.ZONE_LENGTH.get() > self.ZONE_NUMBER.get():
@@ -661,12 +661,14 @@ class Main_ROS_Class(Base_ROS_Class):
         base_vel_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '% 5.2f ' for i in ['LIN','ANG']]) + C_RESET
         base_err_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '% 5.2f ' for i in ['VEL', 'C-T','YAW']]) + C_RESET
         base_ind_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '%4d ' for i in ['CUR']]) + C_RESET
+        base_svm_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '%s' for i in ['OVERRIDE','SVM']]) + C_RESET
         vpr_pos_string  = base_pos_string % tuple(self.vpr_ego)
         slam_pos_string = base_pos_string % tuple(self.slam_ego)
         speed_string    = base_vel_string % (new_linear, new_angular)
         errors_string   = base_err_string % (error_v, error_y, error_yaw)
         index_string    = base_ind_string % (current_ind)
         path_err_string = base_vel_string % (lin_path_err, ang_path_err)
+        svm_string      = base_svm_string % (str(svm_override), str(self.state_msg.mStateBin))
         TAB = ' ' * 8
         lines = [
                  '',
@@ -680,7 +682,7 @@ class Main_ROS_Class(Base_ROS_Class):
                  TAB + '     Index Info: %s' % index_string,
                  TAB + '    Zone Number: %d' % zone,
                  TAB + '     Path Error: %s' % path_err_string,
-                 TAB + '   SVM Override: %s' % str(svm_override)
+                 TAB + '     SVM Status: %s' % svm_string
                 ]
         print(''.join([C_CLEAR + line + '\n' for line in lines]) + (C_UP_N%1)*(len(lines)), end='')
 
