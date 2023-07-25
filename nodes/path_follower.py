@@ -116,6 +116,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.ROBOT_ODOM_TOPIC       = self.params.add(self.namespace + "/robot_odom_topic",         None,               check_string,                           force=False)
         self.VPR_ODOM_TOPIC         = self.params.add(self.namespace + "/vpr_odom_topic",           None,               check_string,                           force=False)
 
+        self.LOOP_PATH              = self.params.add(self.nodespace + "/loop_path",                True,               check_bool,                             force=reset)
         self.SMOOTH_PATH            = self.params.add(self.nodespace + "/smooth_path",              False,              check_bool,                             force=reset)
         self.PRINT_DISPLAY          = self.params.add(self.nodespace + "/print_display",            True,               check_bool,                             force=reset)
         self.USE_NOISE              = self.params.add(self.nodespace + "/noise/enable",             False,              check_bool,                             force=reset)
@@ -564,7 +565,7 @@ class Main_ROS_Class(Base_ROS_Class):
                                 np.square(self.path_xyws[:,1] - np.roll(self.path_xyws[:,1], 1)) \
                             )
         plan_path_sum       = [0]
-        for i in np.arange(len(plan_path_distances)):
+        for i in np.arange(self.path_xyws.shape[0]):
             plan_path_sum.append(np.sum([plan_path_sum[-1], plan_path_distances[i]]))
         plan_path_length    = plan_path_sum[-1]#np.sum(plan_path_distances)
 
@@ -574,7 +575,11 @@ class Main_ROS_Class(Base_ROS_Class):
             self.num_zones      = int(plan_path_length / self.ZONE_LENGTH.get())
         self.zone_length    = plan_path_length / self.num_zones
 
-        self.zone_indices = [np.argmin(np.abs(plan_path_sum-(self.zone_length*i))) for i in np.arange(self.num_zones)] + [len(plan_path_distances) - 1]
+        if not self.LOOP_PATH.get():
+            end_ = [self.path_xyws.shape[0] - 1]
+        else:
+            end_ = [self.path_xyws.shape[0]]
+        self.zone_indices = [np.argmin(np.abs(plan_path_sum-(self.zone_length*i))) for i in np.arange(self.num_zones)] + end_
         self.path_indices = [np.argmin(np.abs(plan_path_sum-(0.2*i))) for i in np.arange(5 * int(plan_path_length))]
 
         path       = Path(header=Header(stamp=rospy.Time.now(), frame_id="map"))
@@ -583,39 +588,38 @@ class Main_ROS_Class(Base_ROS_Class):
 
         direction  = np.sign(np.sum(self.path_xyws[:,2]))
 
-        for i in range(self.path_xyws.shape[0]):
+        for i in self.path_indices:
+            new_pose                        = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id="map"))
+            new_pose.pose.position          = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
+            new_pose.pose.orientation       = q_from_yaw(self.path_xyws[i,2])
 
-            if i in self.path_indices:
-                new_pose                        = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id="map"))
-                new_pose.pose.position          = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
-                new_pose.pose.orientation       = q_from_yaw(self.path_xyws[i,2])
+            new_speed                       = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
+            new_speed.type                  = new_speed.ARROW
+            new_speed.action                = new_speed.ADD
+            new_speed.id                    = i
+            new_speed.color                 = ColorRGBA(r=0.859, g=0.094, b=0.220, a=0.5)
+            new_speed.scale                 = Vector3(x=self.path_xyws[i,3], y=0.05, z=0.05)
+            new_speed.pose.position         = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
+            if not self.REVERSE.get():
+                yaw = q_from_yaw(self.path_xyws[i,2] + direction * np.pi/2)
+            else:
+                yaw = q_from_yaw(self.path_xyws[i,2] - direction * np.pi/2)
+            new_speed.pose.orientation      = yaw
 
-                new_speed                       = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
-                new_speed.type                  = new_speed.ARROW
-                new_speed.action                = new_speed.ADD
-                new_speed.id                    = i
-                new_speed.color                 = ColorRGBA(r=0.859, g=0.094, b=0.220, a=0.5)
-                new_speed.scale                 = Vector3(x=self.path_xyws[i,3], y=0.05, z=0.05)
-                new_speed.pose.position         = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
-                if not self.REVERSE.get():
-                    yaw = q_from_yaw(self.path_xyws[i,2] + direction * np.pi/2)
-                else:
-                    yaw = q_from_yaw(self.path_xyws[i,2] - direction * np.pi/2)
-                new_speed.pose.orientation      = yaw
-
-                path.poses.append(new_pose)
-                speeds.markers.append(new_speed)
-            
-            if i in self.zone_indices:
-                new_zone                    = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
-                new_zone.type               = new_zone.CUBE
-                new_zone.action             = new_zone.ADD
-                new_zone.id                 = i
-                new_zone.color              = ColorRGBA(r=1.000, g=0.616, b=0.000, a=0.5)
-                new_zone.scale              = Vector3(x=0.05, y=1.0, z=1.0)
-                new_zone.pose.position      = Point(x=self.path_xyws[i,0], y=self.path_xyws[i,1], z=0.0)
-                new_zone.pose.orientation   = q_from_yaw(self.path_xyws[i,2])
-                zones.markers.append(new_zone)
+            path.poses.append(new_pose)
+            speeds.markers.append(new_speed)
+        
+        for c, i in enumerate(self.zone_indices):
+            k = i % self.path_xyws.shape[0]
+            new_zone                    = Marker(header=Header(stamp=rospy.Time.now(), frame_id='map'))
+            new_zone.type               = new_zone.CUBE
+            new_zone.action             = new_zone.ADD
+            new_zone.id                 = c
+            new_zone.color              = ColorRGBA(r=1.000, g=0.616, b=0.000, a=0.5)
+            new_zone.scale              = Vector3(x=0.05, y=1.0, z=1.0)
+            new_zone.pose.position      = Point(x=self.path_xyws[k,0], y=self.path_xyws[k,1], z=0.0)
+            new_zone.pose.orientation   = q_from_yaw(self.path_xyws[k,2])
+            zones.markers.append(new_zone)
 
         return path, speeds, zones
 
@@ -783,7 +787,7 @@ class Main_ROS_Class(Base_ROS_Class):
             return
         
         if self.return_stage == Return_Stage.UNSET:
-            self.zone_index  = self.zone_indices[np.argmin(m2m_dist(current_ind, np.transpose(np.matrix(self.zone_indices))))]
+            self.zone_index  = self.zone_indices[np.argmin(m2m_dist(current_ind, np.transpose(np.matrix(self.zone_indices))))] % self.path_xyws.shape[0]
             self.return_stage = Return_Stage.DIST
 
         self.update_position(self.zone_index)
@@ -796,13 +800,13 @@ class Main_ROS_Class(Base_ROS_Class):
 
         if self.return_stage == Return_Stage.DIST:
             if abs(yaw_err) < np.pi/6:
-                ang_err = np.sign(yaw_err) * np.max([0, -0.19*abs(yaw_err)**2 + 0.4*abs(yaw_err) - 0.007])
+                ang_err = np.sign(yaw_err) * np.max([0.1, -0.19*abs(yaw_err)**2 + 0.4*abs(yaw_err) - 0.007])
                 lin_err = np.max([0.1, -(1/3)*dist**2 + (19/30)*dist - 0.06]) 
             else:
                 lin_err = 0
                 ang_err = np.sign(yaw_err) * 0.2
 
-            if dist < 0.1:
+            if dist < 0.05:
                 self.return_stage = Return_Stage.TURN
 
         elif self.return_stage == Return_Stage.TURN:
@@ -813,7 +817,7 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.AUTONOMOUS_OVERRIDE.set(Command_Mode.UNSET)
                 ang_err = 0
             else:
-                ang_err = head_err
+                ang_err = np.sign(head_err) * np.max([0.1, abs(head_err)])
         else:
             raise Exception('Bad return stage [%s].' % str(self.return_stage))
 

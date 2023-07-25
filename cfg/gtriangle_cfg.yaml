@@ -1,9 +1,8 @@
-use_sim_time: false
 vpr_nodes:
-  z_config_file_name: "robot_cfg"
+  z_config_file_name: "gtriangle_cfg"
 
-  simulation: false
-  launch_step: 0
+  simulation: true
+  launch_step: 1
   feature_type: RAW
   img_dims:
   - 64
@@ -15,28 +14,27 @@ vpr_nodes:
   slam_odom_topic: /odom/true
   robot_odom_topic: /jackal_velocity_controller/odom
   vpr_odom_topic: /vpr_odom
-  img_topic: /ros_indigosdk_occam/image0/compressed
+  img_topic: /ros_indigosdk_occam/stitched_image0/compressed
   joy_topic: /bluetooth_teleop/joy
   cmd_topic: /joy_teleop/cmd_vel
 
-  slam_map: s11_center_map.pcd
-  controller_mac: '1C:A0:B8:EC:59:05' #'58:10:31:03:8F:E8'
-  cor_offset: 0.045
+  slam_map: gardens_triangle.pcd
+  controller_mac: '1C:A0:B8:EC:59:05'
 
   limits:
     slow:
-      linear: 0.2
-      angular: 0.2
+      linear: 0.8
+      angular: 0.6
     fast:
-      linear: 0.5
-      angular: 0.5
+      linear: 1.0
+      angular: 1.2
     mode: 'slow'
 
   groundtruth: true
   path: 
-    bag_name: s5_ccw_1
+    bag_name: sim1_ccw2
     odom_topic: /odom/true
-    img_topic: /ros_indigosdk_occam/image0/compressed
+    img_topic: /ros_indigosdk_occam/stitched_image0/compressed
     density: 0.2
     zones:
       length: 5
@@ -44,11 +42,11 @@ vpr_nodes:
 
   svm:
     qry:
-      bag_name: s4_cw_1
+      bag_name: sim1_cw1
       filters: '{}'
       sample_rate: 10.0
     ref:
-      bag_name: s4_cw_2
+      bag_name: sim1_cw2
       filters: '{}'
       sample_rate: 10.0
     factors:
@@ -56,24 +54,16 @@ vpr_nodes:
     - grad
     tolerance:
       mode: DISTANCE
-      threshold: 0.5
+      threshold: 0.2
 
   ref:
-    bag_name: s5_ccw_1
+    bag_name: sim1_ccw1
     filters: '{}'
     sample_rate: 10.0
 
   tolerance:
     mode: METRE_LINE
     threshold: 0.2
-
-  frame_transformer:
-    log_level: 2
-    rate: 10.0
-
-  multicam_fusion:
-    log_level: INFO
-    rate: 15.0
 
   svm_trainer:
     log_level: 2
@@ -87,9 +77,9 @@ vpr_nodes:
     log_level: 2
     rate: 2.0
 
-  data_fuser:
+  img_odom_agg:
     log_level: 2
-    rate: 15.0
+    rate: 10.0
 
   vpr_cruncher:
     log_level: 2
@@ -106,6 +96,11 @@ vpr_nodes:
     log_level: 2
     rate: 12.0
 
+  follower:
+    log_level: 2
+    rate: 12.0
+    publish_info: true
+
   slam_follower:
     log_level: 2
     rate: 12.0
@@ -116,12 +111,6 @@ vpr_nodes:
       - 0.1
       - 0.1
       reverse: false
-
-  visualiser:
-    log_level: 2
-    num_markers: 100
-    rate: 12.0
-    svm_mode: false
 
   path_follower:
     log_level: 2
@@ -134,12 +123,5 @@ vpr_nodes:
       - 0.1
       reverse: false
     override:
-      safety: UNSET
-      autonomous: UNSET
-      ang_error: 0.3490658503988659
-      lin_error: 0.5
-    print_display: true
-    publish_info: true
-    reverse: false
-    smooth_path: false
-    svm_override: false
+      safety: -1
+      autonomous: -1
