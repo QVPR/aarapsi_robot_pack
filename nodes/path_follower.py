@@ -862,8 +862,7 @@ class Main_ROS_Class(Base_ROS_Class):
         else:
             heading_fixed       = self.slam_ego[2]
             ego                 = self.slam_ego
-            svm_override        = True or self.SVM_OVERRIDE.get()
-
+            svm_override        = True
         current_ind, zone       = self.calc_current_ind(ego)
 
         # Calculate perpendicular (lin) and angular (ang) path errors:
