@@ -19,6 +19,8 @@ vpr_nodes:
   joy_topic: /bluetooth_teleop/joy
   cmd_topic: /joy_teleop/cmd_vel
 
+  img_hfov: 72.0
+
   slam_map: s11_center_map.pcd
   controller_mac: '1C:A0:B8:EC:59:05' #'58:10:31:03:8F:E8'
   cor_offset: 0.045
