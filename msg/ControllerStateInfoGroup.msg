@@ -25,7 +25,7 @@ float64[] factors
 
 int64 current_ind
 int64 target_ind
-bool svm_override
+string reject_mode
 
 int64[] zone_indices
 float64 zone_length

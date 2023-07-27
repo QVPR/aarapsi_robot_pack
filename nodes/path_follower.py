@@ -89,6 +89,13 @@ class Return_Stage(Enum):
     TURN            = 2
     DONE            = 3
 
+class Reject_Mode(Enum):
+    NONE            = 0
+    STOP            = 1
+    OLD             = 2
+    OLD_50          = 150
+    OLD_90          = 190
+
 class Main_ROS_Class(Base_ROS_Class):
     def __init__(self, **kwargs):
         super().__init__(**kwargs, throttle=30)
@@ -116,16 +123,16 @@ class Main_ROS_Class(Base_ROS_Class):
         self.ROBOT_ODOM_TOPIC       = self.params.add(self.namespace + "/robot_odom_topic",         None,               check_string,                           force=False)
         self.VPR_ODOM_TOPIC         = self.params.add(self.namespace + "/vpr_odom_topic",           None,               check_string,                           force=False)
 
+        self.REJECT_MODE            = self.params.add(self.nodespace + "/reject_mode",              Reject_Mode.OLD,    lambda x: check_enum(x, Reject_Mode),   force=reset)
         self.LOOP_PATH              = self.params.add(self.nodespace + "/loop_path",                True,               check_bool,                             force=reset)
         self.SMOOTH_PATH            = self.params.add(self.nodespace + "/smooth_path",              False,              check_bool,                             force=reset)
         self.PRINT_DISPLAY          = self.params.add(self.nodespace + "/print_display",            True,               check_bool,                             force=reset)
         self.USE_NOISE              = self.params.add(self.nodespace + "/noise/enable",             False,              check_bool,                             force=reset)
         self.NOISE_VALS             = self.params.add(self.nodespace + "/noise/vals",               [0.1]*3,            lambda x: check_float_list(x, 3),       force=reset)
         self.PUB_INFO               = self.params.add(self.nodespace + "/publish_info",             True,               check_bool,                             force=reset)
-        self.SVM_OVERRIDE           = self.params.add(self.nodespace + "/svm_override",             False,              check_bool,                             force=reset)
         self.REVERSE                = self.params.add(self.nodespace + "/reverse",                  False,              check_bool,                             force=reset)
-        self.LINSTOP_OVERRIDE       = self.params.add(self.nodespace + "/override/lin_error",       0.5,                check_positive_float,                   force=reset)
-        self.ANGSTOP_OVERRIDE       = self.params.add(self.nodespace + "/override/ang_error",       20*np.pi/180,       check_positive_float,                   force=reset)
+        self.LINSTOP_OVERRIDE       = self.params.add(self.nodespace + "/override/lin_error",       0.4,                check_positive_float,                   force=reset)
+        self.ANGSTOP_OVERRIDE       = self.params.add(self.nodespace + "/override/ang_error",       80*np.pi/180,       check_positive_float,                   force=reset)
         self.SAFETY_OVERRIDE        = self.params.add(self.nodespace + "/override/safety",          Safety_Mode.UNSET,  lambda x: check_enum(x, Safety_Mode),   force=reset)
         self.AUTONOMOUS_OVERRIDE    = self.params.add(self.nodespace + "/override/autonomous",      Command_Mode.UNSET, lambda x: check_enum(x, Command_Mode),  force=reset)
 
@@ -352,7 +359,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         msg.group.current_ind       = current_ind
         msg.group.target_ind        = target_ind
-        msg.group.svm_override      = self.SVM_OVERRIDE.get()
+        msg.group.reject_mode       = enum_name(self.REJECT_MODE.get())
 
         try:
             msg.group.true_yaw      = np.round(self.slam_ego[2], 3)
@@ -635,7 +642,7 @@ class Main_ROS_Class(Base_ROS_Class):
     def vpr2path(self, vpr_ind):
         return self.vpr2path_inds[vpr_ind]
 
-    def print_display(self, new_linear, new_angular, current_ind, error_v, error_y, error_yaw, zone, lin_path_err, ang_path_err, svm_override):
+    def print_display(self, new_linear, new_angular, current_ind, error_v, error_y, error_yaw, zone, lin_path_err, ang_path_err):
 
         if self.command_mode == Command_Mode.STOP:
             command_mode_string = C_I_GREEN + 'STOPPED' + C_RESET
@@ -661,14 +668,14 @@ class Main_ROS_Class(Base_ROS_Class):
         base_vel_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '% 5.2f ' for i in ['LIN','ANG']]) + C_RESET
         base_err_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '% 5.2f ' for i in ['VEL', 'C-T','YAW']]) + C_RESET
         base_ind_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '%4d ' for i in ['CUR']]) + C_RESET
-        base_svm_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '%s' for i in ['OVERRIDE','SVM']]) + C_RESET
+        base_svm_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '%s ' for i in ['OVERRIDE','SVM']]) + C_RESET
         vpr_pos_string  = base_pos_string % tuple(self.vpr_ego)
         slam_pos_string = base_pos_string % tuple(self.slam_ego)
         speed_string    = base_vel_string % (new_linear, new_angular)
         errors_string   = base_err_string % (error_v, error_y, error_yaw)
         index_string    = base_ind_string % (current_ind)
         path_err_string = base_vel_string % (lin_path_err, ang_path_err)
-        svm_string      = base_svm_string % (str(svm_override), str(self.state_msg.mStateBin))
+        svm_string      = base_svm_string % (enum_name(self.REJECT_MODE.get()), str(self.state_msg.mStateBin))
         TAB = ' ' * 8
         lines = [
                  '',
@@ -751,7 +758,7 @@ class Main_ROS_Class(Base_ROS_Class):
         goal.pose.orientation   = q_from_yaw(self.path_xyws[goal_ind,2])
         self.goal_pub.publish(goal)
 
-    def make_new_command(self, error_v: float, error_y: float, error_yaw: float, override_svm: bool = False) -> Twist:
+    def make_new_command(self, error_v: float, error_y: float, error_yaw: float) -> Twist:
         if self.safety_mode == Safety_Mode.SLOW:
             lin_max = self.SLOW_LIN_VEL_MAX.get()
             ang_max = self.SLOW_LIN_VEL_MAX.get()
@@ -762,12 +769,25 @@ class Main_ROS_Class(Base_ROS_Class):
             lin_max = 0
             ang_max = 0
         
-        if self.state_msg.mStateBin or override_svm:
+        if not (self.command_mode == Command_Mode.VPR) or self.REJECT_MODE.get() == Reject_Mode.NONE or self.state_msg.mStateBin:
             new_linear          = np.sign(error_v)   * np.min([abs(error_v),   lin_max])
             new_angular         = np.sign(error_yaw) * np.min([abs(error_yaw), ang_max])
         else:
-            new_linear          = self.old_linear
-            new_angular         = self.old_angular
+            if self.REJECT_MODE.get() == Reject_Mode.STOP:
+                new_linear      = 0.0
+                new_angular     = 0.0
+            elif self.REJECT_MODE.get() == Reject_Mode.OLD:
+                new_linear      = self.old_linear
+                new_angular     = self.old_angular
+            elif self.REJECT_MODE.get() == Reject_Mode.OLD_50:
+                new_linear      = self.old_linear * 0.5
+                new_angular     = self.old_angular * 0.5
+            elif self.REJECT_MODE.get() == Reject_Mode.OLD_90:
+                new_linear      = self.old_linear * 0.9
+                new_angular     = self.old_angular * 0.9
+
+            else:
+                raise Exception('Unknown rejection mode %s' % str(self.REJECT_MODE.get()))
 
         self.old_linear         = new_linear
         self.old_angular        = new_angular
@@ -777,11 +797,11 @@ class Main_ROS_Class(Base_ROS_Class):
         new_msg.angular.z       = new_angular
         return new_msg
 
-    def path_follow(self, ego, current_ind, svm_override):
+    def path_follow(self, ego, current_ind):
         errors, target_ind = self.calc_vpr_errors(ego, current_ind)
 
         self.update_position(target_ind)
-        new_msg = self.make_new_command(override_svm=svm_override, **errors)
+        new_msg = self.make_new_command(**errors)
         new_linear = new_msg.linear.x
         new_angular = new_msg.angular.z
 
@@ -829,7 +849,7 @@ class Main_ROS_Class(Base_ROS_Class):
         else:
             raise Exception('Bad return stage [%s].' % str(self.return_stage))
 
-        new_msg     = self.make_new_command(override_svm=True, error_v=lin_err, error_yaw=ang_err, error_y=errors.pop('error_y'))
+        new_msg     = self.make_new_command(error_v=lin_err, error_yaw=ang_err, error_y=errors.pop('error_y'))
         self.cmd_pub.publish(new_msg)
 
     def update_COR(self, ego):
@@ -858,11 +878,9 @@ class Main_ROS_Class(Base_ROS_Class):
             rm_corr             = self.roll_match()
             heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
-            svm_override        = False or self.SVM_OVERRIDE.get()
         else:
             heading_fixed       = self.slam_ego[2]
             ego                 = self.slam_ego
-            svm_override        = True
         current_ind, zone       = self.calc_current_ind(ego)
 
         # Calculate perpendicular (lin) and angular (ang) path errors:
@@ -885,7 +903,7 @@ class Main_ROS_Class(Base_ROS_Class):
             elif ang_path_err > self.ANGSTOP_OVERRIDE.get() and self.ANGSTOP_OVERRIDE.get() > 0:
                 self.command_mode = Command_Mode.STOP
             else:
-                lin_cmd, ang_cmd, errs, target_ind = self.path_follow(ego, current_ind, svm_override)
+                lin_cmd, ang_cmd, errs, target_ind = self.path_follow(ego, current_ind)
 
         if self.command_mode == Command_Mode.ZONE_RETURN:
             self.zone_return(ego, current_ind)
@@ -893,7 +911,7 @@ class Main_ROS_Class(Base_ROS_Class):
         errs.update(dict(lin_path_err=lin_path_err, ang_path_err=ang_path_err))
 
         if self.PRINT_DISPLAY.get():
-            self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, svm_override=svm_override, **errs)
+            self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, **errs)
 
         self.publish_controller_info(current_ind, target_ind, heading_fixed, t_zone)
 
