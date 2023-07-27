@@ -6,8 +6,8 @@ vpr_nodes:
   launch_step: 1
   feature_type: RAW
   img_dims:
-  - 32
-  - 32
+  - 64
+  - 64
   npz_dbp: /data/compressed_sets
   svm_dbp: /cfg/svm_models
   bag_dbp: /data/rosbags
