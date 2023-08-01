@@ -124,6 +124,20 @@ class Main_ROS_Class(Base_ROS_Class):
             param.revert()
             self.print(formatException(), LogType.ERROR)
 
+    def publish_ros_info(self, zvalues, prob, pred, factors):
+        # Populate and publish SVM State details
+        ros_msg                 = MonitorDetails()
+        ros_msg.queryImage      = self.label.queryImage
+        ros_msg.header.stamp    = rospy.Time.now()
+        ros_msg.header.frame_id	= 'map'
+        ros_msg.data            = self.label.data
+        ros_msg.mState	        = zvalues # Continuous monitor state estimate 
+        ros_msg.prob	        = prob # Monitor probability estimate
+        ros_msg.mStateBin       = pred# Binary monitor state estimate
+        ros_msg.factors         = factors
+
+        self.svm_state_pub.publish(ros_msg)
+
     def main(self):
         # Main loop process
         self.set_state(NodeState.MAIN)
@@ -166,19 +180,8 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.print(formatException(), LogType.DEBUG, throttle=1)
                 rospy.sleep(0.005)
 
-        # Populate and publish SVM State details
-        ros_msg                 = MonitorDetails()
-        ros_msg.queryImage      = self.label.queryImage
-        ros_msg.header.stamp    = rospy.Time.now()
-        ros_msg.header.frame_id	= 'map'
-        ros_msg.data            = self.label.data
-        ros_msg.mState	        = zvalues # Continuous monitor state estimate 
-        ros_msg.prob	        = prob # Monitor probability estimate
-        ros_msg.mStateBin       = pred# Binary monitor state estimate
-        ros_msg.factors         = [factor1, factor2]
-
-        self.svm_state_pub.publish(ros_msg)
-        del ros_msg
+        # Make ROS messages
+        self.publish_ros_info(zvalues, prob, pred, [factor1, factor2])
 
 def do_args():
     parser = ap.ArgumentParser(prog="vpr_monitor.py", 
