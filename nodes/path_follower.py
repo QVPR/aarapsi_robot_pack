@@ -26,7 +26,7 @@ from aarapsi_robot_pack.msg import ControllerStateInfo, MonitorDetails, RequestD
 
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_bool, check_string, check_float_list, check_enum, check_positive_int, check_float
 from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, q_from_yaw, pose2xyw, compressed2np, np2compressed, q_from_rpy
-from pyaarapsi.core.helper_tools            import formatException, angle_wrap, normalize_angle, m2m_dist
+from pyaarapsi.core.helper_tools            import roll, formatException, angle_wrap, normalize_angle, m2m_dist
 from pyaarapsi.core.enum_tools              import enum_name, enum_value
 from pyaarapsi.core.vars                    import C_I_RED, C_I_GREEN, C_I_YELLOW, C_I_BLUE, C_I_WHITE, C_RESET, C_CLEAR, C_UP_N, C_DOWN_N
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
@@ -92,7 +92,8 @@ class Return_Stage(Enum):
 class Reject_Mode(Enum):
     NONE            = 0
     STOP            = 1
-    OLD             = 2
+    ODOM            = 2
+    OLD             = 100
     OLD_50          = 150
     OLD_90          = 190
 
@@ -124,8 +125,10 @@ class Main_ROS_Class(Base_ROS_Class):
         self.VPR_ODOM_TOPIC         = self.params.add(self.namespace + "/vpr_odom_topic",           None,               check_string,                           force=False)
 
         self.REJECT_MODE            = self.params.add(self.nodespace + "/reject_mode",              Reject_Mode.OLD,    lambda x: check_enum(x, Reject_Mode),   force=reset)
+        self.IGNORE_ODOM            = self.params.add(self.nodespace + "/ignore_odom",              True,               check_bool,                             force=reset)
         self.LOOP_PATH              = self.params.add(self.nodespace + "/loop_path",                True,               check_bool,                             force=reset)
         self.SMOOTH_PATH            = self.params.add(self.nodespace + "/smooth_path",              False,              check_bool,                             force=reset)
+        self.PUBLISH_ROLLMATCH      = self.params.add(self.nodespace + "/publish_rollmatch",        True,               check_bool,                             force=reset)
         self.PRINT_DISPLAY          = self.params.add(self.nodespace + "/print_display",            True,               check_bool,                             force=reset)
         self.USE_NOISE              = self.params.add(self.nodespace + "/noise/enable",             False,              check_bool,                             force=reset)
         self.NOISE_VALS             = self.params.add(self.nodespace + "/noise/vals",               [0.1]*3,            lambda x: check_float_list(x, 3),       force=reset)
@@ -139,6 +142,7 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_vars(self):
         super().init_vars()
 
+        self.est_ego            = []
         self.vpr_ego            = []
         self.vpr_ego_hist       = []
         self.slam_ego           = []
@@ -151,6 +155,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.old_linear         = 0.0
         self.old_angular        = 0.0
+        self.last_good_time     = rospy.Time.now().to_sec()
         self.zone_index         = None
         self.return_stage       = Return_Stage.UNSET
 
@@ -219,6 +224,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.zones_pub          = self.add_pub(     self.namespace + '/zones',      MarkerArray,                                queue_size=1, latch=True, subscriber_listener=self.sublis)
         self.cmd_pub            = self.add_pub(     self.CMD_TOPIC.get(),           Twist,                                      queue_size=1)
         self.info_pub           = self.add_pub(     self.nodespace + '/info',       ControllerStateInfo,                        queue_size=1)
+        self.rollmatch_pub      = self.add_pub(     self.nodespace + '/rollmatch/compressed',  CompressedImage,                 queue_size=1)
         self.ds_requ_pub        = self.add_pub(     ds_requ + "request",            RequestDataset,                             queue_size=1)
         self.ds_requ_sub        = rospy.Subscriber( ds_requ + "ready",              ResponseDataset,        self.ds_requ_cb,    queue_size=1)
         self.state_sub          = rospy.Subscriber( self.namespace + '/state',      MonitorDetails,         self.state_cb,      queue_size=1)
@@ -232,7 +238,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.sublis.add_operation(self.namespace + '/zones',    method_sub=self.path_peer_subscribe)
         self.sublis.add_operation(self.namespace + '/speeds',   method_sub=self.path_peer_subscribe)
 
-    def try_load_datasets(self, dp1, dp2):
+    def try_load_datasets(self, dp1: dict, dp2: dict):
         if not self.datasets_loaded[0]:
             try:
                 self.ip.load_dataset(dp1)
@@ -332,7 +338,7 @@ class Main_ROS_Class(Base_ROS_Class):
             else:
                 self.safety_mode = Safety_Mode.STOP
 
-    def publish_controller_info(self, current_ind: int, target_ind: int, current_yaw: float, zone: int):
+    def publish_controller_info(self, current_ind: int, target_ind: int, zone: int, adj_lookahead: float):
         msg                         = ControllerStateInfo()
         msg.header.stamp            = rospy.Time.now()
         msg.header.frame_id         = 'map'
@@ -354,7 +360,7 @@ class Main_ROS_Class(Base_ROS_Class):
         msg.group.safety_mode       = enum_name(self.safety_mode)
         msg.group.command_mode      = enum_name(self.command_mode)
 
-        msg.group.current_yaw       = np.round(current_yaw, 3)
+        msg.group.current_yaw       = np.round(self.est_ego[2], 3)
         msg.group.target_yaw        = np.round(self.path_xyws[target_ind,2], 3)
 
         msg.group.current_ind       = current_ind
@@ -368,7 +374,7 @@ class Main_ROS_Class(Base_ROS_Class):
             pass
         self.new_slam_ego = False
 
-        msg.group.lookahead         = self.lookahead
+        msg.group.lookahead         = adj_lookahead
         msg.group.lookahead_mode    = enum_name(self.lookahead_mode)
 
         msg.group.zone_indices      = self.zone_indices
@@ -485,44 +491,6 @@ class Main_ROS_Class(Base_ROS_Class):
         self.print('Bluetooth controller not found! Shutting down.', LogType.FATAL)
         sys.exit()
 
-    def global2local(self, ego):
-
-        Tx  = self.path_xyws[:,0] - ego[0]
-        Ty  = self.path_xyws[:,1] - ego[1]
-        R   = np.sqrt(np.power(Tx, 2) + np.power(Ty, 2))
-        A   = np.arctan2(Ty, Tx) - ego[2]
-
-        return list(np.multiply(np.cos(A), R)), list(np.multiply(np.sin(A), R))
-    
-    def calc_current_ind(self, ego):
-        current_ind         = np.argmin(m2m_dist(self.path_xyws[:,0:2], ego[0:2], True), axis=0)
-        zone                = np.max(np.arange(self.num_zones)[np.array(self.zone_indices[0:-1]) <= current_ind] + 1)
-        return current_ind, zone
-
-    def calc_errors(self, ego, target_ind: int = None):
-        rel_x, rel_y    = self.global2local(ego)
-        error_yaw       = normalize_angle(np.arctan2(rel_y[target_ind], rel_x[target_ind]))
-        error_y         = rel_y[target_ind]
-        errors          = {'error_yaw': error_yaw, 'error_y': error_y}
-        return errors
-    
-    def calc_vpr_errors(self, ego, current_ind: int):
-        lookahead_scaled = self.lookahead * (self.path_xyws[current_ind,3] / self.speed_lims[1])
-        if self.lookahead_mode == Lookahead_Mode.INDEX:
-            target_ind  = (current_ind + int(np.round(lookahead_scaled))) % self.path_xyws.shape[0]
-        elif self.lookahead_mode == Lookahead_Mode.DISTANCE:
-            target_ind  = current_ind
-            dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
-            while dist < lookahead_scaled:
-                target_ind  = (target_ind + 1) % self.path_xyws.shape[0] 
-                dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
-        else:
-            raise Exception('Unknown lookahead_mode: %s' % str(self.lookahead_mode))
-        error_v         = self.path_xyws[current_ind, 3]
-        errors          = self.calc_errors(ego, target_ind)
-        errors.update({'error_v': error_v})
-        return errors, target_ind
-
     def make_path(self):
         self.vpr_points = np.transpose(np.stack([   self.path_dataset['dataset']['px'].flatten(), 
                                                     self.path_dataset['dataset']['py'].flatten(), 
@@ -636,13 +604,16 @@ class Main_ROS_Class(Base_ROS_Class):
 
         return path, speeds, zones
 
-    def path2vpr(self, path_ind):
+    def path2vpr(self, path_ind: int) -> int:
         return self.path2vpr_inds[path_ind]
 
-    def vpr2path(self, vpr_ind):
+    def vpr2path(self, vpr_ind: int) -> int:
         return self.vpr2path_inds[vpr_ind]
 
-    def print_display(self, new_linear, new_angular, current_ind, error_v, error_y, error_yaw, zone, lin_path_err, ang_path_err):
+    def print_display(self, new_linear: float, new_angular: float, 
+                      current_ind: int, zone: int, 
+                      error_v: float, error_y: float, error_yaw: float, 
+                      lin_path_err: float, ang_path_err: float):
 
         if self.command_mode == Command_Mode.STOP:
             command_mode_string = C_I_GREEN + 'STOPPED' + C_RESET
@@ -668,14 +639,15 @@ class Main_ROS_Class(Base_ROS_Class):
         base_vel_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '% 5.2f ' for i in ['LIN','ANG']]) + C_RESET
         base_err_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '% 5.2f ' for i in ['VEL', 'C-T','YAW']]) + C_RESET
         base_ind_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '%4d ' for i in ['CUR']]) + C_RESET
-        base_svm_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '%s ' for i in ['OVERRIDE','SVM']]) + C_RESET
+        base_svm_string = ''.join([C_I_YELLOW + i + ': ' + C_I_WHITE + '%s ' for i in ['OVERRIDE','SVM','LGT']]) + C_RESET
         vpr_pos_string  = base_pos_string % tuple(self.vpr_ego)
         slam_pos_string = base_pos_string % tuple(self.slam_ego)
+        est_pos_string  = base_pos_string % tuple(self.est_ego)
         speed_string    = base_vel_string % (new_linear, new_angular)
         errors_string   = base_err_string % (error_v, error_y, error_yaw)
         index_string    = base_ind_string % (current_ind)
         path_err_string = base_vel_string % (lin_path_err, ang_path_err)
-        svm_string      = base_svm_string % (enum_name(self.REJECT_MODE.get()), str(self.state_msg.mStateBin))
+        svm_string      = base_svm_string % (enum_name(self.REJECT_MODE.get()), str(self.state_msg.mStateBin), str(np.round(rospy.Time.now().to_sec() - self.last_good_time, 1)))
         TAB = ' ' * 8
         lines = [
                  '',
@@ -684,10 +656,11 @@ class Main_ROS_Class(Base_ROS_Class):
                  TAB + '    Safety Mode: %s' % safety_mode_string,
                  TAB + '   VPR Position: %s' % vpr_pos_string,
                  TAB + '  SLAM Position: %s' % slam_pos_string,
+                 TAB + '  Est. Position: %s' % est_pos_string,
                  TAB + ' Speed Commands: %s' % speed_string,
                  TAB + '         Errors: %s' % errors_string,
                  TAB + '     Index Info: %s' % index_string,
-                 TAB + '    Zone Number: %d' % zone,
+                 TAB + '   SLAM Zone ID: %d' % zone,
                  TAB + '     Path Error: %s' % path_err_string,
                  TAB + '     SVM Status: %s' % svm_string
                 ]
@@ -702,6 +675,44 @@ class Main_ROS_Class(Base_ROS_Class):
                 break
         if (enum_value(self.LOG_LEVEL.get()) <= log_level) and super().print(*args, **kwargs):
             self.print_lines += 1
+
+    def global2local(self, ego_in: list):
+
+        Tx  = self.path_xyws[:,0] - ego_in[0]
+        Ty  = self.path_xyws[:,1] - ego_in[1]
+        R   = np.sqrt(np.power(Tx, 2) + np.power(Ty, 2))
+        A   = np.arctan2(Ty, Tx) - ego_in[2]
+
+        return list(np.multiply(np.cos(A), R)), list(np.multiply(np.sin(A), R))
+    
+    def calc_current_ind(self, ego_in: list):
+        current_ind         = np.argmin(m2m_dist(self.path_xyws[:,0:2], ego_in[0:2], True), axis=0)
+        zone                = np.max(np.arange(self.num_zones)[np.array(self.zone_indices[0:-1]) <= current_ind] + 1)
+        return current_ind, zone
+
+    def calc_errors(self, ego_in: list, target_ind: int = None):
+        rel_x, rel_y    = self.global2local(ego_in)
+        error_yaw       = normalize_angle(np.arctan2(rel_y[target_ind], rel_x[target_ind]))
+        error_y         = rel_y[target_ind]
+        errors          = {'error_yaw': error_yaw, 'error_y': error_y}
+        return errors
+    
+    def calc_vpr_errors(self, current_ind: int, ego_in: list):
+        adj_lookahead = self.lookahead #* (self.path_xyws[current_ind,3] / self.speed_lims[1])
+        if self.lookahead_mode == Lookahead_Mode.INDEX:
+            target_ind  = (current_ind + int(np.round(adj_lookahead))) % self.path_xyws.shape[0]
+        elif self.lookahead_mode == Lookahead_Mode.DISTANCE:
+            target_ind  = current_ind
+            dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
+            while dist < adj_lookahead:
+                target_ind  = (target_ind + 1) % self.path_xyws.shape[0] 
+                dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
+        else:
+            raise Exception('Unknown lookahead_mode: %s' % str(self.lookahead_mode))
+        error_v         = self.path_xyws[current_ind, 3]
+        errors          = self.calc_errors(ego_in, target_ind)
+        errors.update({'error_v': error_v})
+        return errors, target_ind, adj_lookahead
 
     def main(self):
         # Main loop process
@@ -741,15 +752,39 @@ class Main_ROS_Class(Base_ROS_Class):
                     self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
                     rospy.sleep(0.5)
 
-    def roll_match(self, resize: list = [360,8]):
+    def roll_match(self):
+        resize          = [int(self.IMG_HFOV.get()), 8]
         img_dims        = self.IMG_DIMS.get()
         query_raw       = cv2.cvtColor(compressed2np(self.state_msg.queryImage), cv2.COLOR_BGR2GRAY)
-        image_to_align  = cv2.resize(query_raw, resize)
+        img             = cv2.resize(query_raw, resize)
+        img_mask        = np.ones(img.shape)
+
+        _b              = int(resize[0] / 2)
+        sliding_options = range((-_b) + 1, _b)
+
         against_image   = cv2.resize(np.reshape(self.norm_dataset['dataset']['RAW'][self.state_msg.data.matchId], [img_dims[1], img_dims[0]]), resize)
-        options_stacked = np.stack([np.roll(against_image, i, 1).flatten() for i in range(against_image.shape[1])])
-        matches         = m2m_dist(image_to_align.flatten()[np.newaxis, :], options_stacked, True)
-        yaw_fix_deg     = np.argpartition(matches, 1)[0:1][0]
-        yaw_fix_rad     = yaw_fix_deg * np.pi / 180.0
+        options_stacked = np.stack([roll(against_image, i).flatten() for i in sliding_options])
+        img_stacked     = np.stack([(roll(img_mask, i)*img).flatten() for i in sliding_options])
+        matches         = np.sum(np.square(img_stacked - options_stacked),axis=1)
+        yaw_fix_deg     = sliding_options[np.argmin(matches)]
+        yaw_fix_rad     = normalize_angle(yaw_fix_deg * np.pi / 180.0)
+
+        if self.PUBLISH_ROLLMATCH.get():
+            fig, ax = plt.subplots()
+            ax.plot(sliding_options, matches)
+            ax.plot(sliding_options[np.argmin(matches)], matches[np.argmin(matches)])
+            ax.set_title('%s' % str([sliding_options[np.argmin(matches)], matches[np.argmin(matches)]]))
+            fig.canvas.draw()
+            img_np_raw_flat = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            img_np_raw      = img_np_raw_flat.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            img_np          = np.flip(img_np_raw, axis=2) # to bgr format, for ROS
+            plt.close('all') # close matplotlib
+            plt.show()
+            img_msg = np2compressed(img_np)
+            img_msg.header.stamp = rospy.Time.now()
+            img_msg.header.frame_id = 'map'
+            self.rollmatch_pub.publish(img_msg)
+
         return yaw_fix_rad
 
     def update_position(self, goal_ind: int) -> None:
@@ -769,9 +804,10 @@ class Main_ROS_Class(Base_ROS_Class):
             lin_max = 0
             ang_max = 0
         
-        if not (self.command_mode == Command_Mode.VPR) or self.REJECT_MODE.get() == Reject_Mode.NONE or self.state_msg.mStateBin:
+        if not (self.command_mode == Command_Mode.VPR) or self.REJECT_MODE.get() in [Reject_Mode.NONE, Reject_Mode.ODOM] or self.state_msg.mStateBin:
             new_linear          = np.sign(error_v)   * np.min([abs(error_v),   lin_max])
             new_angular         = np.sign(error_yaw) * np.min([abs(error_yaw), ang_max])
+            self.last_good_time = rospy.Time.now().to_sec()
         else:
             if self.REJECT_MODE.get() == Reject_Mode.STOP:
                 new_linear      = 0.0
@@ -782,9 +818,17 @@ class Main_ROS_Class(Base_ROS_Class):
             elif self.REJECT_MODE.get() == Reject_Mode.OLD_50:
                 new_linear      = self.old_linear * 0.5
                 new_angular     = self.old_angular * 0.5
+                if new_linear < 0.05:
+                    new_linear  = 0
+                    new_angular = 0
+                    self.command_mode = Command_Mode.STOP
             elif self.REJECT_MODE.get() == Reject_Mode.OLD_90:
                 new_linear      = self.old_linear * 0.9
                 new_angular     = self.old_angular * 0.9
+                if new_linear < 0.05:
+                    new_linear  = 0
+                    new_angular = 0
+                    self.command_mode = Command_Mode.STOP
 
             else:
                 raise Exception('Unknown rejection mode %s' % str(self.REJECT_MODE.get()))
@@ -797,8 +841,8 @@ class Main_ROS_Class(Base_ROS_Class):
         new_msg.angular.z       = new_angular
         return new_msg
 
-    def path_follow(self, ego, current_ind):
-        errors, target_ind = self.calc_vpr_errors(ego, current_ind)
+    def path_follow(self, current_ind: int):
+        errors, target_ind, adj_lookahead = self.calc_vpr_errors(current_ind, self.est_ego)
 
         self.update_position(target_ind)
         new_msg = self.make_new_command(**errors)
@@ -808,9 +852,20 @@ class Main_ROS_Class(Base_ROS_Class):
         if (not self.command_mode == Command_Mode.STOP) and (not self.safety_mode == Safety_Mode.STOP):
             self.cmd_pub.publish(new_msg)
 
-        return new_linear, new_angular, errors, target_ind
+        return new_linear, new_angular, errors, target_ind, adj_lookahead
+
+    def update_COR(self):
+        COR_x = self.slam_ego[0] + self.COR_OFFSET.get() * np.cos(self.slam_ego[2])
+        COR_y = self.slam_ego[1] + self.COR_OFFSET.get() * np.sin(self.slam_ego[2])
+
+        pose                    = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id='map'))
+        pose.pose.position      = Point(x=COR_x, y=COR_y)
+        pose.pose.orientation   = q_from_rpy(0, -np.pi/2, 0)
+        self.COR_pub.publish(pose)
+
+        return [COR_x, COR_y]
     
-    def zone_return(self, ego, current_ind):
+    def zone_return(self, current_ind):
         if self.return_stage == Return_Stage.DONE:
             return
         
@@ -820,11 +875,11 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.update_position(self.zone_index)
 
-        errors      = self.calc_errors(ego, target_ind=self.zone_index)
-        ego_cor     = self.update_COR(ego)
+        errors      = self.calc_errors(self.slam_ego, target_ind=self.zone_index)
+        ego_cor     = self.update_COR()
         dist        = np.sqrt(np.square(ego_cor[0]-self.path_xyws[self.zone_index, 0]) + np.square(ego_cor[1]-self.path_xyws[self.zone_index, 1]))
         yaw_err     = errors.pop('error_yaw')
-        head_err    = self.path_xyws[self.zone_index, 2] - ego[2]
+        head_err    = self.path_xyws[self.zone_index, 2] - self.slam_ego[2]
 
         if self.return_stage == Return_Stage.DIST:
             if abs(yaw_err) < np.pi/6:
@@ -852,17 +907,6 @@ class Main_ROS_Class(Base_ROS_Class):
         new_msg     = self.make_new_command(error_v=lin_err, error_yaw=ang_err, error_y=errors.pop('error_y'))
         self.cmd_pub.publish(new_msg)
 
-    def update_COR(self, ego):
-        COR_x = ego[0] + self.COR_OFFSET.get() * np.cos(ego[2])
-        COR_y = ego[1] + self.COR_OFFSET.get() * np.sin(ego[2])
-
-        pose                    = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id='map'))
-        pose.pose.position      = Point(x=COR_x, y=COR_y)
-        pose.pose.orientation   = q_from_rpy(0, -np.pi/2, 0)
-        self.COR_pub.publish(pose)
-
-        return [COR_x, COR_y]
-
     def loop_contents(self):
 
         if not (self.new_robot_ego and self.new_vpr_ego): # denest
@@ -874,15 +918,6 @@ class Main_ROS_Class(Base_ROS_Class):
         self.new_vpr_ego    = False
         self.new_robot_ego  = False
 
-        if self.command_mode == Command_Mode.VPR:
-            rm_corr             = self.roll_match()
-            heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
-            ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
-        else:
-            heading_fixed       = self.slam_ego[2]
-            ego                 = self.slam_ego
-        current_ind, zone       = self.calc_current_ind(ego)
-
         # Calculate perpendicular (lin) and angular (ang) path errors:
         t_current_ind, t_zone   = self.calc_current_ind(self.slam_ego)
         _dx             = self.slam_ego[0] - self.path_xyws[t_current_ind, 0]
@@ -892,28 +927,59 @@ class Main_ROS_Class(Base_ROS_Class):
         lin_path_err    = abs(_dr * np.sin(self.path_xyws[t_current_ind, 2] - _dw))
         ang_path_err    = abs(angle_wrap(self.path_xyws[t_current_ind, 2] - self.slam_ego[2], 'RAD'))
 
+        # If VPR path following mode, estimate current pose:
+        if self.command_mode == Command_Mode.VPR:
+
+            # If we want to use roll-match to correct heading because we got a good point:
+            if self.REJECT_MODE.get() == Reject_Mode.NONE or self.state_msg.mStateBin or self.IGNORE_ODOM.get():
+                rm_corr             = self.roll_match()
+                heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
+                self.est_ego        = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
+
+            # If we don't trust the new VPR point:
+            else:
+                _x = self.est_ego[0] + self.robot_ego[0] - self.old_robot_ego[0]
+                _y = self.est_ego[1] + self.robot_ego[1] - self.old_robot_ego[1]
+                _w = angle_wrap(self.est_ego[2] + self.robot_ego[2] - self.old_robot_ego[2], 'RAD')
+                self.est_ego        = [_x, _y, _w]
+
+            current_ind, zone = self.calc_current_ind(self.est_ego)
+
+        # Otherwise, use SLAM pose: (our current pose estimation becomes 'perfect'):
+        else:
+            self.est_ego        = self.slam_ego
+            current_ind         = t_current_ind
+            zone                = t_zone
+
         lin_cmd         = 0
         ang_cmd         = 0
         errs            = {'error_yaw': 0, 'error_y': 0, 'error_v': 0}
         target_ind      = 0
+        adj_lookahead   = self.lookahead
 
+        # If we're in a path-following command mode:
         if self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM]:
             if lin_path_err > self.LINSTOP_OVERRIDE.get() and self.LINSTOP_OVERRIDE.get() > 0:
                 self.command_mode = Command_Mode.STOP
             elif ang_path_err > self.ANGSTOP_OVERRIDE.get() and self.ANGSTOP_OVERRIDE.get() > 0:
                 self.command_mode = Command_Mode.STOP
             else:
-                lin_cmd, ang_cmd, errs, target_ind = self.path_follow(ego, current_ind)
+                lin_cmd, ang_cmd, errs, target_ind, adj_lookahead = self.path_follow(current_ind)
 
-        if self.command_mode == Command_Mode.ZONE_RETURN:
-            self.zone_return(ego, current_ind)
+        # If we are in the zone return command mode:
+        elif self.command_mode == Command_Mode.ZONE_RETURN:
+            self.zone_return(t_current_ind)
+
+        # If we're just listening to manual controls and doing no estimation:
+        else:
+            self.last_good_time = rospy.Time.now().to_sec()
 
         errs.update(dict(lin_path_err=lin_path_err, ang_path_err=ang_path_err))
 
         if self.PRINT_DISPLAY.get():
-            self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=zone, **errs)
+            self.print_display(new_linear=lin_cmd, new_angular=ang_cmd, current_ind=current_ind, zone=t_zone, **errs)
 
-        self.publish_controller_info(current_ind, target_ind, heading_fixed, t_zone)
+        self.publish_controller_info(current_ind, target_ind, t_zone, adj_lookahead)
 
 def do_args():
     parser = ap.ArgumentParser(prog="path_follower.py", 

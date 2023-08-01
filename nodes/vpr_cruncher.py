@@ -16,7 +16,7 @@ from std_msgs.msg import String
 from sensor_msgs.msg import CompressedImage
 
 from pyaarapsi.core.enum_tools              import enum_name
-from pyaarapsi.core.argparse_tools          import check_bounded_float, check_positive_float, check_positive_int, check_enum, check_string
+from pyaarapsi.core.argparse_tools          import check_bounded_float, check_positive_float, check_positive_int, check_enum, check_string, check_bool
 from pyaarapsi.core.ros_tools               import yaw_from_q, q_from_yaw, roslogger, LogType, NodeState
 from pyaarapsi.core.helper_tools            import formatException, uint8_list_to_np_ndarray
 from pyaarapsi.vpr_simple.vpr_helpers       import VPR_Tolerance_Mode, FeatureType
@@ -40,7 +40,8 @@ class Main_ROS_Class(Base_ROS_Class):
         self.VPR_ODOM_TOPIC  = self.params.add(self.namespace + "/vpr_odom_topic",      None,                   check_string,                                   force=False)
         self.TIME_HIST_LEN   = self.params.add(self.nodespace + "/time_history_length", max(1,int(5*rate_num)), check_positive_int,                             force=reset)
         self.DVC_WEIGHT      = self.params.add(self.nodespace + "/dvc_weight",          1,                      lambda x: check_bounded_float(x, 0, 1, 'both'), force=reset)
-        
+        self.DVC_SPOOF       = self.params.add(self.nodespace + "/dvc_spoof",           False,                  check_bool,                                     force=reset)
+
     def init_vars(self):
         super().init_vars()
 
@@ -218,6 +219,12 @@ class Main_ROS_Class(Base_ROS_Class):
             return
         
         matchInd, dvc   = self.getMatchInd(ft_qry) # Find match
+        if self.DVC_SPOOF.get():
+            swap_ind        = int(matchInd + (len(dvc) * 0.05)) % len(dvc)
+            swap_dist       = dvc[swap_ind]
+            dvc[swap_ind]   = dvc[matchInd]
+            dvc[matchInd]   = swap_dist
+            matchInd        = swap_ind
         trueInd         = self.getTrueInd() # find correct match based on shortest difference to measured odometry
         tolMode         = self.TOL_MODE.get()
 

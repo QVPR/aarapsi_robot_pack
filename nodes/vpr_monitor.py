@@ -30,10 +30,7 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_vars(self):
         super().init_vars()
 
-        self.contour_msg            = None
-
         self.state_hist             = np.zeros((10,3)) # x, y, w
-        self.state_size             = 0
 
         # Set up SVM
         self.svm                    = SVMModelProcessor(ros=True)
@@ -95,7 +92,6 @@ class Main_ROS_Class(Base_ROS_Class):
 
         self.state_hist       = np.roll(self.state_hist, 1, 0)
         self.state_hist[0,:]  = [msg.data.vpr_ego.x, msg.data.vpr_ego.y, msg.data.vpr_ego.w]
-        self.state_size       = np.min([self.state_size + 1, self.state_hist.shape[0]])
 
         self.new_label        = True
 
