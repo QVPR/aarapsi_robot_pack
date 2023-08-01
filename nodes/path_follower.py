@@ -743,8 +743,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
     def roll_match(self, resize: list = [360,8]):
         img_dims        = self.IMG_DIMS.get()
-        query_raw       = cv2.cvtColor(compressed2np(self.state_msg.queryImage), cv2.COLOR_BGR2GRAY)
-        image_to_align  = cv2.resize(query_raw, resize)
+        image_to_align  = cv2.cvtColor(cv2.resize(compressed2np(self.state_msg.queryImage), resize), cv2.COLOR_RGB2GRAY)
         against_image   = cv2.resize(np.reshape(self.norm_dataset['dataset']['RAW'][self.state_msg.data.matchId], [img_dims[1], img_dims[0]]), resize)
         options_stacked = np.stack([np.roll(against_image, i, 1).flatten() for i in range(against_image.shape[1])])
         matches         = m2m_dist(image_to_align.flatten()[np.newaxis, :], options_stacked, True)
