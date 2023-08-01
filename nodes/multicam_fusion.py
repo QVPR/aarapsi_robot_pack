@@ -68,7 +68,7 @@ class Main_ROS_Class(Base_ROS_Class):
     # /ros_indigosdk_occam/image0/compressed (sensor_msgs/CompressedImage)
     # Store newest forward-facing image received
         self.new_imgs[index]    = True
-        self.imgs[index]        = compressed2np(msg, "bgr8")
+        self.imgs[index]        = compressed2np(msg)
 
     
     def main(self):
