@@ -507,7 +507,7 @@ class Main_ROS_Class(Base_ROS_Class):
         return errors
     
     def calc_vpr_errors(self, ego, current_ind: int):
-        lookahead_scaled = self.lookahead * (self.path_xyws[current_ind,3] / self.speed_lims[1])
+        lookahead_scaled = self.lookahead# * (self.path_xyws[current_ind,3] / self.speed_lims[1])
         if self.lookahead_mode == Lookahead_Mode.INDEX:
             target_ind  = (current_ind + int(np.round(lookahead_scaled))) % self.path_xyws.shape[0]
         elif self.lookahead_mode == Lookahead_Mode.DISTANCE:
