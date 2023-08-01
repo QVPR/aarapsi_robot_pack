@@ -8,10 +8,6 @@ import os
 import argparse as ap
 import numpy as np
 from sensor_msgs.msg import CompressedImage, Image
-from nav_msgs.msg import Odometry
-
-from tqdm.auto import tqdm
-from cv_bridge import CvBridge
 from pathlib import Path
 
 from pyaarapsi.core.argparse_tools import check_positive_float, check_bool, check_string, check_string_list

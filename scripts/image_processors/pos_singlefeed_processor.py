@@ -3,13 +3,13 @@
 import rospy
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CompressedImage#, Image
-from cv_bridge import CvBridge
 import cv2 as cv
 import numpy as np
 import rospkg
 from pathlib import Path
 import time
 from tqdm import tqdm
+from pyaarapsi.core.ros_tools import compressed2np, np2compressed
 
 # Odometry Image Processor Node:
 
@@ -28,14 +28,8 @@ class mrc: # main ROS class
         self.rate_num   = 0.5 # Hz
         self.rate_obj   = rospy.Rate(self.rate_num)
 
-        self.bridge     = CvBridge() # to convert sensor_msgs/Image (or CompressedImage) to cv2
-
         self.odom_sub   = rospy.Subscriber("/odometry/filtered", Odometry, self.odom_callback)
         self.img0_sub   = rospy.Subscriber("/ros_indigosdk_occam/image0/compressed", CompressedImage, self.img0_callback)
-        # alternative: self.img0_sub   = rospy.Subscriber("/ros_indigosdk_occam/image0", Image, self.img0_callback)
-
-        #self.store_img0 = self.bridge.compressed_imgmsg_to_cv2(CompressedImage, "bgr8") # populate, empty
-        ## alternative: self.store_img0 = self.bridge.imgmsg_to_cv2(Image, "bgr8")
 
         # flags to denest main loop:
         self.new_img0   = False
@@ -54,8 +48,7 @@ class mrc: # main ROS class
     # /ros_indigosdk_occam/image0/compressed (sensor_msgs/CompressedImage)
     # Store newest image received
 
-        self.store_img0 = self.bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
-        # alternative: self.store_img0 = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+        self.store_img0 = compressed2np(msg)
         self.new_img0   = True
 
 def odom_image_processor():

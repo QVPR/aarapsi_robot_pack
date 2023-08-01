@@ -6,8 +6,7 @@ import argparse as ap
 import numpy as np
 import rospkg
 import os
-import cv2 
-from cv_bridge import CvBridge
+import cv2
 
 from sensor_msgs.msg import CompressedImage
 
@@ -37,7 +36,6 @@ class mrc:
         self.heartbeat  = Heartbeat(self.node_name, self.namespace, NodeState.INIT, self.rate_num)
 
         self.img        = cv2.imread(self.img_path)
-        self.bridge     = CvBridge()
         self.pub        = rospy.Publisher(self.namespace + '/image_spin/compressed', CompressedImage, queue_size=1)
 
     def main(self):
@@ -46,7 +44,7 @@ class mrc:
         while not rospy.is_shutdown():
             self.rate_obj.sleep()
             self.img            = np.roll(self.img, 1, 1)
-            msg                 = img2msg(self.img[:,0:self.img.shape[0],:], 'CompressedImage', bridge=self.bridge)
+            msg                 = img2msg(self.img[:,0:self.img.shape[0],:], 'CompressedImage')
             msg.header.stamp    = rospy.Time.now()
             msg.header.seq      = self.seq
             msg.header.frame_id = "image"

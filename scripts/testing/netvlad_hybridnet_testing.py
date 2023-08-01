@@ -9,7 +9,8 @@ import rospy
 import torch
 from pyaarapsi.vpr_simple.vpr_feature_tool import VPRImageProcessor, FeatureType
 from pyaarapsi.core.helper_tools import vis_dict
-from pyaarapsi.vpr_classes import NetVLAD_Container, HybridNet_Container
+from pyaarapsi.vpr_classes.netvlad import NetVLAD_Container
+from pyaarapsi.vpr_classes.hybridnet import HybridNet_Container
 
 gpu_exists      = torch.cuda.is_available()
 cam             = 'forward'

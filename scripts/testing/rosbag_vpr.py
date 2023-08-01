@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 
 import rospy
-import rospkg
 from fastdist import fastdist
-import os, sys
+import sys
 import numpy as np
 import signal
 from pyaarapsi.vpr_simple.vpr_dataset_tool import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.svm_model_tool import SVMModelProcessor
-from pyaarapsi.core.helper_tools import try_load_var, save_var
 
 import matplotlib
 matplotlib.use('TkAgg')

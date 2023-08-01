@@ -4,9 +4,6 @@ import rospy
 import argparse as ap
 import sys
 import copy
-import cv2
-from cv_bridge import CvBridge
-from cv_bridge.boost.cv_bridge_boost import cvtColor2
 
 from rospy_message_converter import message_converter
 from pyaarapsi.core.argparse_tools          import check_bool
@@ -49,7 +46,6 @@ class Main_ROS_Class(Base_ROS_Class):
         path_dataset_dict       = self.make_dataset_dict(path=True)
         ref_dataset_dict        = self.make_dataset_dict(path=False)
         self.use_gpu            = use_gpu
-        self.bridge             = CvBridge()
         try:
             self.vpr            = VPRDatasetProcessor(path_dataset_dict, try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
                                         autosave=True, use_tqdm=True, ros=True)

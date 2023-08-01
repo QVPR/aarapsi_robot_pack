@@ -5,17 +5,13 @@ from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2
 
 import numpy as np
-import math
 import cv2
-from cv_bridge import CvBridge
-import sys
 import matplotlib
 matplotlib.use("Qt5agg")
 from matplotlib import pyplot as plt
 from sensor_msgs.msg import CompressedImage
-from pyaarapsi.core.missing_pixel_filler import fill_swath_fast,fill_swath_with_neighboring_pixel 
+from pyaarapsi.core.missing_pixel_filler import fill_swath_fast 
 from pyaarapsi.core.helper_tools import Timer
-import time
 
 class mrc:
     def __init__(self, node_name='lidar2panorama', anon=True, rate_num=20.0):
@@ -30,8 +26,6 @@ class mrc:
         self.img_subs       = []
         self.img_msgs       = [None]*5
         self.new_imgs       = [False]*5
-
-        self.bridge = CvBridge()
     
         for i in range(5):
             self.img_subs.append(rospy.Subscriber(self.image_topic % (i), CompressedImage, self.image_callback, (i)))

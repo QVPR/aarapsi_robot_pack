@@ -3,7 +3,6 @@
 import rospy
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CompressedImage
-from cv_bridge import CvBridge
 import cv2
 import numpy as np
 import rospkg
@@ -11,6 +10,7 @@ from pathlib import Path
 import time
 from matplotlib import pyplot as plt
 from tqdm import tqdm
+from pyaarapsi.core.ros_tools import compressed2np, np2compressed
 
 # Odometry Multi-Image Processor Node:
 
@@ -29,8 +29,6 @@ class mrc: # main ROS class
         
         self.rate_num           = 4.0 # Hz
         self.rate_obj           = rospy.Rate(self.rate_num)
-
-        self.bridge             = CvBridge() # to convert sensor_msgs/CompressedImage to cv2.
 
         self.odom_sub           = rospy.Subscriber("/odometry/filtered", Odometry, self.odom_callback)
         self.img_frwd_sub       = rospy.Subscriber("/ros_indigosdk_occam/image0/compressed", CompressedImage, self.img_frwd_callback, queue_size=1) # centre-view
@@ -58,21 +56,21 @@ class mrc: # main ROS class
     def img_frwd_callback(self, msg):
     # /ros_indigosdk_occam/image0/compressed (sensor_msgs/CompressedImage)
     # Store newest forward-facing image received
-        self.store_img_frwd     = self.bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
+        self.store_img_frwd     = compressed2np(msg)
         self.new_img_frwd       = True
 
     def img_rght_callback(self, msg):
     # /ros_indigosdk_occam/image1/compressed (sensor_msgs/CompressedImage)
     # Store newest right-facing image received
 
-        self.store_img_rght     = self.bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
+        self.store_img_rght     = compressed2np(msg)
         self.new_img_rght       = True
 
     def img_left_callback(self, msg):
     # /ros_indigosdk_occam/image4/compressed (sensor_msgs/CompressedImage)
     # Store newest left-facing image received
 
-        self.store_img_left     = self.bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
+        self.store_img_left     = compressed2np(msg)
         self.new_img_left       = True
 
 # https://github.com/lukasalexanderweber/stitching_tutorial/blob/master/docs/Stitching%20Tutorial.md
@@ -235,9 +233,9 @@ def odom_multiimage_processor():
         
         ## Publish to ROS for viewing pleasure (optional)
         # convert to ROS message first
-        cimage_ros_pano = nmrc.bridge.cv2_to_compressed_imgmsg(crrctd_pnrm, "png")
-        cimage_ros_left = nmrc.bridge.cv2_to_compressed_imgmsg(left_img_merge, "png")
-        cimage_ros_rght = nmrc.bridge.cv2_to_compressed_imgmsg(rght_img_merge, "png")
+        cimage_ros_pano = np2compressed(crrctd_pnrm)
+        cimage_ros_left = np2compressed(left_img_merge)
+        cimage_ros_rght = np2compressed(rght_img_merge)
         # publish
         nmrc.panorama_pub.publish(cimage_ros_pano)
         nmrc.l_merged_pub.publish(cimage_ros_left)

@@ -5,9 +5,6 @@ from sensor_msgs import point_cloud2
 from sensor_msgs.msg import PointCloud2
 
 import numpy as np
-import math
-import cv2
-from cv_bridge import CvBridge
 import sys
 import matplotlib
 matplotlib.use("Qt5agg")
@@ -29,8 +26,6 @@ class mrc:
         self.img_subs       = []
         self.img_msgs       = [None]*5
         self.new_imgs       = [False]*5
-
-        self.bridge = CvBridge()
     
         for i in range(5):
             self.img_subs.append(rospy.Subscriber(self.image_topic % (i), CompressedImage, self.image_callback, (i)))
