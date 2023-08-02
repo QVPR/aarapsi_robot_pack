@@ -104,7 +104,7 @@ class Follower_Class(Main_ROS_Class):
         yaw_fix_rad     = yaw_fix_deg * np.pi / 180.0
         return yaw_fix_rad
 
-    def update_position(self, goal_ind: int) -> None:
+    def update_goal_position(self, goal_ind: int) -> None:
         goal                    = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id='map'))
         goal.pose.position      = Point(x=self.path_xyws[goal_ind,0], y=self.path_xyws[goal_ind,1], z=0.0)
         goal.pose.orientation   = q_from_yaw(self.path_xyws[goal_ind,2])
@@ -182,7 +182,7 @@ class Follower_Class(Main_ROS_Class):
             self.zone_index  = self.zone_indices[np.argmin(m2m_dist(current_ind, np.transpose(np.matrix(self.zone_indices))))] % self.path_xyws.shape[0]
             self.return_stage = Return_Stage.DIST
 
-        self.update_position(self.zone_index)
+        self.update_goal_position(self.zone_index)
 
         errors      = self.calc_yaw_y_errors(ego, target_ind=self.zone_index)
         ego_cor     = self.update_COR(ego)
@@ -301,7 +301,7 @@ class Follower_Class(Main_ROS_Class):
             # calculate heading, cross-track, velocity errors and the target index:
             errors, target_ind = self.calc_all_errors(ego, current_ind)
             # publish a pose to visualise the target:
-            self.update_position(target_ind)
+            self.update_goal_position(target_ind)
             # generate a new command to drive the robot based on the errors:
             new_command = self.make_new_command(**errors)
             # send command:
