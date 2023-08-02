@@ -166,38 +166,14 @@ Visualization Manager:
       Topic: /vpr_nodes/vpr_odom
       Unreliable: false
       Value: true
-    - Alpha: 0.10000000149011612
-      Buffer Length: 1
-      Class: rviz/Path
-      Color: 255; 255; 255
-      Enabled: true
-      Head Diameter: 0.20000000298023224
-      Head Length: 0.10000000149011612
-      Length: 0.30000001192092896
-      Line Style: Lines
-      Line Width: 0.029999999329447746
-      Name: /vpr_nodes/ref/path
-      Offset:
-        X: 0
-        Y: 0
-        Z: 0
-      Pose Color: 233; 185; 110
-      Pose Style: Arrows
-      Queue Size: 10
-      Radius: 0.029999999329447746
-      Shaft Diameter: 0
-      Shaft Length: 0
-      Topic: /vpr_nodes/ref/path
-      Unreliable: false
-      Value: true
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /vpr_nodes/confidence
       Name: /vpr_nodes/confidence
       Namespaces:
         {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Angle Tolerance: 0.10000000149011612
       Class: rviz/Odometry
       Covariance:
