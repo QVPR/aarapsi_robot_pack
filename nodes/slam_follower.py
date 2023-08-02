@@ -58,7 +58,7 @@ class Main_ROS_Class(Base_ROS_Class):
         # Process path data
         if self.PATH_FILE.get() == '':
             try:
-                self.ip     = VPRDatasetProcessor(self.make_dataset_dict(path=True), try_gen=False, ros=True)
+                self.ip     = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=False, ros=True)
             except:
                 self.print(formatException(), LogType.ERROR)
                 self.exit()

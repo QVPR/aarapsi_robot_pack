@@ -43,14 +43,11 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_vars(self, use_gpu):
         super().init_vars()
         # Process reference data
-        path_dataset_dict       = self.make_dataset_dict(path=True)
-        ref_dataset_dict        = self.make_dataset_dict(path=False)
         self.use_gpu            = use_gpu
+        dataset_dict            = self.make_dataset_dict()
         try:
-            self.vpr            = VPRDatasetProcessor(path_dataset_dict, try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
+            self.vpr            = VPRDatasetProcessor(dataset_dict, try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
                                         autosave=True, use_tqdm=True, ros=True)
-            self.path_odom      = copy.deepcopy(self.vpr.dataset)
-            self.vpr.load_dataset(ref_dataset_dict, try_gen=True)
         except Exception as e:
             self.print(formatException(), LogType.ERROR)
             self.print(formatException(dump=True), LogType.DEBUG)

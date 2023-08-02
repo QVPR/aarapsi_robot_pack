@@ -35,11 +35,7 @@ vpr_nodes:
     mode: 'slow'
 
   groundtruth: true
-  path: 
-    bag_name: sim_path
-    odom_topic: /odom/true
-    img_topic: /ros_indigosdk_occam/image0/compressed
-    density: 0.2
+  path:
     zones:
       length: 5
       number: 20
