@@ -14,9 +14,10 @@ from pyaarapsi.core.helper_tools            import formatException, angle_wrap, 
 from pyaarapsi.vpr_classes.base             import base_optional_args
 from pyaarapsi.core.enum_tools              import enum_value
 
-from pyaarapsi.pathing.enums                import *
-from pyaarapsi.pathing.make_paths           import *
-from pyaarapsi.pathing.base                 import Main_ROS_Class
+# Import break-out libraries (they exist to help keep me sane and make this file readable):
+from pyaarapsi.pathing.enums                import * # Enumerations
+from pyaarapsi.pathing.make_paths           import * # Helper functions
+from pyaarapsi.pathing.base                 import Main_ROS_Class # For ROS and data loading/generation related functions
 
 '''
 Path Follower
@@ -105,6 +106,7 @@ class Follower_Class(Main_ROS_Class):
         return yaw_fix_rad
 
     def update_goal_position(self, goal_ind: int) -> None:
+        # Update visualisation of current goal/target pose
         goal                    = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id='map'))
         goal.pose.position      = Point(x=self.path_xyws[goal_ind,0], y=self.path_xyws[goal_ind,1], z=0.0)
         goal.pose.orientation   = q_from_yaw(self.path_xyws[goal_ind,2])
@@ -165,7 +167,7 @@ class Follower_Class(Main_ROS_Class):
         return new_msg
     
     def update_COR(self, ego):
-        # update centre-of-rotation for visualisation and precise alignment:
+        # Update centre-of-rotation for visualisation and precise alignment:
         COR_x                   = ego[0] + self.COR_OFFSET.get() * np.cos(ego[2])
         COR_y                   = ego[1] + self.COR_OFFSET.get() * np.sin(ego[2])
         pose                    = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id='map'))
@@ -175,9 +177,24 @@ class Follower_Class(Main_ROS_Class):
         return [COR_x, COR_y]
     
     def zone_return(self, ego, current_ind):
+        '''
+        Handle an autonomous return-to-zone:
+        - Picks nearest target
+        - Drives to target
+        - Turns on-spot to face correctly
+
+        Stages:
+        Return_STAGE.UNSET: Stage 0 - New request: identify zone target.
+        Return_STAGE.DIST:  Stage 1 - Distance from target exceeds 5cm: head towards target.
+        Return_STAGE.TURN:  Stage 2 - Heading error exceeds 1 degree: turn on-the-spot towards target heading.
+        Return_STAGE.DONE:  Stage 3 - FINISHED.
+
+        '''
+
         if self.return_stage == Return_Stage.DONE:
             return
         
+        # If stage 0: determine target and move to stage 1
         if self.return_stage == Return_Stage.UNSET:
             self.zone_index  = self.zone_indices[np.argmin(m2m_dist(current_ind, np.transpose(np.matrix(self.zone_indices))))] % self.path_xyws.shape[0]
             self.return_stage = Return_Stage.DIST
@@ -185,11 +202,12 @@ class Follower_Class(Main_ROS_Class):
         self.update_goal_position(self.zone_index)
 
         errors      = self.calc_yaw_y_errors(ego, target_ind=self.zone_index)
-        ego_cor     = self.update_COR(ego)
+        ego_cor     = self.update_COR(ego) # must improve accuracy of centre-of-rotation as we do on-the-spot turns
         dist        = np.sqrt(np.square(ego_cor[0]-self.path_xyws[self.zone_index, 0]) + np.square(ego_cor[1]-self.path_xyws[self.zone_index, 1]))
         yaw_err     = errors.pop('error_yaw')
         head_err    = self.path_xyws[self.zone_index, 2] - ego[2]
 
+        # If stage 1: calculate distance to target (lin_err) and heading error (ang_err)
         if self.return_stage == Return_Stage.DIST:
             if abs(yaw_err) < np.pi/6:
                 ang_err = np.sign(yaw_err) * np.max([0.1, -0.19*abs(yaw_err)**2 + 0.4*abs(yaw_err) - 0.007])
@@ -198,16 +216,20 @@ class Follower_Class(Main_ROS_Class):
                 lin_err = 0
                 ang_err = np.sign(yaw_err) * 0.2
 
+            # If we're within 5 cm of the target, stop and move to stage 2
             if dist < 0.05:
                 self.return_stage = Return_Stage.TURN
 
+        # If stage 2: calculate heading error and turn on-the-spot
         elif self.return_stage == Return_Stage.TURN:
             lin_err = 0
+            # If heading error is less than 1 degree, stop and move to stage 3
             if abs(head_err) < np.pi/180:
                 self.command_mode = Command_Mode.STOP
                 self.return_stage = Return_Stage.DONE
                 self.AUTONOMOUS_OVERRIDE.set(Command_Mode.UNSET)
                 ang_err = 0
+                return # DONE! :)
             else:
                 ang_err = np.sign(head_err) * np.max([0.1, abs(head_err)])
         else:
