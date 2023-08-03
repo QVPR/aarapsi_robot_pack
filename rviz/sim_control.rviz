@@ -154,7 +154,7 @@ Visualization Manager:
       Position Tolerance: 0.10000000149011612
       Queue Size: 10
       Shape:
-        Alpha: 1
+        Alpha: 0.699999988079071
         Axes Length: 1
         Axes Radius: 0.10000000149011612
         Color: 32; 74; 135
@@ -462,6 +462,22 @@ Visualization Manager:
       Topic: /vpr_nodes/path_goal
       Unreliable: false
       Value: true
+    - Alpha: 0.699999988079071
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz/Pose
+      Color: 245; 121; 0
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.5
+      Name: /vpr_nodes/slam_pose
+      Queue Size: 10
+      Shaft Length: 0
+      Shaft Radius: 0
+      Shape: Arrow
+      Topic: /vpr_nodes/slam_pose
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 186; 189; 182
@@ -490,7 +506,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 24.707107543945312
+      Distance: 6.758278846740723
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -498,9 +514,9 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -6.137566089630127
-        Y: -0.6931474208831787
-        Z: 0.621152937412262
+        X: -5.124710559844971
+        Y: 8.388581275939941
+        Z: 0.6302531957626343
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
