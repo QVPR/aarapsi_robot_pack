@@ -6,11 +6,13 @@ import numpy as np
 import sys
 import cv2
 
+import matplotlib.pyplot as plt
+
 from std_msgs.msg           import Header
 from geometry_msgs.msg      import PoseStamped, Point, Twist
 
-from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, q_from_yaw, compressed2np, q_from_rpy
-from pyaarapsi.core.helper_tools            import formatException, angle_wrap, normalize_angle, m2m_dist
+from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, q_from_yaw, compressed2np, np2compressed, q_from_rpy
+from pyaarapsi.core.helper_tools            import formatException, angle_wrap, normalize_angle, m2m_dist, roll
 from pyaarapsi.vpr_classes.base             import base_optional_args
 from pyaarapsi.core.enum_tools              import enum_value
 
@@ -61,21 +63,23 @@ class Follower_Class(Main_ROS_Class):
         return {'error_yaw': error_yaw, 'error_y': error_y}
     
     def calc_all_errors(self, ego, current_ind: int):
+        adj_lookahead = np.max([self.lookahead * (self.path_xyws[current_ind, 3]/np.max(self.path_xyws[:, 3].flatten())), 0.3])
         if self.lookahead_mode == Lookahead_Mode.INDEX:
-            target_ind  = (current_ind + int(np.round(self.lookahead))) % self.path_xyws.shape[0]
+            target_ind  = (current_ind + int(np.round(adj_lookahead))) % self.path_xyws.shape[0]
         elif self.lookahead_mode == Lookahead_Mode.DISTANCE:
             target_ind  = current_ind
             # find first index at least lookahead-distance-away from current index:
             dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
-            while dist < self.lookahead:
+            while dist < adj_lookahead:
                 target_ind  = (target_ind + 1) % self.path_xyws.shape[0] 
                 dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
         else:
             raise Exception('Unknown lookahead_mode: %s' % str(self.lookahead_mode))
         
-        errors          = self.calc_yaw_y_errors(ego, target_ind)
+        #errors          = self.calc_yaw_y_errors(ego, target_ind)
+        errors          = {'error_yaw': angle_wrap(self.path_xyws[target_ind, 2] - ego[2], 'RAD'), 'error_y': 0.0}
         errors.update({'error_v': self.path_xyws[current_ind, 3]})
-        return errors, target_ind
+        return errors, target_ind, adj_lookahead
     
     def make_path(self):
         # generate an n row, 4 column array (x, y, yaw, speed) corresponding to each reference image (same index)
@@ -95,22 +99,47 @@ class Follower_Class(Main_ROS_Class):
         self.viz_path, self.viz_speeds   = make_path_speeds(self.path_xyws, self.path_indices)
         self.viz_zones                   = make_zones(self.path_xyws, self.zone_indices)
 
-    def roll_match(self, resize: list = [360,8]):
+    def roll_match(self):
+        resize          = [int(self.IMG_HFOV.get()), 8]
         img_dims        = self.IMG_DIMS.get()
-        image_to_align  = cv2.cvtColor(cv2.resize(compressed2np(self.state_msg.queryImage), resize), cv2.COLOR_RGB2GRAY)
+        query_raw       = cv2.cvtColor(compressed2np(self.state_msg.queryImage), cv2.COLOR_BGR2GRAY)
+        img             = cv2.resize(query_raw, resize)
+        img_mask        = np.ones(img.shape)
+
+        _b              = int(resize[0] / 2)
+        sliding_options = range((-_b) + 1, _b)
+
         against_image   = cv2.resize(np.reshape(self.ip.dataset['dataset']['RAW'][self.state_msg.data.matchId], [img_dims[1], img_dims[0]]), resize)
-        options_stacked = np.stack([np.roll(against_image, i, 1).flatten() for i in range(against_image.shape[1])])
-        matches         = m2m_dist(image_to_align.flatten()[np.newaxis, :], options_stacked, True)
-        yaw_fix_deg     = np.argpartition(matches, 1)[0:1][0]
-        yaw_fix_rad     = yaw_fix_deg * np.pi / 180.0
+        options_stacked = np.stack([roll(against_image, i).flatten() for i in sliding_options])
+        img_stacked     = np.stack([(roll(img_mask, i)*img).flatten() for i in sliding_options])
+        matches         = np.sum(np.square(img_stacked - options_stacked),axis=1)
+        yaw_fix_deg     = sliding_options[np.argmin(matches)]
+        yaw_fix_rad     = normalize_angle(yaw_fix_deg * np.pi / 180.0)
+
+        if self.PUBLISH_ROLLMATCH.get():
+            fig, ax = plt.subplots()
+            ax.plot(sliding_options, matches)
+            ax.plot(sliding_options[np.argmin(matches)], matches[np.argmin(matches)])
+            ax.set_title('%s' % str([sliding_options[np.argmin(matches)], matches[np.argmin(matches)]]))
+            fig.canvas.draw()
+            img_np_raw_flat = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            img_np_raw      = img_np_raw_flat.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            img_np          = np.flip(img_np_raw, axis=2) # to bgr format, for ROS
+            plt.close('all') # close matplotlib
+            plt.show()
+            img_msg = np2compressed(img_np)
+            img_msg.header.stamp = rospy.Time.now()
+            img_msg.header.frame_id = 'map'
+            self.rollmatch_pub.publish(img_msg)
+
         return yaw_fix_rad
 
-    def update_goal_position(self, goal_ind: int) -> None:
+    def publish_pose(self, goal_ind: int, pub) -> None:
         # Update visualisation of current goal/target pose
         goal                    = PoseStamped(header=Header(stamp=rospy.Time.now(), frame_id='map'))
         goal.pose.position      = Point(x=self.path_xyws[goal_ind,0], y=self.path_xyws[goal_ind,1], z=0.0)
         goal.pose.orientation   = q_from_yaw(self.path_xyws[goal_ind,2])
-        self.goal_pub.publish(goal)
+        pub.publish(goal)
 
     def make_new_command(self, error_v: float, error_y: float, error_yaw: float) -> Twist:
         # Determine maximum linear and angular speeds based on safety state:
@@ -199,7 +228,7 @@ class Follower_Class(Main_ROS_Class):
             self.zone_index  = self.zone_indices[np.argmin(m2m_dist(current_ind, np.transpose(np.matrix(self.zone_indices))))] % self.path_xyws.shape[0]
             self.return_stage = Return_Stage.DIST
 
-        self.update_goal_position(self.zone_index)
+        self.publish_pose(self.zone_index, self.goal_pub)
 
         errors      = self.calc_yaw_y_errors(ego, target_ind=self.zone_index)
         ego_cor     = self.update_COR(ego) # must improve accuracy of centre-of-rotation as we do on-the-spot turns
@@ -297,6 +326,7 @@ class Follower_Class(Main_ROS_Class):
 
         if self.command_mode == Command_Mode.VPR: # If we are estimating pose, calculate via VPR:
             rm_corr             = self.roll_match()
+            print([rm_corr, self.vpr_ego[2], self.slam_ego[2]])
             heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
             current_ind, zone   = self.calc_current_ind(ego)
@@ -306,6 +336,9 @@ class Follower_Class(Main_ROS_Class):
             ego                 = self.slam_ego
             current_ind         = t_current_ind
             zone                = t_zone
+
+        # Visualise SLAM nearest position on path: 
+        self.publish_pose(t_current_ind, self.slam_pub)
         
         # Calculate perpendicular (lin) and angular (ang) path errors:
         lin_err, ang_err = calc_path_errors(self.slam_ego, t_current_ind, self.path_xyws)
@@ -317,17 +350,21 @@ class Follower_Class(Main_ROS_Class):
         new_command     = Twist()
         errs            = {'error_yaw': 0, 'error_y': 0, 'error_v': 0}
         target_ind      = 0
+        adj_lookahead   = self.lookahead
 
-        # If the current command mode is a path-following exercise and a safety is 'enabled':
-        if self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM] and self.safety_mode in [Safety_Mode.SLOW, Safety_Mode.FAST]:
+        # If the current command mode is a path-following exercise:
+        if self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM]:
             # calculate heading, cross-track, velocity errors and the target index:
-            errors, target_ind = self.calc_all_errors(ego, current_ind)
+            errs, target_ind, adj_lookahead = self.calc_all_errors(ego, current_ind)
             # publish a pose to visualise the target:
-            self.update_goal_position(target_ind)
+            self.publish_pose(target_ind, self.goal_pub)
             # generate a new command to drive the robot based on the errors:
-            new_command = self.make_new_command(**errors)
-            # send command:
-            self.cmd_pub.publish(new_command)
+            new_command = self.make_new_command(**errs)
+
+            # If a safety is 'enabled':
+            if self.safety_mode in [Safety_Mode.SLOW, Safety_Mode.FAST]:
+                # send command:
+                self.cmd_pub.publish(new_command)
 
         # If the current command mode is set to return-to-nearest-zone-boundary:
         elif self.command_mode == Command_Mode.ZONE_RETURN:
@@ -338,7 +375,7 @@ class Follower_Class(Main_ROS_Class):
             self.print_display(new_linear=new_command.linear.x, new_angular=new_command.angular.z, 
                                current_ind=current_ind, zone=t_zone, 
                                lin_path_err=lin_err, ang_path_err=ang_err, **errs)
-        self.publish_controller_info(current_ind, target_ind, heading_fixed, t_zone)
+        self.publish_controller_info(current_ind, target_ind, heading_fixed, t_zone, adj_lookahead)
 
     def print(self, *args, **kwargs):
         arg_list = list(args) + [kwargs[k] for k in kwargs]
