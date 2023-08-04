@@ -54,7 +54,7 @@ vpr_nodes:
     - grad
     tolerance:
       mode: DISTANCE
-      threshold: 0.2
+      threshold: 0.3
 
   ref:
     bag_name: sim_path

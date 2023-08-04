@@ -49,7 +49,7 @@ class Follower_Class(Main_ROS_Class):
         
     def calc_current_zone(self, ind):
         # The closest zone boundary that is 'behind' the closest index (in the direction of the path):
-        zone                = np.max(np.arange(self.num_zones)[np.array(self.zone_indices[0:-1]) <= ind] + 1)
+        zone        = np.max(np.arange(self.num_zones)[np.array(self.zone_indices[0:-1]) <= ind] + 1)
         return zone
     
     def calc_current_ind(self, ego):
@@ -57,15 +57,13 @@ class Follower_Class(Main_ROS_Class):
         ind         = np.argmin(m2m_dist(self.path_xyws[:,0:2], ego[0:2], True), axis=0)
         return ind
 
-    def calc_yaw_y_errors(self, ego, target_ind: int = None):
-        rel_x, rel_y    = self.global2local(ego) # Convert to local coordinates
+    def calc_yaw_error(self, ego, target_ind: int = None):
         # Heading error (angular):
+        rel_x, rel_y    = self.global2local(ego) # Convert to local coordinates
         error_yaw       = normalize_angle(np.arctan2(rel_y[target_ind], rel_x[target_ind]))
-        # Cross-track error (perpendicular distance):
-        error_y         = rel_y[target_ind]
-        return {'error_yaw': error_yaw, 'error_y': error_y}
+        return error_yaw
     
-    def calc_all_errors(self, ego, current_ind: int):
+    def calc_target(self, ego, current_ind: int):
         adj_lookahead = np.max([self.lookahead * (self.path_xyws[current_ind, 3]/np.max(self.path_xyws[:, 3].flatten())), 0.3])
         if self.lookahead_mode == Lookahead_Mode.INDEX:
             target_ind  = (current_ind + int(np.round(adj_lookahead))) % self.path_xyws.shape[0]
@@ -76,15 +74,10 @@ class Follower_Class(Main_ROS_Class):
             while dist < adj_lookahead:
                 target_ind  = (target_ind + 1) % self.path_xyws.shape[0] 
                 dist        = np.sqrt(np.sum(np.square(self.path_xyws[target_ind, 0:2] - self.path_xyws[current_ind, 0:2])))
+            adj_lookahead = dist
         else:
             raise Exception('Unknown lookahead_mode: %s' % str(self.lookahead_mode))
-        
-        if self.command_mode == Command_Mode.SLAM:
-            errors = self.calc_yaw_y_errors(ego, target_ind)
-        else:
-            errors = {'error_yaw': angle_wrap(self.path_xyws[target_ind, 2] - ego[2], 'RAD'), 'error_y': 0.0}
-        errors.update({'error_v': self.path_xyws[current_ind, 3]})
-        return errors, target_ind, adj_lookahead
+        return target_ind, adj_lookahead
     
     def make_path(self):
         # generate an n row, 4 column array (x, y, yaw, speed) corresponding to each reference image (same index)
@@ -146,58 +139,30 @@ class Follower_Class(Main_ROS_Class):
         goal.pose.orientation   = q_from_yaw(self.path_xyws[goal_ind,2])
         pub.publish(goal)
 
-    def make_new_command(self, error_v: float, error_y: float, error_yaw: float) -> Twist:
-        # Determine maximum linear and angular speeds based on safety state:
-        if self.safety_mode == Safety_Mode.SLOW:
-            lin_max = self.SLOW_LIN_VEL_MAX.get()
-            ang_max = self.SLOW_LIN_VEL_MAX.get()
-        elif self.safety_mode == Safety_Mode.FAST:
-            lin_max = self.FAST_LIN_VEL_MAX.get()
-            ang_max = self.FAST_LIN_VEL_MAX.get()
-        else:
-            lin_max = 0
-            ang_max = 0
-        
+    def make_new_command(self, speed: float, error_yaw: float) -> Twist:
         # If we're not estimating where we are, we're ignoring the SVM, or we have a good point:
         if not (self.command_mode == Command_Mode.VPR) or self.REJECT_MODE.get() == Reject_Mode.NONE or self.state_msg.mStateBin:
             # ... then calculate based on the controller errors:
-            new_linear          = np.sign(error_v)   * np.min([abs(error_v),   lin_max])
-            new_angular         = np.sign(error_yaw) * np.min([abs(error_yaw), ang_max])
+            new_lin             = np.sign(speed)     * np.min([abs(speed),     self.lin_lim.get(self.safety_mode, 0)])
+            new_ang             = np.sign(error_yaw) * np.min([abs(error_yaw), self.ang_lim.get(self.safety_mode, 0)])
         
         # otherwise, if we want to reject the point we received:
         else:
-            # ... then we must decide on what new command we should send.
-            # If we want to stop:
-            if self.REJECT_MODE.get() == Reject_Mode.STOP:
-                new_linear      = 0.0
-                new_angular     = 0.0
-
-            # If we want to resend the last command:
-            elif self.REJECT_MODE.get() == Reject_Mode.OLD:
-                new_linear      = self.old_linear
-                new_angular     = self.old_angular
-                
-            # If we want to quickly decelerate:
-            elif self.REJECT_MODE.get() == Reject_Mode.OLD_50:
-                new_linear      = self.old_linear * 0.5
-                new_angular     = self.old_angular * 0.5
-
-            # If we want to slowly decelerate:
-            elif self.REJECT_MODE.get() == Reject_Mode.OLD_90:
-                new_linear      = self.old_linear * 0.9
-                new_angular     = self.old_angular * 0.9
-
-            else:
+            # ... then we must decide on what new command we should send:
+            try:
+                new_lin         = self.reject_lambda[self.REJECT_MODE.get()](self.old_lin)
+                new_ang         = self.reject_lambda[self.REJECT_MODE.get()](self.old_ang)
+            except KeyError:
                 raise Exception('Unknown rejection mode %s' % str(self.REJECT_MODE.get()))
 
         # Update the last-sent-command to be the one we just made:
-        self.old_linear         = new_linear
-        self.old_angular        = new_angular
+        self.old_lin            = new_lin
+        self.old_ang            = new_ang
 
         # Generate the actual ROS command:
         new_msg                 = Twist()
-        new_msg.linear.x        = new_linear
-        new_msg.angular.z       = new_angular
+        new_msg.linear.x        = new_lin
+        new_msg.angular.z       = new_ang
         return new_msg
     
     def update_COR(self, ego):
@@ -235,10 +200,9 @@ class Follower_Class(Main_ROS_Class):
 
         self.publish_pose(self.zone_index, self.goal_pub)
 
-        errors      = self.calc_yaw_y_errors(ego, target_ind=self.zone_index)
+        yaw_err      = self.calc_yaw_error(ego, target_ind=self.zone_index)
         ego_cor     = self.update_COR(ego) # must improve accuracy of centre-of-rotation as we do on-the-spot turns
         dist        = np.sqrt(np.square(ego_cor[0]-self.path_xyws[self.zone_index, 0]) + np.square(ego_cor[1]-self.path_xyws[self.zone_index, 1]))
-        yaw_err     = errors.pop('error_yaw')
         head_err    = self.path_xyws[self.zone_index, 2] - ego[2]
 
         # If stage 1: calculate distance to target (lin_err) and heading error (ang_err)
@@ -268,7 +232,7 @@ class Follower_Class(Main_ROS_Class):
         else:
             raise Exception('Bad return stage [%s].' % str(self.return_stage))
 
-        new_msg     = self.make_new_command(error_v=lin_err, error_yaw=ang_err, error_y=errors.pop('error_y'))
+        new_msg     = self.make_new_command(error_v=lin_err, error_yaw=ang_err)
         self.cmd_pub.publish(new_msg)
 
     def check_for_safety_stop(self, lin_err, ang_err):
@@ -352,18 +316,24 @@ class Follower_Class(Main_ROS_Class):
 
         # Set default values for printing:
         new_command     = Twist()
-        errs            = {'error_yaw': 0, 'error_y': 0, 'error_v': 0}
+        speed           = 0.0
+        error_yaw       = 0.0
         target_ind      = 0
         adj_lookahead   = self.lookahead
 
         # If the current command mode is a path-following exercise:
         if self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM]:
             # calculate heading, cross-track, velocity errors and the target index:
-            errs, target_ind, adj_lookahead = self.calc_all_errors(ego, current_ind)
+            target_ind, adj_lookahead = self.calc_target(ego, current_ind)
+            if self.command_mode == Command_Mode.SLAM:
+                error_yaw = self.calc_yaw_error(ego, target_ind)
+            else:
+                error_yaw = angle_wrap(self.path_xyws[target_ind, 2] - ego[2], 'RAD')
+            speed = self.path_xyws[current_ind, 3]
             # publish a pose to visualise the target:
             self.publish_pose(target_ind, self.goal_pub)
             # generate a new command to drive the robot based on the errors:
-            new_command = self.make_new_command(**errs)
+            new_command = self.make_new_command(speed, error_yaw)
 
             # If a safety is 'enabled':
             if self.safety_mode in [Safety_Mode.SLOW, Safety_Mode.FAST]:
@@ -378,7 +348,7 @@ class Follower_Class(Main_ROS_Class):
         if self.PRINT_DISPLAY.get():
             self.print_display(new_linear=new_command.linear.x, new_angular=new_command.angular.z, 
                                current_ind=current_ind, zone=t_zone, 
-                               lin_path_err=lin_err, ang_path_err=ang_err, **errs)
+                               lin_path_err=lin_err, ang_path_err=ang_err, speed=speed, error_yaw=error_yaw)
         self.publish_controller_info(current_ind, target_ind, heading_fixed, t_zone, adj_lookahead)
 
     def print(self, *args, **kwargs):
