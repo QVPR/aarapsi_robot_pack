@@ -46,13 +46,16 @@ class Follower_Class(Main_ROS_Class):
         A   = np.arctan2(Ty, Tx) - ego[2]
 
         return list(np.multiply(np.cos(A), R)), list(np.multiply(np.sin(A), R))
+        
+    def calc_current_zone(self, ind):
+        # The closest zone boundary that is 'behind' the closest index (in the direction of the path):
+        zone                = np.max(np.arange(self.num_zones)[np.array(self.zone_indices[0:-1]) <= ind] + 1)
+        return zone
     
     def calc_current_ind(self, ego):
         # Closest index based on provided ego:
-        current_ind         = np.argmin(m2m_dist(self.path_xyws[:,0:2], ego[0:2], True), axis=0)
-        # The closest zone boundary that is 'behind' the closest index (in the direction of the path):
-        zone                = np.max(np.arange(self.num_zones)[np.array(self.zone_indices[0:-1]) <= current_ind] + 1)
-        return current_ind, zone
+        ind         = np.argmin(m2m_dist(self.path_xyws[:,0:2], ego[0:2], True), axis=0)
+        return ind
 
     def calc_yaw_y_errors(self, ego, target_ind: int = None):
         rel_x, rel_y    = self.global2local(ego) # Convert to local coordinates
@@ -76,8 +79,10 @@ class Follower_Class(Main_ROS_Class):
         else:
             raise Exception('Unknown lookahead_mode: %s' % str(self.lookahead_mode))
         
-        #errors          = self.calc_yaw_y_errors(ego, target_ind)
-        errors          = {'error_yaw': angle_wrap(self.path_xyws[target_ind, 2] - ego[2], 'RAD'), 'error_y': 0.0}
+        if self.command_mode == Command_Mode.SLAM:
+            errors = self.calc_yaw_y_errors(ego, target_ind)
+        else:
+            errors = {'error_yaw': angle_wrap(self.path_xyws[target_ind, 2] - ego[2], 'RAD'), 'error_y': 0.0}
         errors.update({'error_v': self.path_xyws[current_ind, 3]})
         return errors, target_ind, adj_lookahead
     
@@ -99,7 +104,7 @@ class Follower_Class(Main_ROS_Class):
         self.viz_path, self.viz_speeds   = make_path_speeds(self.path_xyws, self.path_indices)
         self.viz_zones                   = make_zones(self.path_xyws, self.zone_indices)
 
-    def roll_match(self):
+    def roll_match(self, ind: int):
         resize          = [int(self.IMG_HFOV.get()), 8]
         img_dims        = self.IMG_DIMS.get()
         query_raw       = cv2.cvtColor(compressed2np(self.state_msg.queryImage), cv2.COLOR_BGR2GRAY)
@@ -109,7 +114,7 @@ class Follower_Class(Main_ROS_Class):
         _b              = int(resize[0] / 2)
         sliding_options = range((-_b) + 1, _b)
 
-        against_image   = cv2.resize(np.reshape(self.ip.dataset['dataset']['RAW'][self.state_msg.data.matchId], [img_dims[1], img_dims[0]]), resize)
+        against_image   = cv2.resize(np.reshape(self.ip.dataset['dataset']['RAW'][ind], [img_dims[1], img_dims[0]]), resize)
         options_stacked = np.stack([roll(against_image, i).flatten() for i in sliding_options])
         img_stacked     = np.stack([(roll(img_mask, i)*img).flatten() for i in sliding_options])
         matches         = np.sum(np.square(img_stacked - options_stacked),axis=1)
@@ -254,9 +259,8 @@ class Follower_Class(Main_ROS_Class):
             lin_err = 0
             # If heading error is less than 1 degree, stop and move to stage 3
             if abs(head_err) < np.pi/180:
-                self.command_mode = Command_Mode.STOP
+                self.set_command_mode(Command_Mode.STOP)
                 self.return_stage = Return_Stage.DONE
-                self.AUTONOMOUS_OVERRIDE.set(Command_Mode.UNSET)
                 ang_err = 0
                 return # DONE! :)
             else:
@@ -270,9 +274,9 @@ class Follower_Class(Main_ROS_Class):
     def check_for_safety_stop(self, lin_err, ang_err):
         if self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM]:
             if lin_err > self.LINSTOP_OVERRIDE.get() and self.LINSTOP_OVERRIDE.get() > 0:
-                self.command_mode = Command_Mode.STOP
+                self.set_command_mode(Command_Mode.STOP)
             elif ang_err > self.ANGSTOP_OVERRIDE.get() and self.ANGSTOP_OVERRIDE.get() > 0:
-                self.command_mode = Command_Mode.STOP
+                self.set_command_mode(Command_Mode.STOP)
 
     def main(self):
         # Main loop process
@@ -322,20 +326,20 @@ class Follower_Class(Main_ROS_Class):
         self.new_robot_ego  = False
 
         # Calculate current SLAM position and zone:
-        t_current_ind, t_zone   = self.calc_current_ind(self.slam_ego)
+        t_current_ind           = self.calc_current_ind(self.slam_ego)
+        t_zone                  = self.calc_current_zone(t_current_ind)
 
         if self.command_mode == Command_Mode.VPR: # If we are estimating pose, calculate via VPR:
-            rm_corr             = self.roll_match()
-            print([rm_corr, self.vpr_ego[2], self.slam_ego[2]])
+            current_ind         = self.state_msg.data.matchId
+            rm_corr             = self.roll_match(current_ind)
             heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
-            current_ind, zone   = self.calc_current_ind(ego)
 
         else: # If we are not estimating pose, use everything from the ground truth:
-            heading_fixed       = self.slam_ego[2]
-            ego                 = self.slam_ego
             current_ind         = t_current_ind
-            zone                = t_zone
+            rm_corr             = self.roll_match(t_current_ind)
+            heading_fixed       = normalize_angle(angle_wrap(self.slam_ego[2] + rm_corr, 'RAD'))
+            ego                 = self.slam_ego
 
         # Visualise SLAM nearest position on path: 
         self.publish_pose(t_current_ind, self.slam_pub)
