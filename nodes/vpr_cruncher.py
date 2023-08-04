@@ -16,8 +16,8 @@ from std_msgs.msg import String
 from sensor_msgs.msg import CompressedImage
 
 from pyaarapsi.core.enum_tools              import enum_name
-from pyaarapsi.core.argparse_tools          import check_bounded_float, check_positive_float, check_positive_int, check_enum, check_string
-from pyaarapsi.core.ros_tools               import yaw_from_q, q_from_yaw, roslogger, LogType, NodeState
+from pyaarapsi.core.argparse_tools          import check_bounded_float, check_positive_float, check_positive_int, check_enum, check_string, check_bool
+from pyaarapsi.core.ros_tools               import yaw_from_q, q_from_yaw, roslogger, LogType, NodeState, compressed2np
 from pyaarapsi.core.helper_tools            import formatException, uint8_list_to_np_ndarray
 from pyaarapsi.vpr_simple.vpr_helpers       import VPR_Tolerance_Mode, FeatureType
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
@@ -28,7 +28,7 @@ class Main_ROS_Class(Base_ROS_Class):
         super().__init__(**kwargs, throttle=30)
 
         self.init_params(kwargs['rate_num'], kwargs['log_level'], kwargs['reset'])
-        self.init_vars()
+        self.init_vars(kwargs['use_gpu'])
         self.init_rospy()
         
         self.node_ready(kwargs['order_id'])
@@ -38,10 +38,11 @@ class Main_ROS_Class(Base_ROS_Class):
         self.TOL_MODE        = self.params.add(self.namespace + "/tolerance/mode",      None,                   lambda x: check_enum(x, VPR_Tolerance_Mode),    force=False)
         self.TOL_THRES       = self.params.add(self.namespace + "/tolerance/threshold", None,                   check_positive_float,                           force=False)
         self.VPR_ODOM_TOPIC  = self.params.add(self.namespace + "/vpr_odom_topic",      None,                   check_string,                                   force=False)
+        self.EXTRACT_SRV     = self.params.add(self.nodespace + "/service_extraction",  True,                   check_bool,                                     force=reset)
         self.TIME_HIST_LEN   = self.params.add(self.nodespace + "/time_history_length", max(1,int(5*rate_num)), check_positive_int,                             force=reset)
         self.DVC_WEIGHT      = self.params.add(self.nodespace + "/dvc_weight",          1,                      lambda x: check_bounded_float(x, 0, 1, 'both'), force=reset)
         
-    def init_vars(self):
+    def init_vars(self, use_gpu):
         super().init_vars()
 
         self.ego                    = [0.0, 0.0, 0.0] # ground truth robot position
@@ -58,7 +59,11 @@ class Main_ROS_Class(Base_ROS_Class):
 
         # Process reference data
         try:
-            self.ip                 = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=False, ros=True)
+            if self.EXTRACT_SRV.get():
+                self.ip             = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=False, ros=True, use_tqdm=False)
+            else:
+                self.ip             = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=True, ros=True, use_tqdm=True, \
+                                                          init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, autosave=True)
         except:
             self.print(formatException(), LogType.ERROR)
             self.exit()
@@ -174,15 +179,19 @@ class Main_ROS_Class(Base_ROS_Class):
         if not self.main_ready:
             return
         
-        requ            = DoExtractionRequest()
-        requ.feat_type  = enum_name(feat_type)
-        requ.img_dims   = list(img_dims)
-        requ.input      = query
-        resp            = self.srv_extraction(requ)
+        if self.EXTRACT_SRV.get():
+            requ            = DoExtractionRequest()
+            requ.feat_type  = enum_name(feat_type)
+            requ.img_dims   = list(img_dims)
+            requ.input      = query
+            resp            = self.srv_extraction(requ)
 
-        if resp.success == False:
-            raise Exception('[extract] Service executed, success=False!')
-        out = uint8_list_to_np_ndarray(resp.output)
+            if resp.success == False:
+                raise Exception('[extract] Service executed, success=False!')
+            out = uint8_list_to_np_ndarray(resp.output)
+        else:
+            ft_qry          = self.ip.getFeat(compressed2np(query), feat_type, use_tqdm=False, dims=img_dims)
+            out             = ft_qry
         return out
 
     def main(self):
@@ -250,6 +259,7 @@ def do_args():
     
     # Optional Arguments:
     parser = base_optional_args(parser, node_name='vpr_cruncher')
+    parser.add_argument('--use-gpu', '-G', type=check_bool, default=True, help='Specify whether to use GPU (default: %(default)s).')
 
     # Parse args...
     return vars(parser.parse_known_args()[0])
