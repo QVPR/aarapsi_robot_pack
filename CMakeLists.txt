@@ -57,8 +57,9 @@ catkin_python_setup()
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files( 
+add_message_files(
   FILES # in alphabetical order:
+  ControllerState.msg
   ControllerStateInfo.msg
   ControllerStateInfoGroup.msg
   DatasetParams.msg
@@ -68,6 +69,7 @@ add_message_files(
   ImageLabelDetails.msg
   ImageOdom.msg
   ImageStructure.msg
+  Label.msg
   LabelDetails.msg
   MonitorDetails.msg
   ParamsSVM.msg
@@ -75,6 +77,7 @@ add_message_files(
   RequestSVM.msg
   ResponseDataset.msg
   ResponseSVM.msg
+  RobotDetails.msg
   xyw.msg
 )
 
