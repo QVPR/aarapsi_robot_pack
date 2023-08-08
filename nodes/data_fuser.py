@@ -3,13 +3,14 @@
 import rospy
 import sys
 import argparse as ap
+import numpy as np
 
-from sensor_msgs.msg import CompressedImage
-from nav_msgs.msg import Odometry
-from aarapsi_robot_pack.msg import ImageOdom
+from sensor_msgs.msg                import CompressedImage
+from nav_msgs.msg                   import Odometry
+from aarapsi_robot_pack.msg         import Label, xyw
 
-from pyaarapsi.core.ros_tools       import NodeState, roslogger, LogType
-from pyaarapsi.core.helper_tools    import formatException, Timer
+from pyaarapsi.core.ros_tools       import NodeState, LogType, pose2xyw, roslogger
+from pyaarapsi.core.helper_tools    import formatException
 from pyaarapsi.vpr_classes.base     import Base_ROS_Class, base_optional_args
 
 '''
@@ -41,26 +42,33 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_vars(self):
         super().init_vars()
 
-        self.img        = None
-        self.odom       = None
-        self.new_img    = False
-        self.new_odom   = False
-        self.time       = rospy.Time.now()
+        self.img            = None
+        self.gt_odom        = None
+        self.robot_odom     = None
+        self.new_img        = False
+        self.new_gt_odom    = False
+        self.new_robot_odom = False
+        self.time           = rospy.Time.now()
 
     def init_rospy(self):
         super().init_rospy()
         
-        self.img_sub    = rospy.Subscriber(self.IMG_TOPIC.get(), CompressedImage, self.img_cb, queue_size=1)
-        self.odom_sub   = rospy.Subscriber(self.SLAM_ODOM_TOPIC.get(), Odometry, self.odom_cb, queue_size=1)
-        self.pub        = self.add_pub(self.namespace + '/img_odom', ImageOdom, queue_size=1)
+        self.img_sub        = rospy.Subscriber(self.IMG_TOPIC.get(), CompressedImage, self.img_cb, queue_size=1)
+        self.gt_odom_sub    = rospy.Subscriber(self.SLAM_ODOM_TOPIC.get(), Odometry, self.gt_odom_cb, queue_size=1)
+        self.robot_odom_sub = rospy.Subscriber(self.ROBOT_ODOM_TOPIC.get(), Odometry, self.robot_odom_cb, queue_size=1)
+        self.pub            = self.add_pub(self.namespace + '/img_odom', Label, queue_size=1)
 
-    def odom_cb(self, msg):
-        self.odom       = msg
-        self.new_odom   = True
+    def gt_odom_cb(self, msg: Odometry):
+        self.gt_odom        = msg
+        self.new_gt_odom    = True
 
-    def img_cb(self, msg):
-        self.img        = msg
-        self.new_img    = True
+    def robot_odom_cb(self, msg: Odometry):
+        self.robot_odom     = msg
+        self.new_robot_odom = True
+
+    def img_cb(self, msg: CompressedImage):
+        self.img            = msg
+        self.new_img        = True
 
     def main(self):
         # Main loop process
@@ -83,7 +91,7 @@ class Main_ROS_Class(Base_ROS_Class):
         if rospy.Time.now().to_sec() - self.time.to_sec() > 1:
             self.print("Long message delay experienced.", LogType.WARN, throttle=5)
 
-        if not (self.new_img and self.new_odom):
+        if not (self.new_img and self.new_gt_odom and self.new_robot_odom):
             rospy.sleep(0.005)
             return # denest
         
@@ -91,13 +99,18 @@ class Main_ROS_Class(Base_ROS_Class):
         self.time                   = rospy.Time.now()
 
         self.new_img                = False
-        self.new_odom               = False
+        self.new_gt_odom            = False
+        self.new_robot_odom         = False
 
-        msg_to_pub                  = ImageOdom()
+        msg_to_pub                  = Label()
         msg_to_pub.header.stamp     = self.time
-        msg_to_pub.header.frame_id  = self.odom.header.frame_id
-        msg_to_pub.odom             = self.odom
-        msg_to_pub.image            = self.img
+        msg_to_pub.header.frame_id  = 'map'
+        msg_to_pub.gt_ego           = xyw(*pose2xyw(self.gt_odom.pose.pose))
+        msg_to_pub.robot_ego        = xyw(*pose2xyw(self.robot_odom.pose.pose))
+        msg_to_pub.query_image      = self.img
+        msg_to_pub.stamps.append(self.time)
+        msg_to_pub.step             = msg_to_pub.DATA
+        msg_to_pub.id               = int((1 + np.random.rand()) * 100000000000)
         self.pub.publish(msg_to_pub)
 
 def do_args():

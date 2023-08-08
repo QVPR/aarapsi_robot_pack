@@ -100,7 +100,7 @@ class Follower_Class(Main_ROS_Class):
     def roll_match(self, ind: int):
         resize          = [int(self.IMG_HFOV.get()), 8]
         img_dims        = self.IMG_DIMS.get()
-        query_raw       = cv2.cvtColor(compressed2np(self.state_msg.queryImage), cv2.COLOR_BGR2GRAY)
+        query_raw       = cv2.cvtColor(compressed2np(self.label.query_image), cv2.COLOR_BGR2GRAY)
         img             = cv2.resize(query_raw, resize)
         img_mask        = np.ones(img.shape)
 
@@ -141,7 +141,7 @@ class Follower_Class(Main_ROS_Class):
 
     def make_new_command(self, speed: float, error_yaw: float) -> Twist:
         # If we're not estimating where we are, we're ignoring the SVM, or we have a good point:
-        if not (self.command_mode == Command_Mode.VPR) or self.REJECT_MODE.get() == Reject_Mode.NONE or self.state_msg.mStateBin:
+        if not (self.command_mode == Command_Mode.VPR) or self.REJECT_MODE.get() == Reject_Mode.NONE or self.label.svm_class:
             # ... then calculate based on the controller errors:
             new_lin             = np.sign(speed)     * np.min([abs(speed),     self.lin_lim.get(self.safety_mode, 0)])
             new_ang             = np.sign(error_yaw) * np.min([abs(error_yaw), self.ang_lim.get(self.safety_mode, 0)])
@@ -294,7 +294,7 @@ class Follower_Class(Main_ROS_Class):
         t_zone                  = self.calc_current_zone(t_current_ind)
 
         if self.command_mode == Command_Mode.VPR: # If we are estimating pose, calculate via VPR:
-            current_ind         = self.state_msg.data.matchId
+            current_ind         = self.label.match_index
             rm_corr             = self.roll_match(current_ind)
             heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
             ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]

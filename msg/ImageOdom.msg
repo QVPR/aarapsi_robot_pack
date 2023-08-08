@@ -1,3 +1,0 @@
-sensor_msgs/CompressedImage image
-nav_msgs/Odometry odom
-std_msgs/Header header
