@@ -11,6 +11,8 @@ aarapsi_robot_pack/xyw robot_ego        # from robot wheel encoders
 int64 match_index                       # best vpr match
 int64 truth_index                       # best groundtruth match
 bool gt_class                           # whether in-tolerance of groundtruth
+string gt_mode                          # groundtruth mode
+float64 gt_error                        # groundtruth error (as per groundtruth mode)
 bool svm_class                          # whether in-tolerance of svm
 float64 svm_prob                        # svm probability score
 float64 svm_z                           # svm z value score

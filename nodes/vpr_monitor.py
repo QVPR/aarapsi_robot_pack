@@ -8,11 +8,11 @@ import sys
 
 from rospy_message_converter import message_converter
 from std_msgs.msg import String
-from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, ImageLabelDetails, MonitorDetails  # Our custom structures
+from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, Label  # Our custom structures
 
 from pyaarapsi.vpred                        import *
-from pyaarapsi.core.helper_tools            import formatException, vis_dict
-from pyaarapsi.core.ros_tools               import roslogger, set_rospy_log_lvl, LogType, NodeState
+from pyaarapsi.core.helper_tools            import formatException
+from pyaarapsi.core.ros_tools               import roslogger, LogType, NodeState
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.svm_model_tool    import SVMModelProcessor
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
@@ -57,10 +57,10 @@ class Main_ROS_Class(Base_ROS_Class):
         
         self.last_time              = rospy.Time.now()
 
-        self.vpr_label_sub          = rospy.Subscriber(     self.namespace + "/label",                  ImageLabelDetails,   self.label_callback,           queue_size=1)
-        self.svm_request_sub        = rospy.Subscriber(     self.namespace + "/requests/svm/ready",     ResponseSVM,         self.svm_request_callback,     queue_size=1)
-        self.svm_request_pub        = self.add_pub(self.namespace + "/requests/svm/request",   RequestSVM,                                         queue_size=1)
-        self.svm_state_pub          = self.add_pub(self.namespace + "/state",                  MonitorDetails,                                     queue_size=1)
+        self.vpr_label_sub          = rospy.Subscriber( self.namespace + "/label",                  Label,          self.label_callback,        queue_size=1)
+        self.svm_request_sub        = rospy.Subscriber( self.namespace + "/requests/svm/ready",     ResponseSVM,    self.svm_request_callback,  queue_size=1)
+        self.svm_request_pub        = self.add_pub(     self.namespace + "/requests/svm/request",   RequestSVM,                                 queue_size=1)
+        self.svm_state_pub          = self.add_pub(     self.namespace + "/state",                  Label,                                      queue_size=1)
 
     def update_SVM(self):
         svm_model_params       = self.make_svm_model_params()
@@ -88,13 +88,13 @@ class Main_ROS_Class(Base_ROS_Class):
     def svm_request_callback(self, msg: ResponseSVM):
         pass
 
-    def label_callback(self, msg: ImageLabelDetails):
+    def label_callback(self, msg: Label):
     # Store new label message and act as drop-in replacement for odom_callback + img_callback
 
         self.label            = msg
 
         self.state_hist       = np.roll(self.state_hist, 1, 0)
-        self.state_hist[0,:]  = [msg.data.vpr_ego.x, msg.data.vpr_ego.y, msg.data.vpr_ego.w]
+        self.state_hist[0,:]  = [msg.vpr_ego.x, msg.vpr_ego.y, msg.vpr_ego.w]
         self.state_size       = np.min([self.state_size + 1, self.state_hist.shape[0]])
 
         self.new_label        = True
@@ -124,19 +124,20 @@ class Main_ROS_Class(Base_ROS_Class):
             param.revert()
             self.print(formatException(), LogType.ERROR)
 
-    def publish_ros_info(self, zvalues, prob, pred, factors):
+    def publish_ros_info(self, svm_z, svm_prob, svm_class, svm_factors):
         # Populate and publish SVM State details
-        ros_msg                 = MonitorDetails()
-        ros_msg.queryImage      = self.label.queryImage
-        ros_msg.header.stamp    = rospy.Time.now()
-        ros_msg.header.frame_id	= 'map'
-        ros_msg.data            = self.label.data
-        ros_msg.mState	        = zvalues # Continuous monitor state estimate 
-        ros_msg.prob	        = prob # Monitor probability estimate
-        ros_msg.mStateBin       = pred# Binary monitor state estimate
-        ros_msg.factors         = factors
 
-        self.svm_state_pub.publish(ros_msg)
+        time                        = rospy.Time.now()
+        self.label.header.stamp     = time
+        self.label.stamps.append(time)
+        self.label.step             = self.label.MONITOR
+
+        self.label.svm_prob	        = svm_prob # Continuous monitor state estimate 
+        self.label.svm_z	        = svm_z # Monitor probability estimate
+        self.label.svm_class        = svm_class# Binary monitor state estimate
+        self.label.svm_factors      = svm_factors
+
+        self.svm_state_pub.publish(self.label)
 
     def main(self):
         # Main loop process
@@ -173,7 +174,7 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.exit()
             try:
                 rXY = np.stack([self.ip.dataset['dataset']['px'], self.ip.dataset['dataset']['py']], 1)
-                (pred, zvalues, [factor1, factor2], prob) = self.svm.predict(self.label.data.dvc, self.label.data.matchId, rXY, init_pos=self.state_hist[1, 0:2])
+                (pred, zvalues, [factor1, factor2], prob) = self.svm.predict(self.label.distance_vector, self.label.match_index, rXY, init_pos=self.state_hist[1, 0:2])
                 predict_success = True
             except:
                 self.print("Predict failed. Trying again ...", LogType.WARN, throttle=1)

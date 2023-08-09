@@ -6,7 +6,7 @@ import rospkg
 import argparse as ap
 import os
 
-from aarapsi_robot_pack.msg import MonitorDetails, ImageDetails
+from aarapsi_robot_pack.msg import Label, ImageDetails
 from std_msgs.msg import String
 
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
@@ -56,7 +56,7 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_rospy(self):
         super().init_rospy()
         
-        self.svm_state_sub          = rospy.Subscriber(self.namespace + "/state",                MonitorDetails, self.state_callback,        queue_size=1)
+        self.svm_state_sub          = rospy.Subscriber(self.namespace + "/state",                Label,          self.state_callback,        queue_size=1)
         self.field_sub              = rospy.Subscriber(self.namespace + "/field",                ImageDetails,   self.field_callback,        queue_size=1)
 
     def update_VPR(self):
@@ -86,10 +86,10 @@ class Main_ROS_Class(Base_ROS_Class):
         self.svm_field_msg  = msg
         self.update_contour = self.svm_field_msg.data.update
 
-    def state_callback(self, msg: MonitorDetails):
+    def state_callback(self, msg: Label):
     # Store new label message and act as drop-in replacement for odom_callback + img_callback
-        self.state              = msg
-        self.new_state          = True
+        self.label              = msg
+        self.new_label          = True
 
     def exit(self):
         global server
@@ -126,9 +126,9 @@ def main_loop(nmrc: Main_ROS_Class, doc_frame: Doc_Frame):
     # Clear flags:
     nmrc.new_state  = False
 
-    dvc             = np.transpose(np.matrix(nmrc.state.data.dvc))
-    matchInd        = nmrc.state.data.matchId
-    trueInd         = nmrc.state.data.trueId
+    dvc             = np.transpose(np.matrix(nmrc.label.distance_vector))
+    matchInd        = nmrc.label.match_index
+    trueInd         = nmrc.label.truth_index
 
     # Update odometry visualisation:
     updateXYWVFigBokeh(doc_frame, matchInd, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'], nmrc.ip.dataset['dataset']['pw'])
@@ -137,9 +137,9 @@ def main_loop(nmrc: Main_ROS_Class, doc_frame: Doc_Frame):
     updateOdomFigBokeh(doc_frame, matchInd, trueInd, nmrc.ip.dataset['dataset']['px'], nmrc.ip.dataset['dataset']['py'])
     if (nmrc.svm_field_msg is None):
         return
-    if updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.state, nmrc.update_contour):
+    if updateCntrFigBokeh(doc_frame, nmrc.svm_field_msg, nmrc.label, nmrc.update_contour):
         nmrc.update_contour = False
-    updateSVMMFigBokeh(doc_frame, nmrc.state)
+    updateSVMMFigBokeh(doc_frame, nmrc.label)
 
 def ros_spin(nmrc: Main_ROS_Class, doc_frame: Doc_Frame):
     try:
