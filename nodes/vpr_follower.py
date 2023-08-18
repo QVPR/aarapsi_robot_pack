@@ -12,7 +12,7 @@ from sensor_msgs.msg import CompressedImage
 from pyaarapsi.core.enum_tools              import enum_name
 from pyaarapsi.core.argparse_tools          import check_positive_float, check_enum
 from pyaarapsi.core.ros_tools               import pose2xyw, twist2xyw, roslogger, LogType, NodeState, compressed2np
-from pyaarapsi.core.helper_tools            import formatException, m2m_dist, angle_wrap
+from pyaarapsi.core.helper_tools            import formatException, m2m_dist, angle_wrap, plt_pause
 from pyaarapsi.vpr_simple.vpr_helpers       import VPR_Tolerance_Mode
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.svm_model_tool    import SVMModelProcessor
@@ -28,14 +28,6 @@ VPR Follower
 Node description.
 
 '''
-
-def plt_pause(interval, fig):
-    backend = plt.rcParams['backend']
-    if backend in matplotlib.rcsetup.interactive_bk:
-        if fig.canvas.figure.stale:
-            fig.canvas.draw()
-        fig.canvas.start_event_loop(interval)
-        return
 
 class Main_ROS_Class(Base_ROS_Class):
     def __init__(self, **kwargs):
