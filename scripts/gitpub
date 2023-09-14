@@ -4,20 +4,32 @@ import subprocess
 import rospy
 
 try:
+    print('Getting aarapsi_robot_pack git identification...')
     gcid_aarapsi_rospack    = subprocess.check_output("cd $(rospack find aarapsi_robot_pack); git rev-parse HEAD", shell=True).decode().strip()
+    print('Done.')
 except:
+    print('Failed.')
     gcid_aarapsi_rospack    = ''
 try:
+    print('Getting pyaarapsi git identification...')
     gcid_aarapsi_pypack     = subprocess.check_output("cd $(rospack find aarapsi_robot_pack)/src/pyaarapsi; git rev-parse HEAD", shell=True).decode().strip()
+    print('Done.')
 except:
+    print('Failed.')
     gcid_aarapsi_pypack     = ''
 try:
+    print('Getting aarapsi_offrobot_ws git identification...')
     gcid_aarapsi_ws         = subprocess.check_output("cd $(rospack find aarapsi_robot_pack)/../../; git rev-parse HEAD", shell=True).decode().strip()
+    print('Done.')
 except:
+    print('Failed.')
     gcid_aarapsi_ws         = ''
 try:
-    gcid_aarapsi_cpr        = subprocess.check_output("cd $(rospack find aarapsi_robot_pack)/../cpr_office_extension_gazebo; git rev-parse HEAD", shell=True).decode().strip()
+    print('Getting cpr_office_extension_gazebo git identification...')
+    gcid_aarapsi_cpr        = subprocess.check_output("cd $(rospack find cpr_office_extension_gazebo); git rev-parse HEAD", shell=True).decode().strip()
+    print('Done.')
 except:
+    print('Failed.')
     gcid_aarapsi_cpr        = ''
     
 rospy.set_param('/vpr_nodes/git/aarapsi_robot_pack', gcid_aarapsi_rospack)
