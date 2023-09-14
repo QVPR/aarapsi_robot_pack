@@ -81,15 +81,7 @@ class Follower_Class(Zone_Return_Class):
         self.speed_pub.publish(self.viz_speeds)
         self.zones_pub.publish(self.viz_zones)
 
-        # Wait for initial wheel odometry and VPR position:
-        while not (self.new_robot_ego and self.new_vpr_ego):
-            self.rate_obj.sleep()
-            self.print('Waiting for start position information...', throttle=5)
-            if rospy.is_shutdown():
-                return
-        self.ready          = True
-        self.new_vpr_ego    = False
-        self.new_robot_ego  = False
+        self.ready = True
 
         # Commence main loop; do forever:
         self.print('Entering main loop.')
