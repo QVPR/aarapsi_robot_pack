@@ -14,9 +14,12 @@
     <arg name="namespace"               default="/vpr_nodes"/>
     <arg name="log_level"               default="2"/>
     <arg name="reset"                   default="True"/>
+    <arg name="load_params"             default="True"/>
 
     <!-- Load in params; must be done outside of a namespace -->
-    <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
+    <group if="$(arg load_params)">
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
+    </group>
 
     <node pkg="aarapsi_robot_pack" type="gitpub" name="gitpub" output="screen"/>
 
