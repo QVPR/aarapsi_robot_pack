@@ -274,7 +274,7 @@ class Main_ROS_Class(Base_ROS_Class):
         plot_raw_flat   = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
         plot_raw_pad    = plot_raw_flat.reshape(fig.canvas.get_width_height()[::-1] + (3,))
         plot_raw        = plot_raw_pad[20:-20, 20:]
-        plot            = convert_img_to_uint8(plot_raw, resize=(500, 250), dstack=(not len(qry_raw.shape) == 3))[:,:,::-1]
+        plot            = convert_img_to_uint8(plot_raw, resize=(500, 250), dstack=(not len(qry_raw.shape) == 3))
         plt.close('all') # close matplotlib
 
         feed            = np.concatenate([  np.concatenate([feed_piece, feed_piece, ref_match,  ref_true    ], axis=1),
