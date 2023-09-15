@@ -100,13 +100,13 @@ class Follower_Class(Zone_Return_Class):
     def loop_contents(self):
 
         # Denest main loop; wait for new messages:
-        if not (self.new_robot_ego and self.new_vpr_ego):
+        if not (self.new_label):
             self.print("Waiting for new position information...", LogType.DEBUG, throttle=10)
             rospy.sleep(0.005)
             return
+        
         self.rate_obj.sleep()
-        self.new_vpr_ego    = False
-        self.new_robot_ego  = False
+        self.new_label          = False
 
         # Calculate current SLAM position and zone:
         t_current_ind           = calc_current_ind(self.slam_ego, self.path_xyws)
