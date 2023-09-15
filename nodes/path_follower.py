@@ -17,6 +17,7 @@ from pyaarapsi.pathing.enums                import * # Enumerations
 from pyaarapsi.pathing.basic                import * # Helper functions
 from pyaarapsi.pathing.base                 import Zone_Return_Class
 
+from pyaarapsi.core.vars                    import C_I_GREEN, C_I_RED, C_RESET
 '''
 Path Follower
 
@@ -97,6 +98,54 @@ class Follower_Class(Zone_Return_Class):
                     self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
                     rospy.sleep(0.5)
 
+    def update_historical_data(self):
+        # Perform work on self.match_hist, self.travel_distance
+        # match hist contains n rows, each row:
+        #   0            1            2               3         4          5           6           7
+        # [ match_index, truth_index, match_distance, gt_class, svm_class, slam_ego_x, slam_ego_y, slam_ego_w, 
+        #   8            9            10           11         12         13         14
+        #   robot_ego_x, robot_ego_y, robot_ego_w, vpr_ego_x, vpr_ego_y, vpr_ego_w, distance ]
+        _distances      = []
+        _match_arr      = np.array(self.match_hist)
+        _shape          = _match_arr.shape
+
+        _ind            = -1
+        for i in range(-2, -_shape[0]-1, -1):
+            if np.sum(_match_arr[i:,-1]) > self.SLICE_LENGTH.get():
+                _ind    = i
+                break
+        if _ind         == -1:
+            return
+        _vpr_matches    = _match_arr[_ind:,:]
+        _svm_matches    = _vpr_matches[np.asarray(_vpr_matches[:,3],dtype=bool),:]
+
+        _best_vpr       = np.argmin(_vpr_matches[:,2])
+        _vpr_ind        = int(_vpr_matches[_best_vpr, 0])
+        _vpr_sum_so_far = _vpr_matches[_best_vpr, -1]
+        _vpr_now_ind    = np.argmin(abs(np.array(self.path_sum) - (self.path_sum[_vpr_ind] + _vpr_sum_so_far)))
+        _vpr_pos_now    = self.path_xyws[_vpr_now_ind, 0:2]
+        _vpr_pos_err    = np.sqrt(np.sum(np.square(np.array(self.match_hist[-1][5:7]) - _vpr_pos_now)))
+
+        if not _svm_matches.shape[0]:
+            _svm_pos_now    = np.nan
+            _svm_pos_err    = np.nan
+            _svm_ind        = np.nan
+        else:
+            _best_svm       = np.argmin(_svm_matches[:,2])
+            _svm_ind        = int(_svm_matches[_best_svm, 0])
+            _svm_sum_so_far = _svm_matches[_best_svm, -1]
+            _svm_now_ind    = np.argmin(abs(np.array(self.path_sum) - (self.path_sum[_svm_ind] + _svm_sum_so_far)))
+            _svm_pos_now    = self.path_xyws[_svm_now_ind, 0:2]
+            _svm_pos_err    = np.sqrt(np.sum(np.square(np.array(self.match_hist[-1][5:7]) - _svm_pos_now)))
+
+        #print(list(_vpr_pos_now), list(_svm_pos_now), [self.match_hist[-1][10:12]])
+        #print(_vpr_ind, _svm_ind, _vpr_matches.shape, _svm_matches.shape)
+        _diff = _vpr_pos_err - _svm_pos_err
+        if _diff > 0:
+            print(C_I_GREEN + ('% 6.2f' % np.abs(_diff)) + C_RESET)
+        else:
+            print(C_I_RED + ('% 6.2f' % np.abs(_diff)) + C_RESET)
+
     def loop_contents(self):
 
         # Denest main loop; wait for new messages:
@@ -126,6 +175,9 @@ class Follower_Class(Zone_Return_Class):
 
         # Visualise SLAM nearest position on path: 
         self.publish_pose(t_current_ind, self.slam_pub)
+
+        # Manage storage of historical data
+        self.update_historical_data()
         
         # Calculate perpendicular (lin) and angular (ang) path errors:
         lin_err, ang_err = calc_path_errors(self.slam_ego, t_current_ind, self.path_xyws)
