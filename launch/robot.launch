@@ -27,7 +27,7 @@
         <!-- SLAM Nodes: -->
         <group if="$(arg launch_slam)">
             <include file="$(find aarapsi_robot_pack)/launch/slam.launch">
-                <arg name="param_file"          value="robot_cfg.yaml"/>
+                <arg name="param_file"          value="$(arg param_file)"/>
                 <arg name="log_level"           value="$(arg log_level)"/>
                 <arg name="reset"               value="$(arg reset)"/>
             </include>
@@ -36,7 +36,7 @@
         <!-- Web Server, Parameter Watcher, Image+Odom Aggregator, Image Throttle Nodes: -->
         <group if="$(arg launch_init)">
             <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_initialisation.launch">
-                <arg name="param_file"          value="robot_cfg.yaml"/>
+                <arg name="param_file"          value="$(arg param_file)"/>
                 <arg name="log_level"           value="$(arg log_level)"/>
                 <arg name="reset"               value="$(arg reset)"/>
             </include>
@@ -47,7 +47,7 @@
             <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_pipeline.launch">
                 <arg name="launch_init"         value="false"/>
                 <arg name="use_gpu"             value="$(arg use_gpu)"/>
-                <arg name="param_file"          value="robot_cfg.yaml"/>
+                <arg name="param_file"          value="$(arg param_file)"/>
                 <arg name="log_level"           value="$(arg log_level)"/>
                 <arg name="reset"               value="$(arg reset)"/>
             </include>
@@ -56,7 +56,7 @@
         <!-- Autonomous Nodes: -->
         <group if="$(arg launch_auto)">
             <include file="$(find aarapsi_robot_pack)/launch/vpr/nodes/path_follower.launch">
-                <arg name="param_file"          value="robot_cfg.yaml"/>
+                <arg name="param_file"          value="$(arg param_file)"/>
                 <arg name="log_level"           value="$(arg log_level)"/>
                 <arg name="reset"               value="$(arg reset)"/>
             </include>
