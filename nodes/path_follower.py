@@ -105,6 +105,10 @@ class Follower_Class(Zone_Return_Class):
         # [ match_index, truth_index, match_distance, gt_class, svm_class, slam_ego_x, slam_ego_y, slam_ego_w, 
         #   8            9            10           11         12         13         14
         #   robot_ego_x, robot_ego_y, robot_ego_w, vpr_ego_x, vpr_ego_y, vpr_ego_w, distance ]
+        if not self.new_history:
+            return
+        self.new_history = False
+        
         _distances      = []
         _match_arr      = np.array(self.match_hist)
         _shape          = _match_arr.shape
