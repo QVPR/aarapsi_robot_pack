@@ -66,12 +66,8 @@ add_message_files(
   Debug.msg
   Heartbeat.msg
   ImageDetails.msg
-  ImageLabelDetails.msg
-  ImageOdom.msg
   ImageStructure.msg
   Label.msg
-  LabelDetails.msg
-  MonitorDetails.msg
   ParamsSVM.msg
   RequestDataset.msg
   RequestSVM.msg
