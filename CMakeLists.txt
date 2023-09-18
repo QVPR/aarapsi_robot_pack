@@ -64,6 +64,7 @@ add_message_files(
   ControllerStateInfoGroup.msg
   DatasetParams.msg
   Debug.msg
+  ExpResults.msg 
   Heartbeat.msg
   ImageDetails.msg
   ImageStructure.msg

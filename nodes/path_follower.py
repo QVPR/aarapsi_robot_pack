@@ -18,6 +18,8 @@ from pyaarapsi.pathing.basic                import * # Helper functions
 from pyaarapsi.pathing.base                 import Zone_Return_Class
 
 from pyaarapsi.core.vars                    import C_I_GREEN, C_I_RED, C_RESET
+
+from aarapsi_robot_pack.msg                 import ExpResults, xyw
 '''
 Path Follower
 
@@ -108,8 +110,7 @@ class Follower_Class(Zone_Return_Class):
         if not self.new_history:
             return
         self.new_history = False
-        
-        _distances      = []
+
         _match_arr      = np.array(self.match_hist)
         _shape          = _match_arr.shape
 
@@ -120,27 +121,38 @@ class Follower_Class(Zone_Return_Class):
                 break
         if _ind         == -1:
             return
-        _vpr_matches    = _match_arr[_ind:,:]
-        _svm_matches    = _vpr_matches[np.asarray(_vpr_matches[:,3],dtype=bool),:]
+        
+        _distances      = np.array([np.sum(_match_arr[_ind+i+1:,-1]) for i in range(abs(_ind)-1)] + [0])
+        
+        _results        = ExpResults()
+        _results.gt_pos = xyw(*self.match_hist[-1][5:8])
 
-        _best_vpr       = np.argmin(_vpr_matches[:,2])
-        _vpr_ind        = int(_vpr_matches[_best_vpr, 0])
-        _vpr_sum_so_far = _vpr_matches[_best_vpr, -1]
-        _vpr_now_ind    = np.argmin(abs(np.array(self.path_sum) - (self.path_sum[_vpr_ind] + _vpr_sum_so_far)))
-        _vpr_pos_now    = self.path_xyws[_vpr_now_ind, 0:2]
-        _vpr_pos_err    = np.sqrt(np.sum(np.square(np.array(self.match_hist[-1][5:7]) - _vpr_pos_now)))
+        _vpr_matches        = _match_arr[_ind:,:]
+        _best_vpr           = np.argmin(_vpr_matches[:,2])
+        _vpr_ind            = int(_vpr_matches[_best_vpr, 0])
+        _vpr_sum_so_far     = _distances[_best_vpr]
+        _vpr_now_ind        = np.argmin(abs(np.array(self.path_sum) - (self.path_sum[_vpr_ind] + _vpr_sum_so_far)))
+        _vpr_pos_now        = self.path_xyws[_vpr_now_ind, 0:3]
+        _vpr_pos_err        = np.sqrt(np.sum(np.square(np.array(self.match_hist[-1][5:7]) - _vpr_pos_now[0:2])))
+        _results.vpr_pos    = xyw(*_vpr_pos_now)
 
+        _svm_matches        = _vpr_matches[np.asarray(_vpr_matches[:,3],dtype=bool),:]
         if not _svm_matches.shape[0]:
-            _svm_pos_now    = np.nan
-            _svm_pos_err    = np.nan
-            _svm_ind        = np.nan
+            _svm_pos_now        = np.nan
+            _svm_pos_err        = np.nan
+            _svm_ind            = np.nan
+            _results.svm_state  = _results.FAIL
         else:
-            _best_svm       = np.argmin(_svm_matches[:,2])
-            _svm_ind        = int(_svm_matches[_best_svm, 0])
-            _svm_sum_so_far = _svm_matches[_best_svm, -1]
-            _svm_now_ind    = np.argmin(abs(np.array(self.path_sum) - (self.path_sum[_svm_ind] + _svm_sum_so_far)))
-            _svm_pos_now    = self.path_xyws[_svm_now_ind, 0:2]
-            _svm_pos_err    = np.sqrt(np.sum(np.square(np.array(self.match_hist[-1][5:7]) - _svm_pos_now)))
+            _best_svm           = np.argmin(_svm_matches[:,2])
+            _svm_ind            = int(_svm_matches[_best_svm, 0])
+            _svm_sum_so_far     = _distances[_best_svm]
+            _svm_now_ind        = np.argmin(abs(np.array(self.path_sum) - (self.path_sum[_svm_ind] + _svm_sum_so_far))) # This will fail if a path is a loop
+            _svm_pos_now        = self.path_xyws[_svm_now_ind, 0:3]
+            _svm_pos_err        = np.sqrt(np.sum(np.square(np.array(self.match_hist[-1][5:7]) - _svm_pos_now[0:2])))
+            _results.svm_pos    = xyw(*_svm_pos_now)
+            _results.svm_state  = _results.SUCCESS
+
+        self.exp_pub.publish(_results)
 
         #print(list(_vpr_pos_now), list(_svm_pos_now), [self.match_hist[-1][10:12]])
         #print(_vpr_ind, _svm_ind, _vpr_matches.shape, _svm_matches.shape)
