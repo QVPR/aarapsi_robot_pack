@@ -9,7 +9,7 @@ Panels:
         - //vpr_nodes/vpr_odom1/Shape1
         - //vpr_nodes/path_follower/rollmatch1
       Splitter Ratio: 0.7696078419685364
-    Tree Height: 356
+    Tree Height: 301
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -27,7 +27,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: /globalmap
+    SyncSource: /vpr_nodes/path_follower/rollmatch
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -227,7 +227,7 @@ Visualization Manager:
       Unreliable: false
       Value: true
     - Class: rviz/Image
-      Enabled: true
+      Enabled: false
       Image Topic: /ros_indigosdk_occam/stitched_image0
       Max Value: 1
       Median window: 5
@@ -237,7 +237,7 @@ Visualization Manager:
       Queue Size: 2
       Transport Hint: compressed
       Unreliable: false
-      Value: true
+      Value: false
     - Class: rviz/Image
       Enabled: false
       Image Topic: /ros_indigosdk_occam/stitched_image0
@@ -260,162 +260,6 @@ Visualization Manager:
         Expand Link Details: false
         Expand Tree: false
         Link Tree Style: Links in Alphabetic Order
-        base_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        chassis_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        front_fender_accessory_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        front_fender_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        front_left_wheel_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        front_mount:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        front_right_wheel_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        imu_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        microstrain_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        mid_camera0:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        mid_camera0_optical:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        mid_camera1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        mid_camera1_optical:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        mid_camera2:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        mid_camera2_optical:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        mid_camera3:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        mid_camera3_optical:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        mid_camera4:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        mid_camera4_optical:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        mid_mount:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        mid_vlp16_leg1:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        mid_vlp16_leg2:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        mid_vlp16_leg3:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        mid_vlp16_leg4:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        mid_vlp16_mount:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        mid_vlp16_plate:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        navsat_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        rear_fender_accessory_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        rear_fender_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        rear_left_wheel_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        rear_mount:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        rear_right_wheel_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        velodyne:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
-        velodyne_base_link:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-          Value: true
       Name: RobotModel
       Robot Description: robot_description
       TF Prefix: ""
@@ -491,6 +335,18 @@ Visualization Manager:
       Transport Hint: compressed
       Unreliable: false
       Value: true
+    - Class: rviz/Image
+      Enabled: true
+      Image Topic: /ros_indigosdk_occam/image0
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Image
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: compressed
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 186; 189; 182
@@ -519,7 +375,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 14.890836715698242
+      Distance: 28.55147933959961
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -527,17 +383,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.7336311340332031
-        Y: 2.1786022186279297
-        Z: 1.6306486129760742
+        X: 4.299690246582031
+        Y: 4.275024890899658
+        Z: 1.7630560398101807
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.4997965097427368
+      Pitch: 1.5447964668273926
       Target Frame: <Fixed Frame>
-      Yaw: 4.800759792327881
+      Yaw: 4.745758533477783
     Saved: ~
 Window Geometry:
   /ros_indigosdk_occam/stitched_image0:
@@ -551,7 +407,9 @@ Window Geometry:
   Height: 1043
   Hide Left Dock: false
   Hide Right Dock: true
-  QMainWindow State: 000000ff00000000fd0000000400000000000001f10000035dfc020000000dfb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003d000001e7000000c900fffffffb00000040002f007600700072005f006e006f006400650073002f006f006300630061006d002f00730074006900740063006800650064005f0069006d0061006700650030010000022a0000009a0000001600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb00000044002f007600700072005f006e006f006400650073002f0070006100740068005f0066006f006c006c006f007700650072002f0072006f006c006c006d006100740063006801000002ca000000d00000001600fffffffb00000048002f0072006f0073005f0069006e006400690067006f00730064006b005f006f006300630061006d002f00730074006900740063006800650064005f0069006d006100670065003000000002e8000000970000001600fffffffb0000000a0049006d00610067006500000002b9000000c60000000000000000fb0000000a0049006d0061006700650100000274000001260000000000000000000000010000011a00000342fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003d00000342000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e100000197000000030000073800000056fc0100000002fb0000000800540069006d0065010000000000000738000003bc00fffffffb0000000800540069006d00650100000000000004500000000000000000000005410000035d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Image:
+    collapsed: false
+  QMainWindow State: 000000ff00000000fd0000000400000000000001f10000035dfc020000000efb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003d000001b0000000c900fffffffb00000040002f007600700072005f006e006f006400650073002f006f006300630061006d002f00730074006900740063006800650064005f0069006d0061006700650030000000022a0000009a0000001600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb00000044002f007600700072005f006e006f006400650073002f0070006100740068005f0066006f006c006c006f007700650072002f0072006f006c006c006d006100740063006801000001f3000000b90000001600fffffffb00000048002f0072006f0073005f0069006e006400690067006f00730064006b005f006f006300630061006d002f00730074006900740063006800650064005f0069006d0061006700650030000000025b000000720000001600fffffffb0000000a0049006d00610067006500000002b9000000c60000000000000000fb0000000a0049006d0061006700650100000274000001260000000000000000fb0000000a0049006d00610067006501000002b2000000e80000001600ffffff000000010000011a00000342fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003d00000342000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e100000197000000030000073800000056fc0100000002fb0000000800540069006d0065010000000000000738000003bc00fffffffb0000000800540069006d00650100000000000004500000000000000000000005410000035d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
