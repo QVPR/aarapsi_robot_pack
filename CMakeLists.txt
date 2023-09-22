@@ -65,12 +65,13 @@ add_message_files(
   DatasetParams.msg
   Debug.msg
   ExpResults.msg 
+  GoalExpResults.msg
   Heartbeat.msg
   ImageDetails.msg
   ImageStructure.msg
   Label.msg
   ParamsSVM.msg
-  RequestDataset.msg
+  RequestDataset.msg 
   RequestSVM.msg
   ResponseDataset.msg
   ResponseSVM.msg
