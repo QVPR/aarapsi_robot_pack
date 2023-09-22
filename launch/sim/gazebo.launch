@@ -16,17 +16,17 @@
   <!-- Load office into empty world-->
   <param name="office_geom" command="$(find xacro)/xacro '$(find cpr_office_extension_gazebo)/urdf/office_extension_geometry.urdf.xacro'" />
   <arg name="world_x"           default="0.0"/>
-  <arg name="world_y"           default="0.0"/>
-  <arg name="world_z"           default="0.0"/>
-  <arg name="world_yaw"         default="0.0"/>
+  <arg name="world_y"           default="1.0"/>
+  <arg name="world_z"           default="-0.5"/>
+  <arg name="world_yaw"         default="3.14"/>
   <node name="office_world_spawner" pkg="gazebo_ros" type="spawn_model"
     args="-urdf -model office_geometry -param office_geom -x $(arg world_x) -y $(arg world_y) -z $(arg world_z) -Y $(arg world_yaw)" />
 
   <!-- Spawn Jackal -->
   <arg name="robot_x"           default="0.0"/>
-  <arg name="robot_y"           default="1.0"/>
-  <arg name="robot_z"           default="0.2"/>
-  <arg name="robot_yaw"         default="3.14" />
+  <arg name="robot_y"           default="0.0"/>
+  <arg name="robot_z"           default="0.0"/>
+  <arg name="robot_yaw"         default="0.0" />
   <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
       args="-urdf -model jackal -param robot_description -x $(arg robot_x) -y $(arg robot_y) -z $(arg robot_z) -R 0 -P 0 -Y $(arg robot_yaw)" />
 
