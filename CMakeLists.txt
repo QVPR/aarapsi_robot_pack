@@ -65,7 +65,7 @@ add_message_files(
   DatasetParams.msg
   Debug.msg
   ExpResults.msg 
-  GoalExpResults.msg
+  GoalExpResults.msg 
   Heartbeat.msg
   ImageDetails.msg
   ImageStructure.msg

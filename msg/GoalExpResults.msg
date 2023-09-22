@@ -4,6 +4,7 @@ string SVM = SVM
 string mode     # VPR or SVM
 int16 id
 bool success
+std_msgs/Header header
 aarapsi_robot_pack/ExpResults localisation
 aarapsi_robot_pack/xyw path_start_pos
 aarapsi_robot_pack/xyw path_finish_pos
