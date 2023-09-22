@@ -239,13 +239,13 @@ class Follower_Class(Main_ROS_Class):
             return
         
         elif self.EXPERIMENT_MODE.get() == Experiment_Mode.INIT:
-            self.exp_results    = GoalExpResults()
-            self.exp_results.id = self.exp_count
-            self.exp_count      = self.exp_count + 1
+            self.exp_results                    = GoalExpResults()
+            self.exp_results.id                 = self.exp_count
+            self.exp_count                      = self.exp_count + 1
             self.exp_results.path_start_pos     = xyw(*self.path_xyws[self.exp_start_SLAM,0:3])
             self.exp_results.path_finish_pos    = xyw(*self.path_xyws[self.exp_stop_SLAM,0:3])
             self.exp_results.mode               = enum_name(self.TECHNIQUE.get())
-            self.return_stage   = Return_Stage.DIST
+            self.return_stage                   = Return_Stage.DIST
             self.EXPERIMENT_MODE.set(Experiment_Mode.ALIGN)
             self.print('[Experiment] Align phase.')
         
@@ -283,8 +283,15 @@ class Follower_Class(Main_ROS_Class):
         elif self.EXPERIMENT_MODE.get() == Experiment_Mode.DRIVE_GOAL:
             if self.point_and_shoot(start=self.point_shoot_start, ego=self.robot_ego, point=self.point_shoot_point, shoot=self.point_shoot_shoot):
                 self.EXPERIMENT_MODE.set(Experiment_Mode.HALT2)
+                self.exp_results.success = True
                 self.print('[Experiment] Halting ... (2)')
                 return
+            
+        elif self.EXPERIMENT_MODE.get() == Experiment_Mode.DANGER:
+            self.EXPERIMENT_MODE.set(Experiment_Mode.HALT2)
+            self.exp_results.success = False
+            self.print('[Experiment] Halting due to potential danger')
+            return
 
         elif self.EXPERIMENT_MODE.get() == Experiment_Mode.HALT2:
             if len(self.robot_velocities):
