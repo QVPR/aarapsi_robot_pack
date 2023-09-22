@@ -10,6 +10,7 @@ teleop_twist_joy:
   enable_turbo_button: 5
 joy_node:
   deadzone: 0.1
-  autorepeat_rate: 10
+  autorepeat_rate: 20
   dev: /dev/input/ps4
   sticky_buttons: false
+  max_timeout: 60
