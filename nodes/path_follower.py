@@ -245,6 +245,7 @@ class Follower_Class(Main_ROS_Class):
             self.exp_results.path_start_pos     = xyw(*self.path_xyws[self.exp_start_SLAM,0:3])
             self.exp_results.path_finish_pos    = xyw(*self.path_xyws[self.exp_stop_SLAM,0:3])
             self.exp_results.mode               = enum_name(self.TECHNIQUE.get())
+            self.exp_results.goal_position      = xyw(*self.goal_pose)
             self.return_stage                   = Return_Stage.DIST
             self.EXPERIMENT_MODE.set(Experiment_Mode.ALIGN)
             self.print('[Experiment] Align phase.')
