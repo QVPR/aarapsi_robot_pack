@@ -240,6 +240,8 @@ class Follower_Class(Main_ROS_Class):
         
         elif self.EXPERIMENT_MODE.get() == Experiment_Mode.INIT:
             self.exp_results                    = GoalExpResults()
+            self.exp_results.header.stamp       = rospy.Time.now()
+            self.exp_results.frame_id           = 'map'
             self.exp_results.id                 = self.exp_count
             self.exp_count                      = self.exp_count + 1
             self.exp_results.path_start_pos     = xyw(*self.path_xyws[self.exp_start_SLAM,0:3])
