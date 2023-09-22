@@ -4,22 +4,23 @@ import rospy
 import argparse as ap
 import numpy as np
 import sys
-import cv2
+import copy
 
-import matplotlib.pyplot as plt
-
-from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType, compressed2np, np2compressed
-from pyaarapsi.core.helper_tools            import formatException, angle_wrap, normalize_angle, roll
+from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType
+from pyaarapsi.core.helper_tools            import formatException, angle_wrap, normalize_angle, p2p_dist_2d, r2d
+from pyaarapsi.core.enum_tools              import enum_name
+from pyaarapsi.core.transforms              import apply_homogeneous_transform, Transform_Builder
 from pyaarapsi.vpr_classes.base             import base_optional_args
 
 # Import break-out libraries (they exist to help keep me sane and make this file readable):
 from pyaarapsi.pathing.enums                import * # Enumerations
 from pyaarapsi.pathing.basic                import * # Helper functions
-from pyaarapsi.pathing.base                 import Zone_Return_Class
+from pyaarapsi.pathing.base                 import Main_ROS_Class
 
-from pyaarapsi.core.vars                    import C_I_GREEN, C_I_RED, C_RESET
+from pyaarapsi.core.vars                    import C_CLEAR
 
-from aarapsi_robot_pack.msg                 import ExpResults, xyw
+from aarapsi_robot_pack.msg                 import GoalExpResults, xyw
+
 '''
 Path Follower
 
@@ -27,8 +28,13 @@ Node description.
 
 '''
 
-class Follower_Class(Zone_Return_Class):
+class Follower_Class(Main_ROS_Class):
     def __init__(self, **kwargs):
+        '''
+
+        Node Initialisation
+
+        '''
         super().__init__(**kwargs, throttle=30)
 
         self.init_params(kwargs['rate_num'], kwargs['log_level'], kwargs['reset'])
@@ -37,43 +43,17 @@ class Follower_Class(Zone_Return_Class):
 
         self.node_ready(kwargs['order_id'])
 
-    def roll_match(self, ind: int):
-        resize          = [int(self.IMG_HFOV.get()), 8]
-        img_dims        = self.IMG_DIMS.get()
-        query_raw       = cv2.cvtColor(compressed2np(self.label.query_image), cv2.COLOR_BGR2GRAY)
-        img             = cv2.resize(query_raw, resize)
-        img_mask        = np.ones(img.shape)
-
-        _b              = int(resize[0] / 2)
-        sliding_options = range((-_b) + 1, _b)
-
-        against_image   = cv2.resize(np.reshape(self.ip.dataset['dataset']['RAW'][ind], [img_dims[1], img_dims[0]]), resize)
-        options_stacked = np.stack([roll(against_image, i).flatten() for i in sliding_options])
-        img_stacked     = np.stack([(roll(img_mask, i)*img).flatten() for i in sliding_options])
-        matches         = np.sum(np.square(img_stacked - options_stacked),axis=1)
-        yaw_fix_deg     = sliding_options[np.argmin(matches)]
-        yaw_fix_rad     = normalize_angle(yaw_fix_deg * np.pi / 180.0)
-
-        if self.PUBLISH_ROLLMATCH.get():
-            fig, ax = plt.subplots()
-            ax.plot(sliding_options, matches)
-            ax.plot(sliding_options[np.argmin(matches)], matches[np.argmin(matches)])
-            ax.set_title('%s' % str([sliding_options[np.argmin(matches)], matches[np.argmin(matches)]]))
-            fig.canvas.draw()
-            img_np_raw_flat = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-            img_np_raw      = img_np_raw_flat.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-            img_np          = np.flip(img_np_raw, axis=2) # to bgr format, for ROS
-            plt.close('all') # close matplotlib
-            plt.show()
-            img_msg = np2compressed(img_np)
-            img_msg.header.stamp = rospy.Time.now()
-            img_msg.header.frame_id = 'map'
-            self.rollmatch_pub.publish(img_msg)
-
-        return yaw_fix_rad
-
     def main(self):
-        # Main loop process
+        '''
+
+        Main function
+
+        Handles:
+        - Pre-loop duties
+        - Keeping main loop alive
+        - Exit
+
+        '''
         self.set_state(NodeState.MAIN)
 
         self.load_dataset() # Load reference data
@@ -90,7 +70,18 @@ class Follower_Class(Zone_Return_Class):
         self.print('Entering main loop.')
         while not rospy.is_shutdown():
             try:
+                # Denest main loop; wait for new messages:
+                if not (self.new_label):# and self.new_robot_odom):
+                    self.print("Waiting for new position information...", LogType.DEBUG, throttle=10)
+                    rospy.sleep(0.005)
+                    continue
+                
+                self.rate_obj.sleep()
+                self.new_label          = False
+                #self.new_robot_odom     = False
+
                 self.loop_contents()
+
             except rospy.exceptions.ROSInterruptException as e:
                 pass
             except Exception as e:
@@ -100,146 +91,270 @@ class Follower_Class(Zone_Return_Class):
                     self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
                     rospy.sleep(0.5)
 
-    def update_historical_data(self):
-        # Perform work on self.match_hist, self.travel_distance
-        # match hist contains n rows, each row:
-        #   0            1            2               3         4          5           6           7
-        # [ match_index, truth_index, match_distance, gt_class, svm_class, slam_ego_x, slam_ego_y, slam_ego_w, 
-        #   8            9            10           11         12         13         14
-        #   robot_ego_x, robot_ego_y, robot_ego_w, vpr_ego_x, vpr_ego_y, vpr_ego_w, distance ]
-        if not self.new_history:
-            return
-        self.new_history = False
+    def path_follow(self, ego, current_ind):
+        '''
+        
+        Follow a pre-defined path
+        
+        '''
 
-        _match_arr      = np.array(self.match_hist)
-        _shape          = _match_arr.shape
-
-        _ind            = -1
-        for i in range(-2, -_shape[0]-1, -1):
-            if np.sum(_match_arr[i:,-1]) > self.SLICE_LENGTH.get():
-                _ind    = i
-                break
-        if _ind         == -1:
+        # Ensure robot is within path limits
+        if not self.check_for_safety_stop():
             return
         
-        _distances      = np.array([np.sum(_match_arr[_ind+i+1:,-1]) for i in range(abs(_ind)-1)] + [0])
+        # Calculate heading, cross-track, velocity errors and the target index:
+        self.target_ind, self.adjusted_lookahead = calc_target(current_ind, self.lookahead, self.lookahead_mode, self.path_xyws)
+
+        # Publish a pose to visualise the target:
+        publish_xyw_pose(self.path_xyws[self.target_ind], self.goal_pub)
+
+        # Calculate control signal for angular velocity:
+        if self.command_mode == Command_Mode.VPR:
+            error_ang = angle_wrap(self.path_xyws[self.target_ind, 2] - ego[2], 'RAD')
+        else:
+            error_ang = calc_yaw_error(ego, self.path_xyws[self.target_ind])
+
+        # Calculate control signal for linear velocity
+        error_lin = self.path_xyws[current_ind, 3]
+
+        # Send a new command to drive the robot based on the errors:
+        self.try_send_command(error_lin, error_ang)
+
+    def zone_return(self, ego, target, ignore_heading=False):
+        '''
+
+        Handle an autonomous movement to a target
+        - Picks nearest target
+        - Drives to target
+        - Turns on-spot to face correctly
+
+        Stages:
+        Return_STAGE.UNSET: Stage 0 - New request: identify zone target.
+        Return_STAGE.DIST:  Stage 1 - Distance from target exceeds 5cm: head towards target.
+        Return_STAGE.TURN:  Stage 2 - Heading error exceeds 1 degree: turn on-the-spot towards target heading.
+        Return_STAGE.DONE:  Stage 3 - FINISHED.
+
+        '''
+
+        publish_xyw_pose(target, self.goal_pub)
+
+        if self.return_stage == Return_Stage.DONE:
+            return True
+
+        yaw_err     = calc_yaw_error(ego, target)
+        ego_cor     = self.update_COR(ego) # must improve accuracy of centre-of-rotation as we do on-the-spot turns
+        dist        = np.sqrt(np.square(ego_cor[0] - target[0]) + np.square(ego_cor[1] - target[1]))
+        head_err    = angle_wrap(target[2] - ego[2], 'RAD')
+
+        # If stage 1: calculate distance to target (lin_err) and heading error (ang_err)
+        if self.return_stage == Return_Stage.DIST:
+            if abs(yaw_err) < np.pi/18:
+                ang_err = np.sign(yaw_err) * np.min([np.max([0.1, -0.19*abs(yaw_err)**2 + 0.4*abs(yaw_err) - 0.007]),1])
+                lin_err = np.max([0.1, 2 * np.log10(dist + 0.7)])
+            else:
+                lin_err = 0
+                ang_err = np.sign(yaw_err) * 0.2
+
+            # If we're within 5 cm of the target, stop and move to stage 2
+            if dist < 0.05:
+                self.return_stage = Return_Stage.TURN
+
+        # If stage 2: calculate heading error and turn on-the-spot
+        elif self.return_stage == Return_Stage.TURN:
+            lin_err = 0
+            # If heading error is less than 1 degree, stop and move to stage 3
+            if (abs(head_err) < np.pi/180) or ignore_heading:
+                self.set_command_mode(Command_Mode.STOP)
+                self.return_stage = Return_Stage.DONE
+                ang_err = 0
+
+                return True
+            else:
+                ang_err = np.sign(head_err) * np.max([0.1, abs(head_err)])
+        else:
+            raise Exception('Bad return stage [%s].' % str(self.return_stage))
+
+        self.try_send_command(lin_err,ang_err)
+        return False
+    
+    def point_and_shoot(self, start, ego, point, shoot):
+        '''
+
+        Handle an autonomous movement to a target
+        - Aims at target
+        - Drives to target
+
+        Stages:
+        Point_Shoot_Stage.INIT:  Stage 0 - New request: start. 
+        Point_Shoot_Stage.POINT: Stage 1 - Use point amount to correct within 2 degrees of error
+        Point_Shoot_Stage.SHOOT: Stage 2 - Use shoot amount to correct witihn 10cm of error
+        Point_Shoot_Stage.DONE:  Stage 3 - FINISHED.
+
+        '''
+
+        if self.point_shoot_stage == Point_Shoot_Stage.DONE:
+            return True
         
-        _results        = ExpResults()
-        _results.gt_pos = xyw(*self.match_hist[-1][5:8])
+        elif self.point_shoot_stage == Point_Shoot_Stage.INIT:
+            self.point_shoot_stage = Point_Shoot_Stage.POINT
 
-        _vpr_matches        = _match_arr[_ind:,:]
-        _best_vpr           = np.argmin(_vpr_matches[:,2])
-        _vpr_ind            = int(_vpr_matches[_best_vpr, 0])
-        _vpr_sum_so_far     = _distances[_best_vpr]
-        _vpr_now_ind        = np.argmin(abs(np.array(self.path_sum) - (self.path_sum[_vpr_ind] + _vpr_sum_so_far)))
-        _vpr_pos_now        = self.path_xyws[_vpr_now_ind, 0:3]
-        _vpr_pos_err        = np.sqrt(np.sum(np.square(np.array(self.match_hist[-1][5:7]) - _vpr_pos_now[0:2])))
-        _results.vpr_pos    = xyw(*_vpr_pos_now)
+        elif self.point_shoot_stage == Point_Shoot_Stage.POINT:
+            point_err = normalize_angle(point - (ego[2] - start[2]))
+            if np.abs(point_err) > np.pi/90:
+                self.try_send_command(0, np.sign(point_err) * 0.3)
+            else:
+                self.point_shoot_stage = Point_Shoot_Stage.SHOOT
 
-        _svm_matches        = _vpr_matches[np.asarray(_vpr_matches[:,3],dtype=bool),:]
-        if not _svm_matches.shape[0]:
-            _svm_pos_now        = np.nan
-            _svm_pos_err        = np.nan
-            _svm_ind            = np.nan
-            _results.svm_state  = _results.FAIL
-        else:
-            _best_svm           = np.argmin(_svm_matches[:,2])
-            _svm_ind            = int(_svm_matches[_best_svm, 0])
-            _svm_sum_so_far     = _distances[_best_svm]
-            _svm_now_ind        = np.argmin(abs(np.array(self.path_sum) - (self.path_sum[_svm_ind] + _svm_sum_so_far))) # This will fail if a path is a loop
-            _svm_pos_now        = self.path_xyws[_svm_now_ind, 0:3]
-            _svm_pos_err        = np.sqrt(np.sum(np.square(np.array(self.match_hist[-1][5:7]) - _svm_pos_now[0:2])))
-            _results.svm_pos    = xyw(*_svm_pos_now)
-            _results.svm_state  = _results.SUCCESS
+        elif self.point_shoot_stage == Point_Shoot_Stage.SHOOT:
+            shoot_err = shoot - p2p_dist_2d(start, ego)
+            if np.abs(shoot_err) > 0.1:
+                self.try_send_command(0.3,0)
+            else:
+                self.point_shoot_stage = Point_Shoot_Stage.DONE
 
-        self.exp_pub.publish(_results)
+        return False
+    
+    def experiment(self):
 
-        #print(list(_vpr_pos_now), list(_svm_pos_now), [self.match_hist[-1][10:12]])
-        #print(_vpr_ind, _svm_ind, _vpr_matches.shape, _svm_matches.shape)
-        _diff = _vpr_pos_err - _svm_pos_err
-        if _diff > 0:
-            print(C_I_GREEN + ('% 6.2f' % np.abs(_diff)) + C_RESET)
-        else:
-            print(C_I_RED + ('% 6.2f' % np.abs(_diff)) + C_RESET)
+        if self.new_goal: # If 2D Nav Goal is used to request a goal
+            _closest_goal_ind   = calc_current_ind(self.goal_pose, self.path_xyws)
+            _stopping           = 0.5 # provide 50cm for vehicle to come to a halt
+            self.exp_stop_SLAM  = np.argmin(np.abs(self.path_sum - (self.path_sum[_closest_goal_ind] - _stopping))) 
+            # Some magic numbers, 0.10m and 0.05m, to ensure the historical data gets cleaned out between experiments
+            self.exp_start_SLAM = np.argmin(np.abs(self.path_sum - (self.path_sum[self.exp_stop_SLAM] - (self.SLICE_LENGTH.get()+0.10)))) 
+            self.exp_dist       = self.path_sum[self.exp_stop_SLAM] - self.path_sum[self.exp_start_SLAM]
+            if self.exp_dist < (self.SLICE_LENGTH.get()+0.05): # Warn if the historical data may not clear
+                self.print('Proposed experiment length: %0.2f [m]: Historical data may be retained!' % self.exp_dist, LogType.WARN)
+            else:
+                self.print('Proposed experiment length: %0.2f [m].' % self.exp_dist)
+            self.new_goal       = False
+            self.EXPERIMENT_MODE.set(Experiment_Mode.INIT)
+            self.print('[Experiment] Initialisation phase.')
+
+            publish_xyzrpy_pose([self.path_xyws[self.exp_start_SLAM,0], self.path_xyws[self.exp_start_SLAM,1], -0.5, 0, -np.pi/2, 0], self.experi_start_pub)
+            publish_xyzrpy_pose([self.path_xyws[self.exp_stop_SLAM,0], self.path_xyws[self.exp_stop_SLAM,1], -0.5, 0, -np.pi/2, 0], self.experi_finish_pub)
+
+        elif self.exp_dist is None:
+            self.print('Experiment pending 2D Nav Goal ...', LogType.WARN, throttle=30)
+            return
+        
+        elif self.EXPERIMENT_MODE.get() == Experiment_Mode.INIT:
+            self.exp_results    = GoalExpResults()
+            self.exp_results.id = self.exp_count
+            self.exp_count      = self.exp_count + 1
+            self.exp_results.path_start_pos     = xyw(*self.path_xyws[self.exp_start_SLAM,0:3])
+            self.exp_results.path_finish_pos    = xyw(*self.path_xyws[self.exp_stop_SLAM,0:3])
+            self.exp_results.mode               = enum_name(self.TECHNIQUE.get())
+            self.return_stage   = Return_Stage.DIST
+            self.EXPERIMENT_MODE.set(Experiment_Mode.ALIGN)
+            self.print('[Experiment] Align phase.')
+        
+        elif self.EXPERIMENT_MODE.get() == Experiment_Mode.ALIGN:
+            if self.zone_return(self.slam_ego, self.path_xyws[self.exp_start_SLAM]):
+                self.EXPERIMENT_MODE.set(Experiment_Mode.DRIVE_PATH)
+                self.print('[Experiment] Driving along path.')
+                return
+
+        elif self.EXPERIMENT_MODE.get() == Experiment_Mode.DRIVE_PATH:
+            if (self.path_sum[self.slam_current_ind] - self.path_sum[self.exp_start_SLAM]) < self.exp_dist:
+                self.path_follow(self.slam_ego, self.slam_current_ind)
+            else:
+                self.EXPERIMENT_MODE.set(Experiment_Mode.HALT1)
+                self.print('[Experiment] Halting ... (1)')
+                return
+
+        elif self.EXPERIMENT_MODE.get() == Experiment_Mode.HALT1:
+            if len(self.robot_velocities):
+                if np.sum(self.robot_velocities) < 0.05:
+                    self.EXPERIMENT_MODE.set(Experiment_Mode.DRIVE_GOAL)
+                    self.print('[Experiment] Driving to goal.')
+                    self.point_shoot_stage                  = Point_Shoot_Stage.INIT
+                    self.point_shoot_point                  = calc_yaw_error(self.current_hist_pos, self.goal_pose)
+                    self.point_shoot_shoot                  = p2p_dist_2d(self.current_hist_pos, self.goal_pose)
+                    self.point_shoot_start                  = self.robot_ego
+                    self.exp_results.point                  = self.point_shoot_point
+                    self.exp_results.shoot                  = self.point_shoot_shoot
+                    self.exp_results.localisation           = copy.deepcopy(self.current_results)
+                    self.exp_results.robot_goal_start_pos   = xyw(*self.robot_ego)
+                    self.exp_results.slam_goal_start_pos    = xyw(*self.slam_ego)
+                    return
+            self.try_send_command(0,0)
+        
+        elif self.EXPERIMENT_MODE.get() == Experiment_Mode.DRIVE_GOAL:
+            if self.point_and_shoot(start=self.point_shoot_start, ego=self.robot_ego, point=self.point_shoot_point, shoot=self.point_shoot_shoot):
+                self.EXPERIMENT_MODE.set(Experiment_Mode.HALT2)
+                self.print('[Experiment] Halting ... (2)')
+                return
+
+        elif self.EXPERIMENT_MODE.get() == Experiment_Mode.HALT2:
+            if len(self.robot_velocities):
+                if np.sum(self.robot_velocities) < 0.05:
+                    self.exp_results.robot_goal_finish_pos   = xyw(*self.robot_ego)
+                    self.exp_results.slam_goal_finish_pos    = xyw(*self.slam_ego)
+                    self.experi_results_pub.publish(self.exp_results)
+                    self.EXPERIMENT_MODE.set(Experiment_Mode.DONE)
+                    return
+            self.try_send_command(0,0)
+
+        elif self.EXPERIMENT_MODE.get() == Experiment_Mode.DONE:
+            self.print('[Experiment] Complete.', throttle=30)
 
     def loop_contents(self):
-
-        # Denest main loop; wait for new messages:
-        if not (self.new_label):
-            self.print("Waiting for new position information...", LogType.DEBUG, throttle=10)
-            rospy.sleep(0.005)
-            return
+        '''
         
-        self.rate_obj.sleep()
-        self.new_label          = False
+        Main Loop
+
+        '''
 
         # Calculate current SLAM position and zone:
-        t_current_ind           = calc_current_ind(self.slam_ego, self.path_xyws)
-        t_zone                  = calc_current_zone(t_current_ind, self.num_zones, self.zone_indices)
+        self.slam_current_ind       = calc_current_ind(self.slam_ego, self.path_xyws)
+        self.slam_zone              = calc_current_zone(self.slam_current_ind, self.num_zones, self.zone_indices)
 
+        self.update_zone_target()
+
+        # Calculate/estimate current ego:
         if self.command_mode == Command_Mode.VPR: # If we are estimating pose, calculate via VPR:
-            current_ind         = self.label.match_index
-            rm_corr             = self.roll_match(current_ind)
-            heading_fixed       = normalize_angle(angle_wrap(self.vpr_ego[2] + rm_corr, 'RAD'))
-            ego                 = [self.vpr_ego[0], self.vpr_ego[1], heading_fixed]
+            self.est_current_ind    = self.label.match_index
+            self.heading_fixed      = normalize_angle(angle_wrap(self.vpr_ego[2] + self.roll_match(self.est_current_ind), 'RAD'))
+            self.ego                = [self.vpr_ego[0], self.vpr_ego[1], self.heading_fixed]
 
         else: # If we are not estimating pose, use everything from the ground truth:
-            current_ind         = t_current_ind
-            rm_corr             = self.roll_match(t_current_ind)
-            heading_fixed       = normalize_angle(angle_wrap(self.slam_ego[2] + rm_corr, 'RAD'))
-            ego                 = self.slam_ego
-
-        # Visualise SLAM nearest position on path: 
-        self.publish_pose(t_current_ind, self.slam_pub)
-
-        # Manage storage of historical data
-        self.update_historical_data()
+            self.est_current_ind    = self.slam_current_ind
+            self.heading_fixed      = normalize_angle(angle_wrap(self.slam_ego[2] + self.roll_match(self.est_current_ind), 'RAD'))
+            self.ego                = self.slam_ego
         
-        # Calculate perpendicular (lin) and angular (ang) path errors:
-        lin_err, ang_err = calc_path_errors(self.slam_ego, t_current_ind, self.path_xyws)
+        publish_xyw_pose(self.path_xyws[self.slam_current_ind], self.slam_pub) # Visualise SLAM nearest position on path
+        self.update_historical_data() # Manage storage of historical data
 
-        # If path-following, ensure robot is within path limits:
-        self.check_for_safety_stop(lin_err, ang_err)
+        # Denest; check if stopped:
+        if self.command_mode in [Command_Mode.STOP]:
+            pass
 
-        # Set default values for printing:
-        speed           = 0.0
-        error_yaw       = 0.0
-        target_ind      = 0
-        adj_lookahead   = self.lookahead
-        new_lin         = 0.0
-        new_ang         = 0.0
+        # Else: if the current command mode is a path-following exercise:
+        elif self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM]:
+            self.path_follow(self.ego, self.est_current_ind)
 
-        # If the current command mode is a path-following exercise:
-        if self.command_mode in [Command_Mode.VPR, Command_Mode.SLAM]:
-            # calculate heading, cross-track, velocity errors and the target index:
-            target_ind, adj_lookahead = calc_target(current_ind, self.lookahead, self.lookahead_mode, self.path_xyws)
-            if self.command_mode == Command_Mode.SLAM:
-                error_yaw = calc_yaw_error(ego, self.path_xyws[:,0], self.path_xyws[:,1], target_ind)
-            else:
-                error_yaw = angle_wrap(self.path_xyws[target_ind, 2] - ego[2], 'RAD')
-            speed = self.path_xyws[current_ind, 3]
-            # publish a pose to visualise the target:
-            self.publish_pose(target_ind, self.goal_pub)
-            # generate a new command to drive the robot based on the errors:
-            new_command = self.make_new_command(speed, error_yaw)
-            new_lin     = new_command.linear.x
-            new_ang     = new_command.angular.z
+        # Else: if the current command mode is set to return-to-nearest-zone-boundary:
+        elif self.command_mode in [Command_Mode.ZONE_RETURN]:
+        
+            # If stage 0: determine target and move to stage 1
+            if self.return_stage == Return_Stage.UNSET:
+                if self.saved_index == -1: # No saved zone
+                    self.zone_index  = calc_nearest_zone(self.zone_indices, self.est_current_ind, self.path_xyws.shape[0])
+                else:
+                    self.zone_index  = self.saved_index
+                self.return_stage = Return_Stage.DIST
+            
+            self.zone_return(self.ego, self.path_xyws[self.zone_index,:])
 
-            # If a safety is 'enabled':
-            if self.safety_mode in [Safety_Mode.SLOW, Safety_Mode.FAST]:
-                # send command:
-                self.cmd_pub.publish(new_command)
+        # Else: if the current command mode is set to special functions (experiments, testing):
+        if not (self.EXPERIMENT_MODE.get() == Experiment_Mode.UNSET):
+            self.experiment()
 
-        # If the current command mode is set to return-to-nearest-zone-boundary:
-        elif self.command_mode == Command_Mode.ZONE_RETURN:
-            self.zone_return(ego, current_ind)
-
-        # Print diagnostics:
+        # Print HMI:
         if self.PRINT_DISPLAY.get():
-            self.print_display(new_linear=new_lin, new_angular=new_ang, 
-                               current_ind=current_ind, zone=t_zone, 
-                               lin_path_err=lin_err, ang_path_err=ang_err, speed=speed, error_yaw=error_yaw)
-        self.publish_controller_info(current_ind, target_ind, heading_fixed, t_zone, adj_lookahead)
+            self.print_display()
+        self.publish_controller_info()
 
 def do_args():
     parser = ap.ArgumentParser(prog="path_follower.py", 
