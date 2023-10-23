@@ -1,0 +1,1 @@
+find "$@" -name *.bag -exec ln -vs "{}" "$(rospack find aarapsi_robot_pack)/data/rosbags/" ';'
