@@ -11,3 +11,4 @@ src/CMakeLists.txt
 *.swp
 *.npz
 *.bag
+cfg/svm_models/fields/*.png
