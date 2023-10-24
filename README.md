@@ -5,7 +5,7 @@ ROS package for the AARAPSI project ([github](https://github.com/QVPR/aarapsipro
 This assumes you have a valid ```ROS noetic``` (ROS1 for Ubuntu 20.04 with python 3.8.10) environment. If not, please visit the [ROS wiki for noetic installation](https://wiki.ros.org/noetic/Installation/Ubuntu) and follow the tutorials to install and configure `ROS`.
 Once ROS is configured, install [our catkin workspace](https://github.com/QVPR/aarapsi_offrobot_ws) or build one from scratch with the equivalent packages. For more information, visit the [wiki page for ROS catkin workspaces](https://wiki.ros.org/ROS/Tutorials/InstallingandConfiguringROSEnvironment).
 - In the root of the catkin workspace, execute ```rosdep install --from-paths src --ignore-src -r -y```
-- Install missing python libraries: ```pip3 install numexpr fastdist bokeh gdown nvidia-ml-py3```
+- Install missing python libraries: ```pip3 install numexpr fastdist bokeh gdown nvidia-ml-py3 pyexiv2```
 
 ## Package Contents
 - **cfg**: Configuration files including yaml files, reference documentation, SVMs, urdf files
