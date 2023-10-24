@@ -23,7 +23,8 @@ from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional
 '''
 SLAM Path Follower
 
-Node description.
+Precursor to path_follower.py
+Uses SLAM positioning to repeat a path
 
 '''
 

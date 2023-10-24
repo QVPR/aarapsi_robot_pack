@@ -7,9 +7,8 @@ import sys
 import copy
 
 from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType
-from pyaarapsi.core.helper_tools            import formatException, angle_wrap, normalize_angle, p2p_dist_2d, r2d
+from pyaarapsi.core.helper_tools            import formatException, angle_wrap, normalize_angle, p2p_dist_2d
 from pyaarapsi.core.enum_tools              import enum_name
-from pyaarapsi.core.transforms              import apply_homogeneous_transform, Transform_Builder
 from pyaarapsi.vpr_classes.base             import base_optional_args
 
 # Import break-out libraries (they exist to help keep me sane and make this file readable):
@@ -24,7 +23,7 @@ from aarapsi_robot_pack.msg                 import GoalExpResults, xyw
 '''
 Path Follower
 
-Node description.
+Uses VPR or SLAM to perform actions such as path following or goal alignment.
 
 '''
 
