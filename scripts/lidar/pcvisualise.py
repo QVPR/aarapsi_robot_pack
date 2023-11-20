@@ -19,6 +19,8 @@ import matplotlib
 matplotlib.use("Qt5agg")
 from matplotlib import pyplot as plt
 
+from pyaarapsi.core.ros_tools import open_rosbag
+
 class mrc:
     def __init__(self, node_name='pcvisualise', anon=True, rate_num=20.0):
         rospy.init_node(node_name, anonymous=anon)
@@ -39,8 +41,7 @@ class mrc:
         bag_path = '/home/claxton/Documents/bags/'
         bag_name = 'trip1.bag'
         
-        ros_bag = rosbag.Bag(bag_path + bag_name, 'r')
-        for topic, msg, timestamp in ros_bag.read_messages(topics=['/velodyne_points']):
+        for topic, msg, timestamp in open_rosbag(bag_path + bag_name, topics=['/velodyne_points']):
             if rospy.is_shutdown():
                 sys.exit()
             nmrc.rate_obj.sleep()
