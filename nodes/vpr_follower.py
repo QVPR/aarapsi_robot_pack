@@ -21,6 +21,7 @@ from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional
 import matplotlib
 matplotlib.use('Qt5agg')
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 '''
 VPR Follower
@@ -41,21 +42,20 @@ class Main_ROS_Class(Base_ROS_Class):
 
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
-        self.TOL_MODE        = self.params.add(self.namespace + "/tolerance/mode",      None,                   lambda x: check_enum(x, VPR_Tolerance_Mode),    force=False)
-        self.TOL_THRES       = self.params.add(self.namespace + "/tolerance/threshold", None,                   check_positive_float,                           force=False)
+        self.TOL_MODE        = self.params.add(self.namespace + "/tolerance/mode",      VPR_Tolerance_Mode.METRE_LINE,  lambda x: check_enum(x, VPR_Tolerance_Mode),    force=False)
+        self.TOL_THRES       = self.params.add(self.namespace + "/tolerance/threshold", 0.5,                            check_positive_float,                           force=False)
 
     def init_vars(self):
         super().init_vars()
 
-        self.img                    = None
-        self.gt                     = [0.0] * 6 # x,y,w,dx,dy,dw; ground truth robot position
+        self.img                    = np.array(None)
+        self.gt                     = [0.0] * 3 # x,y,w; ground truth robot position
         self.vpr_ego                = [0.0] * 3 # x,y,w; our estimate of robot position
-        self.vpr_vel                = [0.0] * 3 # dx,dy,dw; our estimate of robot velocity
 
         self.state_hist             = np.zeros((10,3)) # x,y,w
-        self.gt__hist               = np.zeros((100,6)) # dx, dy, dw
-        self.vpr_hist               = np.zeros((100,6)) # dx, dy, dw
-        self.svm_hist               = np.zeros((100,6)) # dx, dy, dw
+        self.gt__hist               = np.zeros((100,3))
+        self.vpr_hist               = np.zeros((100,3))
+        self.svm_hist               = np.zeros((100,3))
         self.time                   = np.zeros((100))
 
         # flags to denest main loop:
@@ -86,14 +86,14 @@ class Main_ROS_Class(Base_ROS_Class):
         self.gt_sub                 = rospy.Subscriber(self.SLAM_ODOM_TOPIC.get(),  Odometry,           self.gt_cb,    queue_size=1)
 
     def gt_cb(self, msg: Odometry):
-        self.gt                     = pose2xyw(msg.pose.pose) + twist2xyw(msg.twist.twist)
+        self.gt                     = pose2xyw(msg.pose.pose) #+ twist2xyw(msg.twist.twist)
         self.new_gt                 = True
 
     def img_cb(self, msg: CompressedImage):
         self.img                    = compressed2np(msg)
         self.new_img                = True
 
-    def getMatchInd(self, ft_qry: list):
+    def getMatchInd(self, ft_qry: np.ndarray):
     # top matching reference index for query
 
         _features   = self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())]
@@ -112,9 +112,13 @@ class Main_ROS_Class(Base_ROS_Class):
     def main(self):
         # Main loop process
         self.set_state(NodeState.MAIN)
-
-        self.fig, self.axes = plt.subplots(1,3)
+        self.fig, self.axes = plt.subplots(1,3, figsize=(8,4))
+        self._handles = [   Line2D([0], [0], marker='.', label='gt',  color='b',  linewidth=0, markersize=10, markerfacecolor='b', markeredgewidth=0.3),
+                            Line2D([0], [0], marker='.', label='vpr', color='r',  linewidth=0, markersize=10, markerfacecolor='r', markeredgewidth=0.3),
+                            Line2D([0], [0], marker='.', label='svm', color='g',  linewidth=0, markersize=10, markerfacecolor='g', markeredgewidth=0.3)]
+        self.fig.subplots_adjust(bottom=0.2, wspace=0.5)
         plt.show(block=False)
+        plt_pause(0.01, self.fig)   
 
         while not rospy.is_shutdown():
             try:
@@ -159,6 +163,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.state_hist         = np.roll(self.state_hist, 1, 0)
         self.state_hist[0,:]    = [self.vpr_ego[0], self.vpr_ego[1], self.vpr_ego[2]]
         predict_success         = False
+        pred, zvalues, factors, prob = None, None, None, None
         while not predict_success:
             if rospy.is_shutdown():
                 self.exit()
@@ -173,7 +178,6 @@ class Main_ROS_Class(Base_ROS_Class):
         return {'pred': pred, 'zvalues': zvalues, 'factors': factors, 'prob': prob}
 
     def loop_contents(self):
-
         if not (self.main_ready and self.parameters_ready): # denest
             self.print("Waiting.", LogType.DEBUG, throttle=60) # print every 60 seconds
             rospy.sleep(0.005)
@@ -186,8 +190,6 @@ class Main_ROS_Class(Base_ROS_Class):
             svm_result          = self.perform_svm(vpr_result)
             self.new_gt         = False
             self.new_img        = False
-
-            #print(('% 0.3f ' * 6) % tuple(np.round(np.array(self.gt),2)))
 
             self.gt__hist = np.roll(self.gt__hist,  1, 0)
             self.vpr_hist = np.roll(self.vpr_hist,  1, 0)
@@ -202,30 +204,34 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.svm_hist[0, 0:3] = self.vpr_ego
             else:
                 self.svm_hist[0, :] = self.svm_hist[1, :]
-            self.vpr_hist[0, 3:] = (self.vpr_hist[0, 0:3] - self.vpr_hist[1, 0:3]) / (self.time[0] - self.time[1])
-            self.svm_hist[0, 3:] = (self.svm_hist[0, 0:3] - self.svm_hist[1, 0:3]) / (self.time[0] - self.time[1])
             
             self.vpr_hist[0, -1] = angle_wrap(self.vpr_hist[0, -1],'RAD')
             self.svm_hist[0, -1] = angle_wrap(self.svm_hist[0, -1],'RAD')
 
-        try:
-            end_ = np.where(self.time==0)[0][0]
-            if end_ == 0:
-                return
-        except IndexError:
-            end_ = None
+            try:
+                end_ = np.where(self.time==0)[0][0]
+                if end_ == 0:
+                    return
+            except IndexError:
+                end_ = None
 
-        [axes.clear() for axes in self.axes]
-        self.axes[0].plot(self.time[0:end_], self.gt__hist[0:end_, 3], 'b.')
-        self.axes[0].plot(self.time[0:end_], self.vpr_hist[0:end_, 3], 'r.')
-        self.axes[0].plot(self.time[0:end_], self.svm_hist[0:end_, 3], 'g.')
-        self.axes[1].plot(self.time[0:end_], self.gt__hist[0:end_, 4], 'b.')
-        self.axes[1].plot(self.time[0:end_], self.vpr_hist[0:end_, 4], 'r.')
-        self.axes[1].plot(self.time[0:end_], self.svm_hist[0:end_, 4], 'g.')
-        self.axes[2].plot(self.time[0:end_], self.gt__hist[0:end_, 5], 'b.')
-        self.axes[2].plot(self.time[0:end_], self.vpr_hist[0:end_, 5], 'r.')
-        self.axes[2].plot(self.time[0:end_], self.svm_hist[0:end_, 5], 'g.')
-        plt_pause(0.01, self.fig)   
+            [axes.clear() for axes in self.axes]
+            self.axes[0].plot(self.time[0:end_], self.gt__hist[0:end_, 0], 'b.')
+            self.axes[0].plot(self.time[0:end_], self.vpr_hist[0:end_, 0], 'r.')
+            self.axes[0].plot(self.time[0:end_], self.svm_hist[0:end_, 0], 'g.')
+            self.axes[1].plot(self.time[0:end_], self.gt__hist[0:end_, 1], 'b.')
+            self.axes[1].plot(self.time[0:end_], self.vpr_hist[0:end_, 1], 'r.')
+            self.axes[1].plot(self.time[0:end_], self.svm_hist[0:end_, 1], 'g.')
+            self.axes[2].plot(self.time[0:end_], self.gt__hist[0:end_, 2], 'b.')
+            self.axes[2].plot(self.time[0:end_], self.vpr_hist[0:end_, 2], 'r.')
+            self.axes[2].plot(self.time[0:end_], self.svm_hist[0:end_, 2], 'g.')
+            self.axes[0].legend(handles=self._handles, loc='lower center', frameon=False, ncol=4, bbox_to_anchor=(2.0,-0.3))
+        self.axes[0].set_ylabel('x [m]', labelpad=-1)
+        self.axes[1].set_ylabel('y [m]', labelpad=-1)
+        self.axes[2].set_ylabel('yaw [m]', labelpad=-1)
+
+        plt_pause(0.01, self.fig) 
+          
 
 def do_args():
     parser = ap.ArgumentParser(prog="vpr_follower.py", 

@@ -37,8 +37,11 @@ class Main_ROS_Class(Base_ROS_Class):
 
         # Set up SVM
         self.svm                    = SVMModelProcessor(ros=True)
-        if not self.svm.load_model(self.make_svm_model_params()):
+        _model = self.svm.load_model(self.make_svm_model_params())
+        if not _model:
             raise Exception("Failed to find file with parameters matching: \n%s" % str(self.make_svm_model_params()))
+        else:
+            self.print("Model Ready (loaded: %s)." % str(_model))
         self.svm_requests           = []
 
         # flags to denest main loop:
@@ -121,8 +124,7 @@ class Main_ROS_Class(Base_ROS_Class):
         except IndexError:
             pass
         except:
-            param.revert()
-            self.print(formatException(), LogType.ERROR)
+            self.print(formatException(), LogType.DEBUG)
 
     def publish_ros_info(self, svm_z, svm_prob, svm_class, svm_factors):
         # Populate and publish SVM State details
