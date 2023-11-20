@@ -1,6 +1,6 @@
 use_sim_time: false
 vpr_nodes:
-  z_config_file_name: office_cfg
+  z_config_file_name: robot_cfg
   slam_map: s11_center_map.pcd
   simulation: false
   groundtruth: true
