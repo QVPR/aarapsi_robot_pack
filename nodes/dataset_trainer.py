@@ -82,7 +82,8 @@ class Main_ROS_Class(Base_ROS_Class):
         try:
             query           = compressed2np(req.input)
             feat_type       = enum_get(req.feat_type, FeatureType)
-            img_dims        = req.img_dims
+            assert not feat_type is None
+            img_dims        = list(req.img_dims)
             ft_qry          = self.vpr.getFeat(query, feat_type, use_tqdm=False, dims=img_dims)
             ans.output      = np_ndarray_to_uint8_list(ft_qry)
             ans.vector_dims = list(ft_qry.shape)
