@@ -10,7 +10,6 @@ from rospy_message_converter import message_converter
 from std_msgs.msg import String
 from aarapsi_robot_pack.msg import RequestSVM, ResponseSVM, Label  # Our custom structures
 
-from pyaarapsi.vpred                        import *
 from pyaarapsi.core.helper_tools            import formatException
 from pyaarapsi.core.ros_tools               import roslogger, LogType, NodeState
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
@@ -131,6 +130,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         time                        = rospy.Time.now()
         self.label.header.stamp     = time
+        self.label.stamps           = []
         self.label.stamps.append(time)
         self.label.step             = self.label.MONITOR
 
@@ -171,6 +171,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         # Predict model information, but have a try-except to catch if model is transitioning state
         predict_success = False
+        pred, zvalues, [factor1, factor2], prob = None, None, [None, None], None # Initialise variables,
         while not predict_success:
             if rospy.is_shutdown():
                 self.exit()
