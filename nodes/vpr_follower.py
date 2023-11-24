@@ -5,6 +5,7 @@ import rospy
 import numpy as np
 import argparse as ap
 import sys
+import cv2
 
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CompressedImage
@@ -17,6 +18,9 @@ from pyaarapsi.vpr_simple.vpr_helpers       import VPR_Tolerance_Mode
 from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
 from pyaarapsi.vpr_simple.svm_model_tool    import SVMModelProcessor
 from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
+from pyaarapsi.core.lightglue               import PoseEstimator
+from pyaarapsi.pathing.basic                import make_speed_array, calc_path_stats, calc_target, calc_yaw_error, calc_y_error
+from pyaarapsi.pathing.enums                import Lookahead_Mode
 
 import matplotlib
 matplotlib.use('Qt5agg')
@@ -58,6 +62,12 @@ class Main_ROS_Class(Base_ROS_Class):
         self.svm_hist               = np.zeros((100,3))
         self.time                   = np.zeros((100))
 
+        self.path_xyws              = np.array(None)
+        self.path_sum               = []
+        self.path_len               = -1
+
+        self.pose_estimator         = PoseEstimator(img_dims=(240,150), rgb=False)
+
         # flags to denest main loop:
         self.new_img                = False
         self.new_gt                 = False
@@ -82,7 +92,7 @@ class Main_ROS_Class(Base_ROS_Class):
         super().init_rospy()
         
         self.last_time              = rospy.Time.now()
-        self.img_sub                = rospy.Subscriber(self.IMG_TOPIC.get(),        CompressedImage,    self.img_cb,        queue_size=1)
+        self.img_sub                = rospy.Subscriber(self.IMG_TOPIC.get(),        CompressedImage,    self.img_cb,   queue_size=1)
         self.gt_sub                 = rospy.Subscriber(self.SLAM_ODOM_TOPIC.get(),  Odometry,           self.gt_cb,    queue_size=1)
 
     def gt_cb(self, msg: Odometry):
@@ -108,29 +118,6 @@ class Main_ROS_Class(Base_ROS_Class):
         tInd        = np.argmin(squares)
 
         return tInd
-
-    def main(self):
-        # Main loop process
-        self.set_state(NodeState.MAIN)
-        self.fig, self.axes = plt.subplots(1,3, figsize=(8,4))
-        self._handles = [   Line2D([0], [0], marker='.', label='gt',  color='b',  linewidth=0, markersize=10, markerfacecolor='b', markeredgewidth=0.3),
-                            Line2D([0], [0], marker='.', label='vpr', color='r',  linewidth=0, markersize=10, markerfacecolor='r', markeredgewidth=0.3),
-                            Line2D([0], [0], marker='.', label='svm', color='g',  linewidth=0, markersize=10, markerfacecolor='g', markeredgewidth=0.3)]
-        self.fig.subplots_adjust(bottom=0.2, wspace=0.5)
-        plt.show(block=False)
-        plt_pause(0.01, self.fig)   
-
-        while not rospy.is_shutdown():
-            try:
-                self.loop_contents()
-            except rospy.exceptions.ROSInterruptException as e:
-                pass
-            except Exception as e:
-                if self.parameters_ready:
-                    raise Exception('Critical failure. ' + formatException()) from e
-                else:
-                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
-                    rospy.sleep(0.5)
 
     def perform_vpr(self):
         ft_qry          = self.ip.getFeat(self.img, self.FEAT_TYPE.get(), use_tqdm=False, dims=self.IMG_DIMS.get())
@@ -176,6 +163,24 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.print(formatException(), LogType.DEBUG, throttle=1)
                 rospy.sleep(0.005)
         return {'pred': pred, 'zvalues': zvalues, 'factors': factors, 'prob': prob}
+    
+    def make_path(self):
+        '''
+        Generate:
+        - Zone information 
+        - Downsampled list of path points
+        - ROS structures for visualising path, speed along path, and zone boundaries
+        '''
+        assert not self.ip.dataset is None
+
+        # generate an n-row, 4 column array (x, y, yaw, speed) corresponding to each reference image (same index)
+        self.path_xyws  = np.transpose(np.stack([self.ip.dataset['dataset']['px'].flatten(), 
+                                                 self.ip.dataset['dataset']['py'].flatten(),
+                                                 self.ip.dataset['dataset']['pw'].flatten(),
+                                                 make_speed_array(self.ip.dataset['dataset']['pw'].flatten())]))
+        
+        # measure path details:
+        self.path_sum, self.path_len     = calc_path_stats(self.path_xyws)
 
     def loop_contents(self):
         if not (self.main_ready and self.parameters_ready): # denest
@@ -183,55 +188,35 @@ class Main_ROS_Class(Base_ROS_Class):
             rospy.sleep(0.005)
             return
 
+        if not (self.new_gt and self.new_img): # denest
+            self.print("Waiting.", LogType.DEBUG, throttle=60) # print every 60 seconds
+            rospy.sleep(0.005)
+            return
+
         self.rate_obj.sleep()
+        
+        self.new_gt         = False
+        self.new_img        = False
 
-        if self.new_gt and self.new_img:
-            vpr_result          = self.perform_vpr()
-            svm_result          = self.perform_svm(vpr_result)
-            self.new_gt         = False
-            self.new_img        = False
+        vpr_result          = self.perform_vpr()
+        svm_result          = self.perform_svm(vpr_result)
 
-            self.gt__hist = np.roll(self.gt__hist,  1, 0)
-            self.vpr_hist = np.roll(self.vpr_hist,  1, 0)
-            self.svm_hist = np.roll(self.svm_hist,  1, 0)
-            self.time     = np.roll(self.time,      1, 0)
+    def main(self):
+        # Main loop process
+        self.set_state(NodeState.MAIN)
+        self.make_path()
 
-            self.time[0]  = rospy.Time.now().to_sec()
-
-            self.gt__hist[0, :] = self.gt
-            self.vpr_hist[0, 0:3] = self.vpr_ego
-            if svm_result['pred']:
-                self.svm_hist[0, 0:3] = self.vpr_ego
-            else:
-                self.svm_hist[0, :] = self.svm_hist[1, :]
-            
-            self.vpr_hist[0, -1] = angle_wrap(self.vpr_hist[0, -1],'RAD')
-            self.svm_hist[0, -1] = angle_wrap(self.svm_hist[0, -1],'RAD')
-
+        while not rospy.is_shutdown():
             try:
-                end_ = np.where(self.time==0)[0][0]
-                if end_ == 0:
-                    return
-            except IndexError:
-                end_ = None
-
-            [axes.clear() for axes in self.axes]
-            self.axes[0].plot(self.time[0:end_], self.gt__hist[0:end_, 0], 'b.')
-            self.axes[0].plot(self.time[0:end_], self.vpr_hist[0:end_, 0], 'r.')
-            self.axes[0].plot(self.time[0:end_], self.svm_hist[0:end_, 0], 'g.')
-            self.axes[1].plot(self.time[0:end_], self.gt__hist[0:end_, 1], 'b.')
-            self.axes[1].plot(self.time[0:end_], self.vpr_hist[0:end_, 1], 'r.')
-            self.axes[1].plot(self.time[0:end_], self.svm_hist[0:end_, 1], 'g.')
-            self.axes[2].plot(self.time[0:end_], self.gt__hist[0:end_, 2], 'b.')
-            self.axes[2].plot(self.time[0:end_], self.vpr_hist[0:end_, 2], 'r.')
-            self.axes[2].plot(self.time[0:end_], self.svm_hist[0:end_, 2], 'g.')
-            self.axes[0].legend(handles=self._handles, loc='lower center', frameon=False, ncol=4, bbox_to_anchor=(2.0,-0.3))
-        self.axes[0].set_ylabel('x [m]', labelpad=-1)
-        self.axes[1].set_ylabel('y [m]', labelpad=-1)
-        self.axes[2].set_ylabel('yaw [m]', labelpad=-1)
-
-        plt_pause(0.01, self.fig) 
-          
+                self.loop_contents()
+            except rospy.exceptions.ROSInterruptException as e:
+                pass
+            except Exception as e:
+                if self.parameters_ready:
+                    raise Exception('Critical failure. ' + formatException()) from e
+                else:
+                    self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
+                    rospy.sleep(0.5)
 
 def do_args():
     parser = ap.ArgumentParser(prog="vpr_follower.py", 
