@@ -76,6 +76,7 @@ add_message_files(
   ResponseDataset.msg
   ResponseSVM.msg
   RobotDetails.msg
+  SpeedCommand.msg
   xyw.msg
 )
 
