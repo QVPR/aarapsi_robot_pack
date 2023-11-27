@@ -42,9 +42,9 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_vars(self):
         super().init_vars()
 
-        self.img            = None
-        self.gt_odom        = None
-        self.robot_odom     = None
+        self.img            = CompressedImage()
+        self.gt_odom        = Odometry()
+        self.robot_odom     = Odometry()
         self.new_img        = False
         self.new_gt_odom    = False
         self.new_robot_odom = False
@@ -108,7 +108,7 @@ class Main_ROS_Class(Base_ROS_Class):
         msg_to_pub.gt_ego           = xyw(*pose2xyw(self.gt_odom.pose.pose))
         msg_to_pub.robot_ego        = xyw(*pose2xyw(self.robot_odom.pose.pose))
         msg_to_pub.query_image      = self.img
-        msg_to_pub.stamps.append(self.time)
+        msg_to_pub.stamps           = [self.time]
         msg_to_pub.step             = msg_to_pub.DATA
         msg_to_pub.id               = int((1 + np.random.rand()) * 100000000000)
         self.pub.publish(msg_to_pub)
