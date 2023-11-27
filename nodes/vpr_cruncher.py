@@ -106,7 +106,6 @@ class Main_ROS_Class(Base_ROS_Class):
         except IndexError:
             pass
         except:
-            param.revert()
             self.print(formatException(), LogType.ERROR)
 
     def data_callback(self, msg: Label):
@@ -130,17 +129,17 @@ class Main_ROS_Class(Base_ROS_Class):
             dvc_norm = dvc/np.max(dvc)
             spd_x_dvc = ((1-self.DVC_WEIGHT.get())*spd_norm**2 + (self.DVC_WEIGHT.get())*dvc_norm) # TODO: vary bias with velocity, weighted sum
 
-            mInd = np.argmin(spd_x_dvc)
+            mInd = int(np.argmin(spd_x_dvc))
             return mInd, spd_x_dvc
         else:
-            mInd = np.argmin(dvc)
+            mInd = int(np.argmin(dvc))
             return mInd, dvc
     
     def getTrueInd(self):
     # Compare measured odometry to reference odometry and find best match
         squares = np.square(np.array(self.ip.dataset['dataset']['px']) - self.label.gt_ego.x) + \
                             np.square(np.array(self.ip.dataset['dataset']['py']) - self.label.gt_ego.y)  # no point taking the sqrt; proportional
-        trueInd = np.argmin(squares)
+        trueInd = int(np.argmin(squares))
 
         return trueInd
 
@@ -149,7 +148,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         time                        = rospy.Time.now()
         self.label.header.stamp     = time
-        self.label.stamps.append(time)
+        self.label.stamps.append(time) #type: ignore
         self.label.step             = self.label.CRUNCHER
 
         self.label.vpr_ego          = xyw(*self.vpr_ego)
@@ -173,9 +172,6 @@ class Main_ROS_Class(Base_ROS_Class):
         self.vpr_label_pub.publish(self.label) # label publisher
 
     def extract(self, query: CompressedImage, feat_type: FeatureType, img_dims: list):
-        if not self.main_ready:
-            return
-        
         if self.EXTRACT_SRV.get():
             requ            = DoExtractionRequest()
             requ.feat_type  = enum_name(feat_type)
@@ -223,7 +219,7 @@ class Main_ROS_Class(Base_ROS_Class):
             self.print('Service not reachable; is dataset_trainer overloaded? Skipping this iteration...', LogType.WARN, throttle=2)
             return
         
-        matchInd, dvc   = self.getMatchInd(ft_qry) # Find match
+        matchInd, dvc   = self.getMatchInd(ft_qry) #type: ignore # Find match
         self.vpr_ego    = [self.ip.dataset['dataset']['px'][matchInd], self.ip.dataset['dataset']['py'][matchInd], self.ip.dataset['dataset']['pw'][matchInd]]
         self.ego_known  = True
         trueInd         = self.getTrueInd() # find correct match based on shortest difference to measured odometry
@@ -243,10 +239,11 @@ class Main_ROS_Class(Base_ROS_Class):
             tolError = np.abs(matchInd - trueInd)
         else:
             raise Exception("Error: Unknown tolerance mode.")
+        
         if tolError < self.TOL_THRES.get():
-            tolState = 1
+            tolState = True
         else:
-            tolState = 0
+            tolState = False
         
         # Make ROS messages
         self.publish_ros_info(trueInd, matchInd, dvc, tolState, tolError, tolMode)

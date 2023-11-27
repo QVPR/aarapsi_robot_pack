@@ -130,8 +130,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         time                        = rospy.Time.now()
         self.label.header.stamp     = time
-        self.label.stamps           = []
-        self.label.stamps.append(time)
+        self.label.stamps.append(time) #type: ignore
         self.label.step             = self.label.MONITOR
 
         self.label.svm_prob	        = svm_prob # Continuous monitor state estimate 
