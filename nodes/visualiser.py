@@ -263,10 +263,10 @@ class Main_ROS_Class(Base_ROS_Class):
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width * 0.75, box.height])
         L = ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), frameon=False)
-        plt.setp(L.texts, family='monospace')
+        plt.setp(L.texts, family='monospace') # type: ignore
         fig.canvas.draw()
 
-        plot_raw_flat   = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        plot_raw_flat   = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8) # type: ignore
         plot_raw_pad    = plot_raw_flat.reshape(fig.canvas.get_width_height()[::-1] + (3,))
         plot_raw        = plot_raw_pad[20:-20, 20:]
         plot            = convert_img_to_uint8(plot_raw, resize=(500, 250), dstack=(not len(qry_raw.shape) == 3))
