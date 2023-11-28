@@ -24,7 +24,7 @@ vpr_nodes:
   - 64
   - 64
   img_hfov: 72.0
-  feature_type: RAW
+  feature_type: PATCHNORM
   tolerance:
     mode: METRE_LINE
     threshold: 0.5
@@ -32,7 +32,7 @@ vpr_nodes:
   ref:
     bag_name: sim_path
     filters: ''
-    sample_rate: 10.0
+    sample_rate: 0.5
 
   svm:
     factors:
