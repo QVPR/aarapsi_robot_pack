@@ -11,7 +11,7 @@ import cv2
 from std_msgs.msg           import String, ColorRGBA, Header
 from geometry_msgs.msg      import Point, Vector3
 from visualization_msgs.msg import MarkerArray, Marker
-from aarapsi_robot_pack.msg import ControllerStateInfo
+from aarapsi_robot_pack.msg import Label
 from sensor_msgs.msg        import CompressedImage
 
 from pyaarapsi.core.argparse_tools          import check_positive_int, check_bool
@@ -64,12 +64,13 @@ class Main_ROS_Class(Base_ROS_Class):
         self.good_icon          = cv2.resize(cv2.imread(self.icon_path + "/tick.png", cv2.IMREAD_UNCHANGED),  (self.icon_size,)*2, interpolation = cv2.INTER_AREA)
         self.poor_icon          = cv2.resize(cv2.imread(self.icon_path + "/cross.png", cv2.IMREAD_UNCHANGED), (self.icon_size,)*2, interpolation = cv2.INTER_AREA)
 
-        self.control_msg        = None
-        self.new_control_msg    = False
+        self.state_msg          = Label()
+        self.new_state_msg      = False
 
         self.last_ego           = [0.0, 0.0, 0.0]
 
         self.markers            = MarkerArray()
+        self.markers.markers    = []
         self.marker_id          = 0
 
         self.colour_good        = ColorRGBA(r=0.1, g=0.9, b=0.2, a=0.80)
@@ -90,35 +91,29 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_rospy(self):
         super().init_rospy()
         
-        self.control_sub     = rospy.Subscriber(self.namespace + "/path_follower/info", ControllerStateInfo, self.control_callback, queue_size=1)
+        self.state_sub      = rospy.Subscriber(self.namespace + "/state", Label, self.state_callback, queue_size=1)
         self.confidence_pub  = self.add_pub(self.namespace + '/confidence',             MarkerArray,                                queue_size=1)
         self.display_pub     = self.add_pub(self.namespace + '/display/compressed',     CompressedImage,                            queue_size=1)
 
-    def control_callback(self, msg: ControllerStateInfo):
-        self.control_msg     = msg
-        self.new_control_msg = True
+    def state_callback(self, msg: Label):
+        self.state_msg     = msg
+        self.new_state_msg = True
 
         # Generate / record statistics:
-        self.gt_ego             = [self.control_msg.group.gt_ego.x,  self.control_msg.group.gt_ego.y,  self.control_msg.group.gt_ego.w]
-        self.vpr_ego            = [self.control_msg.group.vpr_ego.x, self.control_msg.group.vpr_ego.y, self.control_msg.group.vpr_ego.w]
+        self.gt_ego             = [self.state_msg.gt_ego.x,  self.state_msg.gt_ego.y,  self.state_msg.gt_ego.w]
+        self.vpr_ego            = [self.state_msg.vpr_ego.x, self.state_msg.vpr_ego.y, self.state_msg.vpr_ego.w]
         self.err_ego            = [self.gt_ego[0] - self.vpr_ego[0], self.gt_ego[1] - self.vpr_ego[1], angle_wrap(self.gt_ego[2] - self.vpr_ego[2], 'RAD')]
 
-        self.gt_ind             = self.control_msg.group.trueId
-        self.vpr_ind            = self.control_msg.group.matchId
+        self.gt_ind             = self.state_msg.truth_index
+        self.vpr_ind            = self.state_msg.match_index
         self.err_ind            = abs(self.gt_ind - self.vpr_ind)
 
-        self.in_gt_tolerance    = self.control_msg.group.gt_state > 0
-        self.gt_error           = self.control_msg.group.gt_error
-        self.in_svm_tolerance   = self.control_msg.group.mStateBin
-        self.command_mode       = self.control_msg.group.command_mode
-        self.safety_mode        = self.control_msg.group.safety_mode
+        self.in_gt_tolerance    = self.state_msg.gt_class
+        self.gt_error           = self.state_msg.gt_error
+        self.in_svm_tolerance   = self.state_msg.svm_class
 
-        self.svm_prob           = self.control_msg.group.prob
-        self.svm_zvalue         = self.control_msg.group.mState
-
-        self.target_yaw         = self.control_msg.group.target_yaw
-        self.current_yaw        = self.control_msg.group.current_yaw
-        self.err_yaw            = angle_wrap(self.gt_ego[2] - self.current_yaw)
+        self.svm_prob           = self.state_msg.svm_prob
+        self.svm_zvalue         = self.state_msg.svm_z
 
     def update_VPR(self):
         dataset_dict = self.make_dataset_dict()
@@ -153,7 +148,6 @@ class Main_ROS_Class(Base_ROS_Class):
                 except IndexError:
                     pass
                 except:
-                    param.revert()
                     self.print(formatException(), LogType.ERROR)
         else:
             self.print("Change to untracked parameter [%s]; ignored." % msg.data, LogType.DEBUG)
@@ -208,8 +202,9 @@ class Main_ROS_Class(Base_ROS_Class):
 
         new_marker.pose.position        = Point(x=self.gt_ego[0], y=self.gt_ego[1])
         new_marker.pose.orientation     = q_from_yaw(self.gt_ego[2])
-        self.markers.markers.append(new_marker)
 
+        assert not self.markers.markers is None
+        self.markers.markers.append(new_marker)
         self.marker_id = (self.marker_id + 1) % self.NUM_MARKERS.get()
         while len(self.markers.markers) > self.NUM_MARKERS.get():
             self.markers.markers.pop(0)
@@ -254,7 +249,7 @@ class Main_ROS_Class(Base_ROS_Class):
 
         ref_match_raw   = self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.vpr_ind]
         ref_true_raw    = self.ip.dataset['dataset'][enum_name(self.FEAT_TYPE.get())][self.gt_ind]
-        qry_raw         = compressed2np(self.control_msg.query_image)
+        qry_raw         = compressed2np(self.state_msg.query_image)
         ref_match       = convert_img_to_uint8(ref_match_raw,   resize=(250,250), dstack=(not len(ref_match_raw.shape) == 3))
         ref_true        = convert_img_to_uint8(ref_true_raw,    resize=(250,250), dstack=(not len(ref_true_raw.shape) == 3))
         qry             = convert_img_to_uint8(qry_raw,         resize=(250,250), dstack=(not len(qry_raw.shape) == 3))
@@ -306,12 +301,12 @@ class Main_ROS_Class(Base_ROS_Class):
         self.display_pub.publish(ros_msg)
 
     def loop_contents(self):
-        if not (self.new_control_msg):
+        if not (self.new_state_msg):
             self.print("Waiting.", LogType.DEBUG, throttle=60) # print every 60 seconds
             rospy.sleep(0.005)
             return # denest
         self.rate_obj.sleep()
-        self.new_control_msg = False
+        self.new_state_msg = False
 
         self.make_control_visualisation()
         self.make_display_feed()
