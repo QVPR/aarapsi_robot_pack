@@ -136,7 +136,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.label.svm_prob	        = svm_prob # Continuous monitor state estimate 
         self.label.svm_z	        = svm_z # Monitor probability estimate
         self.label.svm_class        = svm_class# Binary monitor state estimate
-        self.label.svm_factors      = svm_factors
+        self.label.svm_factors      = list(svm_factors)
 
         self.svm_state_pub.publish(self.label)
 
@@ -170,13 +170,13 @@ class Main_ROS_Class(Base_ROS_Class):
 
         # Predict model information, but have a try-except to catch if model is transitioning state
         predict_success = False
-        pred, zvalues, [factor1, factor2], prob = None, None, [None, None], None # Initialise variables,
+        pred, zvalues, factors, prob = None, None, None, None # Initialise variables,
         while not predict_success:
             if rospy.is_shutdown():
                 self.exit()
             try:
                 rXY = np.stack([self.ip.dataset['dataset']['px'], self.ip.dataset['dataset']['py']], 1)
-                (pred, zvalues, [factor1, factor2], prob) = self.svm.predict(self.label.distance_vector, self.label.match_index, rXY, init_pos=self.state_hist[1, 0:2])
+                (pred, zvalues, [factors], prob) = self.svm.predict(np.array(self.label.distance_vector), self.label.match_index, rXY, init_pos=self.state_hist[1, 0:2])
                 predict_success = True
             except:
                 self.print("Predict failed. Trying again ...", LogType.WARN, throttle=1)
@@ -184,7 +184,7 @@ class Main_ROS_Class(Base_ROS_Class):
                 rospy.sleep(0.005)
 
         # Make ROS messages
-        self.publish_ros_info(zvalues, prob, pred, [factor1, factor2])
+        self.publish_ros_info(zvalues, prob, pred, factors)
 
 def do_args():
     parser = ap.ArgumentParser(prog="vpr_monitor.py", 

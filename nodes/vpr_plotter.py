@@ -78,18 +78,17 @@ class Main_ROS_Class(Base_ROS_Class):
         except IndexError:
             pass
         except:
-            param.revert()
             self.print(formatException(), LogType.ERROR)
 
     def field_callback(self, msg: ImageDetails):
-    # Store new SVM field
+     # Store new SVM field
         self.svm_field_msg  = msg
         self.update_contour = self.svm_field_msg.data.update
 
     def state_callback(self, msg: Label):
-    # Store new label message and act as drop-in replacement for odom_callback + img_callback
+        # Store new label message and act as drop-in replacement for odom_callback + img_callback
         self.label              = msg
-        self.new_label          = True
+        self.new_state          = True
 
     def exit(self):
         global server
