@@ -5,14 +5,16 @@
 <launch>
     <arg name="load_params"             default="false"/>
     
-    <arg name="main_rate"               default="12.0"/>
+    <arg name="rate"                    default="12.0"/>
     <arg name="anon"                    default="True"/>
     <arg name="reset"                   default="True"/>
+    <arg name="follow_simple"           default="True"/>
 
     <arg name="namespace"               default="/vpr_nodes"/>
 
     <arg name="log_level"               default="2"/>
     <arg name="param_file"              default="sim_cfg.yaml"/>
+    <arg name="ID"                      default="0"/>
 
     <group if="$(arg load_params)">
         <!-- Load in params; must be done outside of a namespace -->
@@ -23,7 +25,9 @@
 
         <!-- Path Follower Node: -->
         <node pkg="aarapsi_robot_pack" type="path_follower.py" name="path_follower" output="screen" 
-            args="-r $(arg main_rate) -N path_follower -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 9">
+            args="-r $(arg rate) -N path_follower -a $(arg anon) 
+                  -n $(arg namespace) -R $(arg reset) -V $(arg log_level) 
+                  -s $(arg follow_simple) -ID $(arg ID)">
         </node>
 
     </group>

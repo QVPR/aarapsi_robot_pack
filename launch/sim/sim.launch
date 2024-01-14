@@ -1,20 +1,29 @@
 <?xml version="1.0"?>
 <launch>
-    <arg name="launch_slam"             default="true" />
-    <arg name="launch_feedfuse"         default="true" />
-    <arg name="launch_rviz"             default="true" />
-    <arg name="joystick"                default="true" />
-    <arg name="use_sim_time"            default="true" />
-    <arg name="gui"                     default="true" />
-    <arg name="headless"                default="false"/>
+    <arg name="launch_slam"             default="True" />
+    <arg name="launch_feedfuse"         default="True" />
+    <arg name="launch_rviz"             default="True" />
+    <arg name="launch_init"             default="False" />
+    <arg name="launch_core"             default="False"/> <!-- Typically we do this offboard, but for onboard solutions set to true -->
+    <arg name="launch_auto"             default="False"/>
+    <arg name="joystick"                default="True" />
+    <arg name="use_sim_time"            default="True" />
+    <arg name="gui"                     default="True" />
+    <arg name="headless"                default="False"/>
     <arg name="param_file"              default="sim_cfg.yaml"/>
 
+    <arg name="use_gpu"                 default="True"/>
     <arg name="namespace"               default="/vpr_nodes"/>
     <arg name="anon"                    default="True"/>
     <arg name="reset"                   default="True"/>
     <arg name="log_level"               default="2"/>
+    <arg name="follow_simple"           default="True"/>
+    <arg name="load_params"             default="True"/>
 
-    <node pkg="aarapsi_robot_pack" type="gitpub" name="gitpub" output="screen"/>
+    <!-- Load in params; must be done outside of a namespace -->
+    <group if="$(arg load_params)">
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
+    </group>
 
     <!-- Load Jackal's description, controllers, and teleop nodes. -->
     <param name="robot_description"
@@ -35,19 +44,50 @@
 
     <node if="$(arg launch_rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find aarapsi_robot_pack)/rviz/sim_control.rviz" />
 
-    <include if="$(arg launch_slam)" file="$(find aarapsi_robot_pack)/launch/slam.launch">
-        <arg name="param_file"            value="sim_cfg.yaml" />
-        <arg name="load_params"           value="true" />
-        <arg name="log_level"             value="$(arg log_level)"/>
-        <arg name="reset"                 value="$(arg reset)"/>
-    </include>
-
-    <group unless="$(arg launch_slam)">
-        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
-    </group>
-
     <node if="$(arg launch_feedfuse)" name="multicam_fusion" pkg="aarapsi_robot_pack" type="multicam_fusion.py" output="screen"
         args="
                 -r 15.0 -N multicam_fusion -n $(arg namespace) -a $(arg anon) 
                 -V $(arg log_level) -R $(arg reset)"/>
+    <node pkg="aarapsi_robot_pack" type="gitpub" name="gitpub" output="screen"/>
+
+    <group ns="$(arg namespace)">
+        <!-- SLAM Nodes: -->
+        <group if="$(arg launch_slam)">
+            <include file="$(find aarapsi_robot_pack)/launch/slam.launch">
+                <arg name="param_file"          value="$(arg param_file)"/>
+                <arg name="log_level"           value="$(arg log_level)"/>
+                <arg name="reset"               value="$(arg reset)"/>
+            </include>
+        </group>
+
+        <!-- Web Server, Parameter Watcher, Image+Odom Aggregator, Image Throttle Nodes: -->
+        <group if="$(arg launch_init)">
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_initialisation.launch">
+                <arg name="param_file"          value="$(arg param_file)"/>
+                <arg name="log_level"           value="$(arg log_level)"/>
+                <arg name="reset"               value="$(arg reset)"/>
+            </include>
+        </group>
+
+        <!-- Core Pipeline Nodes: -->
+        <group if="$(arg launch_core)">
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/vpr_pipeline.launch">
+                <arg name="launch_init"         value="false"/>
+                <arg name="use_gpu"             value="$(arg use_gpu)"/>
+                <arg name="param_file"          value="$(arg param_file)"/>
+                <arg name="log_level"           value="$(arg log_level)"/>
+                <arg name="reset"               value="$(arg reset)"/>
+            </include>
+        </group>
+        
+        <!-- Autonomous Nodes: -->
+        <group if="$(arg launch_auto)">
+            <include file="$(find aarapsi_robot_pack)/launch/vpr/nodes/path_follower.launch">
+                <arg name="param_file"          value="$(arg param_file)"/>
+                <arg name="log_level"           value="$(arg log_level)"/>
+                <arg name="reset"               value="$(arg reset)"/>
+                <arg name="follow_simple"       value="$(arg follow_simple)"/>
+            </include>
+        </group>
+    </group>
 </launch>

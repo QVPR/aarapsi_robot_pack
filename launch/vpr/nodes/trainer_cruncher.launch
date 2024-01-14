@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!-- 
+    dataset_trainer + vpr_cruncher launch file
+ -->
+<launch>
+    <arg name="launch_cruncher"         default="true"/>
+    <arg name="launch_trainer"          default="true"/>
+
+    <arg name="use_gpu"                 default="True"/>
+
+    <arg name="load_params"             default="false"/>
+
+    <arg name="rate"                    default="12.0"/>
+    <arg name="anon"                    default="True"/>
+    <arg name="reset"                   default="True"/>
+
+    <arg name="namespace"               default="/vpr_nodes"/>
+
+    <arg name="log_level"               default="2"/>
+    <arg name="param_file"              default="sim_cfg.yaml"/>
+    <arg name="tID"                     default="0"/>
+    <arg name="cID"                     default="1"/>
+
+    <group if="$(arg load_params)">
+        <!-- Load in params; must be done outside of a namespace -->
+        <rosparam command="load" file="$(find aarapsi_robot_pack)/cfg/$(arg param_file)"/> 
+    </group>
+    
+    <group ns="$(arg namespace)">
+
+        <!-- Cruncher's Trainer Node: -->
+        <node if="$(arg launch_trainer)" pkg="aarapsi_robot_pack" type="dataset_trainer.py" name="dataset_trainer" output="screen" 
+            args="-G $(arg use_gpu) 
+                    -r $(arg rate) -N dataset_trainer -a $(arg anon) -n $(arg namespace)
+                    -V $(arg log_level) -R $(arg reset) -ID $(arg tID)">
+        </node>
+
+        <!-- Cruncher Node: -->
+        <node if="$(arg launch_cruncher)" pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
+            args="
+                    -r $(arg rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) 
+                    -V $(arg log_level) -R $(arg reset) -ID $(arg cID)">
+        </node>
+    </group>
+
+</launch>

@@ -1,8 +1,10 @@
 <?xml version="1.0"?>
 <!-- 
-    vpr_cruncher launch file
+    dataset_trainer + vpr_cruncher launch file
  -->
 <launch>
+
+    <arg name="use_gpu"                 default="True"/>
 
     <arg name="load_params"             default="false"/>
 
@@ -23,10 +25,10 @@
     
     <group ns="$(arg namespace)">
 
-        <!-- Cruncher Node: -->
-        <node pkg="aarapsi_robot_pack" type="vpr_cruncher.py" name="vpr_cruncher" output="screen" 
-            args="
-                    -r $(arg rate) -N vpr_cruncher -a $(arg anon) -n $(arg namespace) 
+        <!-- Cruncher's Trainer Node: -->
+        <node pkg="aarapsi_robot_pack" type="dataset_trainer.py" name="dataset_trainer" output="screen" 
+            args="-G $(arg use_gpu) 
+                    -r $(arg rate) -N dataset_trainer -a $(arg anon) -n $(arg namespace)
                     -V $(arg log_level) -R $(arg reset) -ID $(arg ID)">
         </node>
     </group>

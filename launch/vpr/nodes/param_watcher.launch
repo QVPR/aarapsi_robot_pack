@@ -5,7 +5,7 @@
 <launch>
     <arg name="load_params"             default="false"/>
     
-    <arg name="throttle_rate"           default="10.0"/>
+    <arg name="rate"                    default="15.0"/>
     <arg name="anon"                    default="True"/>
     <arg name="reset"                   default="True"/>
 
@@ -13,6 +13,7 @@
 
     <arg name="log_level"               default="2"/>
     <arg name="param_file"              default="sim_cfg.yaml"/>
+    <arg name="ID"                      default="0"/>
 
     <group if="$(arg load_params)">
         <!-- Load in params; must be done outside of a namespace -->
@@ -23,7 +24,9 @@
 
         <!-- Param Watcher Node: -->
         <node pkg="aarapsi_robot_pack" type="param_watcher.py" name="param_watcher" output="screen"
-                args="-V $(arg log_level) -R $(arg reset) -ID 1"/>
+                args="
+                        -N param_watcher -r $(arg rate) -a $(arg anon)
+                        -V $(arg log_level) -R $(arg reset) -ID $(arg ID)" />
 
     </group>
 

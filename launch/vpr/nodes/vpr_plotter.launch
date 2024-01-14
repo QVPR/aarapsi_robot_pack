@@ -15,6 +15,7 @@
     <arg name="plotter_address"         default="0.0.0.0"/>
 
     <arg name="log_level"               default="2"/>
+    <arg name="ID"                      default="0"/>
 
     <group if="$(arg load_params)">
         <!-- Load in params; must be done outside of a namespace -->
@@ -27,7 +28,7 @@
         <node pkg="aarapsi_robot_pack" type="vpr_plotter.py" name="vpr_plotter" output="screen" 
             args="-P $(arg plotter_port) -A $(arg plotter_address) 
                     -r $(arg main_rate) -N vpr_plotter -a $(arg anon) -n $(arg namespace) 
-                    -V $(arg log_level) -R $(arg reset) -ID 7">
+                    -V $(arg log_level) -R $(arg reset) -ID $(arg ID)">
         </node>
 
     </group>

@@ -3,12 +3,10 @@
     svm_trainer + vpr_monitor launch file
  -->
 <launch>
-    <arg name="launch_monitor"          default="true"/>
-    <arg name="launch_trainer"          default="true"/>
 
     <arg name="load_params"             default="false"/>
     
-    <arg name="main_rate"               default="12.0"/>
+    <arg name="rate"                    default="12.0"/>
     <arg name="anon"                    default="True"/>
     <arg name="reset"                   default="True"/>
 
@@ -16,6 +14,7 @@
 
     <arg name="log_level"               default="2"/>
     <arg name="param_file"              default="sim_cfg.yaml"/>
+    <arg name="ID"                      default="0"/>
 
     <group if="$(arg load_params)">
         <!-- Load in params; must be done outside of a namespace -->
@@ -23,14 +22,10 @@
     </group>
     
     <group ns="$(arg namespace)">
-        <!-- Monitor's Trainer Node: -->
-        <node if="$(arg launch_trainer)" pkg="aarapsi_robot_pack" type="svm_trainer.py" name="svm_trainer" output="screen" 
-            args="-r $(arg main_rate) -N svm_trainer -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 6">
-        </node>
 
         <!-- Monitor Node: -->
-        <node if="$(arg launch_monitor)" pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
-            args="-r $(arg main_rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID 7">
+        <node pkg="aarapsi_robot_pack" type="vpr_monitor.py" name="vpr_monitor" output="screen" 
+            args="-r $(arg rate) -N vpr_monitor -a $(arg anon) -n $(arg namespace) -R $(arg reset) -V $(arg log_level) -ID $(arg ID)">
         </node>
     </group>
 
