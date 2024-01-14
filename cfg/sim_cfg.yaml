@@ -31,8 +31,8 @@ vpr_nodes:
 
   ref:
     bag_name: sim_path
-    filters: ''
-    sample_rate: 0.5
+    filters: '{"distance": 2.0}'
+    sample_rate: 5.0
 
   svm:
     factors:
@@ -41,11 +41,11 @@ vpr_nodes:
     qry:
       bag_name: run5_ccw
       filters: ''
-      sample_rate: 10.0
+      sample_rate: 5.0
     ref:
       bag_name: run1_fix
       filters: ''
-      sample_rate: 10.0
+      sample_rate: 5.0
     tolerance:
       mode: DISTANCE
       threshold: 0.5
