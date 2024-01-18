@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
+import copy
 import numpy as np
 import argparse as ap
 import sys
@@ -8,12 +9,15 @@ from enum import Enum
 
 import scipy.stats as st
 
-from pyaarapsi.core.ros_tools               import NodeState, roslogger, LogType
-from pyaarapsi.core.helper_tools            import formatException, p2p_dist_2d, plt_pause
-from pyaarapsi.core.vars                    import C_I_GREEN, C_I_YELLOW, C_I_RED, C_RESET
-from pyaarapsi.vpr_classes.base             import Base_ROS_Class, base_optional_args
-from pyaarapsi.vpr_simple.vpr_dataset_tool  import VPRDatasetProcessor
-from aarapsi_robot_pack.msg         import Label, ControllerStateInfo, SpeedCommand
+from pyaarapsi.core.ros_tools                   import NodeState, roslogger, LogType
+from pyaarapsi.core.helper_tools                import formatException, p2p_dist_2d, plt_pause, m2m_dist
+from pyaarapsi.core.vars                        import C_I_GREEN, C_I_YELLOW, C_I_RED, C_I_BLUE, C_RESET
+from pyaarapsi.core.argparse_tools              import check_positive_float, check_string
+from pyaarapsi.vpr_classes.base                 import Base_ROS_Class, base_optional_args
+from pyaarapsi.vpr_classes.dataset_loader_base  import Dataset_Loader
+from pyaarapsi.vpr_simple.vpr_dataset_tool      import VPRDatasetProcessor, FeatureType
+from pyaarapsi.pathing.basic                    import calc_path_stats, make_speed_array
+from aarapsi_robot_pack.msg                     import Label, ControllerStateInfo, SpeedCommand
 
 import matplotlib.pyplot as plt
 
@@ -30,13 +34,18 @@ class Vehicle_Mode(Enum):
     FORWARD = 1
 
 class Stage(Enum):
-    S0  = 0
-    S1  = 1
-    S2  = 2
-    S3  = 3
-    S4  = 4
-    S5  = 5
-    END = 10
+    INIT    = -1
+    S0      = 0
+    S1      = 1
+    S2      = 2
+    S3      = 3
+    S4      = 4
+    S5      = 5
+    END     = 10
+
+def shortest_index_distance(_start, _end, _length):
+    _options = [((_end-_start)-_length), ((_end-_start)-_length)%_length]
+    return _options[np.argmin(np.abs(_options))]
 
 def find_percentile_conf(length: int, percentile: float, confidence: float):
     assert (length > 0) and isinstance(length, int) 
@@ -56,7 +65,7 @@ def find_percentile_conf(length: int, percentile: float, confidence: float):
             break
     return ((_lower, _upper), _conf, _mid-_lower==_upper-_mid)
 
-class Main_ROS_Class(Base_ROS_Class):
+class Main_ROS_Class(Dataset_Loader):
     def __init__(self, **kwargs):
         super().__init__(**kwargs, throttle=30)
 
@@ -69,6 +78,9 @@ class Main_ROS_Class(Base_ROS_Class):
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
 
+        self.PATH_SAMPLE_RATE       = self.params.add(self.namespace + "/path/sample_rate",         5.0,                    check_positive_float,                       force=False) # Hz
+        self.PATH_FILTERS           = self.params.add(self.namespace + "/path/filters",             "{}",                   check_string,                               force=False)
+        
     def init_vars(self):
         super().init_vars()
 
@@ -81,6 +93,7 @@ class Main_ROS_Class(Base_ROS_Class):
         self.new_info   = False
 
         self.mode       = Vehicle_Mode.STOPPED
+        self.stage      = Stage.INIT
 
         self.odometer   = 0.0
         self.recent_odo = 0.0
@@ -95,7 +108,14 @@ class Main_ROS_Class(Base_ROS_Class):
         self.___dynth   = []
 
         # Initialise dataset processor:
-        self.ref_ip     = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=False, ros=True, printer=self.print)
+        self.ref_ip             = VPRDatasetProcessor(None, try_gen=False, ros=True, printer=self.print)
+        self.path_ip            = VPRDatasetProcessor(None, try_gen=False, ros=True, printer=self.print) 
+
+        self.ref_info                   = self.make_dataset_dict() # Get VPR pipeline's dataset dictionary
+        self.ref_info['ft_types']       = [FeatureType.RAW.name] # Ensure same as path_follower
+        self.path_info                  = copy.deepcopy(self.ref_info)
+        self.path_info['sample_rate']   = self.PATH_SAMPLE_RATE.get()
+        self.path_info['filters']       = self.PATH_FILTERS.get()
 
     def init_rospy(self):
         super().init_rospy()
@@ -124,12 +144,39 @@ class Main_ROS_Class(Base_ROS_Class):
         self.info      = msg
         self.new_info  = True
 
+    def make_path(self):
+        '''
+        Generate:
+        - Downsampled list of path points
+        '''
+        assert not self.path_ip.dataset is None
+        # generate an n-row, 4 column array (x, y, yaw, speed) corresponding to each path node / reference image (same index)
+        self.path_xyws  = np.transpose(np.stack([self.path_ip.dataset['dataset']['px'].flatten(), 
+                                                 self.path_ip.dataset['dataset']['py'].flatten(),
+                                                 self.path_ip.dataset['dataset']['pw'].flatten(),
+                                                 make_speed_array(self.path_ip.dataset['dataset']['pw'].flatten())]))
+        self.ref_xyws  = np.transpose(np.stack([self.ref_ip.dataset['dataset']['px'].flatten(), 
+                                                 self.ref_ip.dataset['dataset']['py'].flatten(),
+                                                 self.ref_ip.dataset['dataset']['pw'].flatten(),
+                                                 make_speed_array(self.ref_ip.dataset['dataset']['pw'].flatten())]))
+        
+        # generate path / ref stats:
+        self.path_sum, self.path_len     = calc_path_stats(self.path_xyws)
+        self.ref_sum, self.ref_len       = calc_path_stats(self.ref_xyws)
+
     def main(self):
         # Main loop process
         self.set_state(NodeState.MAIN)
 
-        self.ready = True
+        self.print('Loading reference data...')
+        self.load_dataset(self.ref_ip, self.ref_info) # Load reference data
+        self.print('Loading path data...')
+        self.load_dataset(self.path_ip, self.path_info) # Load path data
 
+        # Generate path details:
+        self.make_path()
+
+        self.ready = True
 
         self.fig,self.ax = plt.subplots(1,1)
         plt.show(block=False)
@@ -145,8 +192,10 @@ class Main_ROS_Class(Base_ROS_Class):
                 self.rate_obj.sleep()
                 self.new_label = False
                 self.new_info  = False
-
-                self.loop_contents()
+                if self.stage == Stage.INIT:
+                    self.init_robot()
+                else:
+                    self.loop_contents()
 
             except rospy.exceptions.ROSInterruptException as e:
                 pass
@@ -156,6 +205,46 @@ class Main_ROS_Class(Base_ROS_Class):
                 else:
                     self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
                     rospy.sleep(0.5)
+
+    def ref2path(self, ref_index):
+        if not hasattr(self, 'ref2path_matrix'):
+            _ref2path_matrix = m2m_dist(self.ref_xyws[:,0:2],self.path_xyws[:,0:2])
+            self.ref2path_matrix = np.argmin(_ref2path_matrix, axis=1)
+        return self.ref2path_matrix[ref_index]
+
+    def path2ref(self, path_index):
+        if not hasattr(self, 'path2ref_matrix'):
+            _path2ref_matrix = m2m_dist(self.path_xyws[:,0:2], self.ref_xyws[:,0:2])
+            self.path2ref_matrix = np.argmin(_path2ref_matrix, axis=1)
+        return self.path2ref_matrix[path_index]
+
+    def init_robot(self):
+
+        if not hasattr(self, '_first_robot_print'):
+            self.print(C_I_BLUE + 'Initialising: Heading to Start Position.' + C_RESET, LogType.DEBUG)
+            self._first_robot_print = True
+
+        self.command.enabled    = True
+        self.command.mode       = self.command.OVERRIDE
+
+        _end        = self.ref2path(0) + 5
+        _start      = self.info.group.current_ind
+        _length     = self.path_xyws.shape[0]
+        _options    = [((_end-_start)%_length), ((_end-_start)%_length)-_length]
+        _distance   = _options[np.argmin(np.abs(_options))]
+
+        self.command.speed      = [0.5 if np.abs(_distance) < (0.9 * self.path_xyws.shape[0]) else 0.2]
+        self.command.reverse    = _distance < 0
+
+        if np.abs(_distance) <= 1:
+            self.stage = Stage.S0
+            self.mode = Vehicle_Mode.STOPPED
+            self.command.reverse = False
+            self.command.speed = [0.0]
+            self.print(C_I_BLUE + 'Ready: Commencing Mission Operation.' + C_RESET, LogType.DEBUG)
+
+        self.command_pub.publish(self.command)
+
 
     def loop_contents(self):
         
@@ -239,51 +328,53 @@ class Main_ROS_Class(Base_ROS_Class):
                     self.stage = Stage.S1
                     self.stage_odo = 0.0
                     self.command.speed = [0.2]
-                    self.best_s1 = [None, 100000]
+                    self.best_s1 = [None, 100000, None]
                     self.s1_flag = [False, 0]
+                    self.better_flag = False
 
-                    print('> Commencing Stage 1: Looking for an OK point ...')
+                    self.print('> Commencing Stage 1: Looking for an OK point ...', LogType.DEBUG)
                 
             elif self.stage == Stage.S1:
                 if (curr_dist < self.best_s1[1]):
-                    self.best_s1 = [self.odometer, curr_dist]
+                    self.best_s1 = [self.odometer, curr_dist, self.label.match_index]
                     if curr_dist < self.___cibbs[-1]:
                         if not self.s1_flag[0]:
-                            print('\tFound OK point: Overshooting by 0.5m ...')
+                            self.print('\tFound OK point: Overshooting by 0.5m ...', LogType.DEBUG)
                             self.s1_flag = [True, self.odometer]
                         else:
-                            print('\tFound better point: Overshooting by 0.5m ...')
+                            if not self.better_flag:
+                                self.print('\tFound better point: Overshooting by 0.5m ...', LogType.DEBUG)
+                                self.better_flag = True
                             self.s1_flag[1] = self.odometer
 
                 if (self.s1_flag[0]) and (np.abs(self.odometer - self.s1_flag[1]) > 0.5):
-                    self.best_s2 = [0, 100000]
-                    self.s2_flag = False
+                    self.best_s2 = [None, 100000, None, False]
                     self.stage = Stage.S2
                     self.command.reverse = True
                     self.mode = Vehicle_Mode.REVERSE
                     self.stage_odo = 0.0
-                    print('> Commencing Stage 2: Reversing 1m ...')
+                    self.print('> Commencing Stage 2: Reversing 1m ...', LogType.DEBUG)
 
             elif self.stage == Stage.S2:
                 if self.stage_odo > 1.0:
                     self.command.reverse = False
                     self.mode       = Vehicle_Mode.FORWARD
                     self.stage_odo  = 0.0
-                    if self.s2_flag:
+                    #if self.best_s2[3]:
+                    if True:
                         self.stage      = Stage.S3
-                        #self.best_odo   = np.mean([self.best_s1[0], self.best_s2[0]]) # mean,
-                        self.best_odo   = (np.prod(self.best_s1) + np.prod(self.best_s2)) / (self.best_s1[1]+self.best_s2[1]) # weighted mean
-                        print('> Commencing Stage 3: Driving to target ... [%0.2f {%0.2f,%0.2f}]' % (self.best_odo, self.best_s1[0], self.best_s2[0]))
+                        self.best_odo   = (np.prod(self.best_s1[0:2]) + np.prod(self.best_s2[0:2])) / (self.best_s1[1]+self.best_s2[1]) # weighted mean
+                        self.print('> Commencing Stage 3: Driving to target ... [%0.2f {%0.2f,%0.2f}]' % (self.best_odo, self.best_s1[0], self.best_s2[0]), LogType.DEBUG)
                     else:
-                        print(C_I_YELLOW + '\tFailed to verify, skipping to Stage 5 ...' + C_RESET)
+                        self.print(C_I_YELLOW + '\tFailed to verify, skipping to Stage 5 ...' + C_RESET, LogType.DEBUG)
                         self.stage      = Stage.S4
                         self.time_now   = rospy.Time.now().to_sec() - 5
                 else:
                     if curr_dist < self.best_s2[1]:
-                        self.best_s2 = [self.odometer, curr_dist]
+                        self.best_s2 = [self.odometer, curr_dist, self.label.match_index, self.best_s2[3]]
 
-                    if (curr_dist < self.___cibbs[-1]) and (not self.s2_flag):
-                        self.s2_flag = True
+                    if (curr_dist < self.___cibbs[-1]):
+                        self.best_s2[3] = True
 
             elif self.stage == Stage.S3:
                 if self.odometer < self.best_odo:
@@ -296,16 +387,27 @@ class Main_ROS_Class(Base_ROS_Class):
                 if np.abs(self.odometer - self.best_odo) < 0.01:
                     self.stage = Stage.S4
                     self.time_now = rospy.Time.now().to_sec()
-                    _dist = p2p_dist_2d(np.array([
+                    _truth_dist = p2p_dist_2d(np.array([
                                 self.ref_ip.dataset['dataset']['px'][self.label.truth_index], 
                                 self.ref_ip.dataset['dataset']['py'][self.label.truth_index]    
                             ]), np.array([getattr(self.label.gt_ego, i) for i in 'xy']) )
-                    _sign = np.sign(np.arctan2(self.ref_ip.dataset['dataset']['py'][self.label.truth_index] - self.label.gt_ego.y,
-                                     self.ref_ip.dataset['dataset']['px'][self.label.truth_index] - self.label.gt_ego.x))
-                    _colour = C_I_GREEN if _dist < 0.15 else C_I_YELLOW if _dist < 0.5 else C_I_RED
-                    print('\tDistance to closest reference point: %s%0.2f%s m' % \
-                        (_colour, _dist * _sign, C_RESET))
-                    print('> Commencing Stage 4: Pausing for a second ...')
+                    _match_dist = p2p_dist_2d(np.array([
+                                self.ref_ip.dataset['dataset']['px'][self.label.truth_index], 
+                                self.ref_ip.dataset['dataset']['py'][self.label.truth_index]    
+                            ]), np.array([
+                                self.ref_ip.dataset['dataset']['px'][self.label.match_index], 
+                                self.ref_ip.dataset['dataset']['py'][self.label.match_index]
+                            ]))
+
+                    _truth_sign = np.sign(shortest_index_distance(self.info.group.current_ind, self.ref2path(self.label.truth_index), self.path_xyws.shape[0]))
+                    _match_sign = np.sign(shortest_index_distance(self.info.group.current_ind, self.ref2path(self.label.match_index), self.path_xyws.shape[0]))
+
+                    _truth_colour = C_I_GREEN if _truth_dist < 0.15 else C_I_YELLOW if _truth_dist < 0.5 else C_I_RED
+                    _match_colour = C_I_GREEN if _match_dist < 0.15 else C_I_YELLOW if _match_dist < 0.5 else C_I_RED
+                    self.print('\tTruth Err: %s%0.2f%s m | Match Err: %s%0.2f%s m' % \
+                        (_truth_colour, _truth_dist * _truth_sign, C_RESET, _match_colour, _match_dist * _match_sign, C_RESET), LogType.INFO)
+                    self.print('\tMatches: ' + str([self.best_s1[2], self.best_s2[2], self.label.match_index]), LogType.DEBUG)
+                    self.print('> Commencing Stage 4: Pausing for a second ...', LogType.DEBUG)
             
             elif self.stage == Stage.S4:
                 self.command.speed = [0.0]
@@ -315,15 +417,15 @@ class Main_ROS_Class(Base_ROS_Class):
                     self.command.reverse = False
                     self.command.speed = [0.5]
                     self.stage_odo = 0.0
-                    print('> Commencing Stage 5: Driving for 0.5m ...')
+                    self.print('> Commencing Stage 5: Driving for 0.5m ...', LogType.DEBUG)
 
             elif self.stage == Stage.S5:
                 if self.stage_odo > 0.5:
-                    print(C_I_GREEN + 'Mission Complete: Resetting to Stage 0.' + C_RESET + '\n')
+                    self.print(C_I_GREEN + 'Mission Complete: Resetting to Stage 0.' + C_RESET + '\n', LogType.DEBUG)
                     self.stage = Stage.S0
 
             else:
-                print('Complete.')
+                self.print('Complete.', LogType.DEBUG)
                 sys.exit()
 
         self.command_pub.publish(self.command)
