@@ -12,3 +12,4 @@ src/CMakeLists.txt
 *.npz
 *.bag
 cfg/svm_models/fields/*.png
+data/image_libraries/*
