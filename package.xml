@@ -74,6 +74,7 @@
   <exec_depend>python3-fastdist</exec_depend>           <!-- pip install fastdist -->
   <exec_depend>python3-torch</exec_depend>              <!-- pip3 install torch==2.0.1 -->
   <exec_depend>python3-torchvision</exec_depend>        <!-- pip3 install torchvision==0.15.2  -->
+  <exec_depend>python3-pytorch_lightning</exec_depend>  <!-- pip3 install pytorch_lightning-->
  
   <export>
   </export>
