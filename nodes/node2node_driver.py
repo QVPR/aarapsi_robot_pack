@@ -404,9 +404,10 @@ class Main_ROS_Class(Dataset_Loader):
 
                     _truth_colour = C_I_GREEN if _truth_dist < 0.15 else C_I_YELLOW if _truth_dist < 0.5 else C_I_RED
                     _match_colour = C_I_GREEN if _match_dist < 0.15 else C_I_YELLOW if _match_dist < 0.5 else C_I_RED
-                    self.print('\tTruth Err: %s%0.2f%s m | Match Err: %s%0.2f%s m' % \
-                        (_truth_colour, _truth_dist * _truth_sign, C_RESET, _match_colour, _match_dist * _match_sign, C_RESET), LogType.INFO)
-                    self.print('\tMatches: ' + str([self.best_s1[2], self.best_s2[2], self.label.match_index]), LogType.DEBUG)
+                    _match_hist   = [self.best_s1[2], self.best_s2[2], self.label.match_index]
+                    self.print('\tTruth Err: %s%0.2f%s m | Match Err: %s%0.2f%s m | Agreement: %d' % \
+                        (_truth_colour, _truth_dist * _truth_sign, C_RESET, _match_colour, _match_dist * _match_sign, C_RESET, int(np.unique(_match_hist).shape[0] == 1)), LogType.INFO)
+                    self.print('\tMatches: ' + str(_match_hist), LogType.DEBUG)
                     self.print('> Commencing Stage 4: Pausing for a second ...', LogType.DEBUG)
             
             elif self.stage == Stage.S4:
