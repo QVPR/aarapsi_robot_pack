@@ -34,12 +34,14 @@
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
 
     <include file="$(find jackal_control)/launch/control.launch" />
-    <include if="$(arg joystick)" file="$(find aarapsi_robot_pack)/launch/sim/teleop.launch"/>
+    <include file="$(find aarapsi_robot_pack)/launch/sim/teleop.launch">
+        <arg name="joystick"            value="$(arg joystick)"/>
+    </include>
 
     <include file="$(find aarapsi_robot_pack)/launch/sim/gazebo.launch">
-        <arg name="gui"                   value="$(arg gui)" />
-        <arg name="use_sim_time"          value="$(arg use_sim_time)" />
-        <arg name="headless"              value="$(arg headless)" />
+        <arg name="gui"                 value="$(arg gui)" />
+        <arg name="use_sim_time"        value="$(arg use_sim_time)" />
+        <arg name="headless"            value="$(arg headless)" />
     </include>
 
     <node if="$(arg launch_rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find aarapsi_robot_pack)/rviz/sim_control.rviz" />
@@ -87,6 +89,7 @@
                 <arg name="log_level"           value="$(arg log_level)"/>
                 <arg name="reset"               value="$(arg reset)"/>
                 <arg name="follow_simple"       value="$(arg follow_simple)"/>
+                <arg name="ID"                  value="9"/>
             </include>
         </group>
     </group>
