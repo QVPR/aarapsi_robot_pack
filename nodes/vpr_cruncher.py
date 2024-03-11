@@ -58,11 +58,16 @@ class Main_ROS_Class(Base_ROS_Class):
 
         # Process reference data
         try:
+            dataset_params = self.make_dataset_dict()
             if self.EXTRACT_SRV.get():
-                self.ip             = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=False, ros=True, use_tqdm=False)
+                self.ip             = VPRDatasetProcessor(dataset_params=dataset_params, try_gen=False, ros=True, use_tqdm=False)
             else:
-                self.ip             = VPRDatasetProcessor(self.make_dataset_dict(), try_gen=True, ros=True, use_tqdm=True, \
-                                                          init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, autosave=True)
+                self.ip             = VPRDatasetProcessor(None, try_gen=True, ros=True, use_tqdm=True, \
+                                                          cuda=use_gpu, autosave=True)
+                if use_gpu:
+                    self.ip.init_nns()
+                    
+                self.ip.load_dataset(dataset_params=dataset_params, try_gen=True)
         except:
             self.print(formatException(), LogType.ERROR)
             self.exit()

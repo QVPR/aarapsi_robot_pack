@@ -75,9 +75,11 @@ class Main_ROS_Class(Base_ROS_Class):
 
         # Process reference data
         try:
-            self.ip                 = VPRDatasetProcessor(self.make_dataset_dict(), 
-                                                            init_hybridnet=False, init_netvlad=True, cuda=True, \
+            self.ip                 = VPRDatasetProcessor(dataset_params=None, cuda=True, \
                                                             try_gen=True, autosave=True, use_tqdm=True, ros=True)
+            self.ip.init_nns()
+
+            self.ip.load_dataset(dataset_params=self.make_dataset_dict(), try_gen=True)
         except:
             self.print(formatException(), LogType.ERROR)
             self.exit()

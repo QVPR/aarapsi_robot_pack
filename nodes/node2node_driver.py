@@ -298,10 +298,10 @@ class Main_ROS_Class(Dataset_Loader):
 
             (lower,upper), _conf, _sym = find_percentile_conf(self.mdist_len, 0.25, 0.995)
 
-            self.___means.append(np.mean(_fsamples))
-            self.___dists.append(curr_dist)
-            self.___cibbs.append(np.sort(self.mdist_hist)[lower])
-            self.___dynth.append(np.mean(self.___cibbs[max([-10,-len(self.___cibbs)]):]))
+            self.___means.append(np.mean(_fsamples)) # mean of history
+            self.___dists.append(curr_dist)          # best match distance
+            self.___cibbs.append(np.sort(self.mdist_hist)[lower]) # confidence interval bottom bound
+            self.___dynth.append(np.mean(self.___cibbs[max([-10,-len(self.___cibbs)]):])) # smooth of recent ___cibbs values
 
             if len(self.___means) > 200:
                 self.___means.pop(0)
@@ -317,7 +317,7 @@ class Main_ROS_Class(Dataset_Loader):
             self.q += 1
             plt_pause(0.001, self.fig)
 
-        if True:
+        if True: # For code folding
             if not hasattr(self, 'bmd'):
                 self.bmd        = 100000
             self.bmd            = np.min([curr_dist, self.bmd])

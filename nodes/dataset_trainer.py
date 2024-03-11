@@ -46,8 +46,13 @@ class Main_ROS_Class(Base_ROS_Class):
         self.use_gpu            = use_gpu
         dataset_dict            = self.make_dataset_dict()
         try:
-            self.vpr            = VPRDatasetProcessor(dataset_dict, try_gen=True, init_hybridnet=use_gpu, init_netvlad=use_gpu, cuda=use_gpu, \
+            self.vpr            = VPRDatasetProcessor(dataset_params=None, try_gen=True, cuda=use_gpu, \
                                         autosave=True, use_tqdm=True, ros=True)
+            if use_gpu:
+                self.vpr.init_nns()
+
+            self.vpr.load_dataset(dataset_params=dataset_dict, try_gen=True)
+                
         except Exception as e:
             self.print(formatException(), LogType.ERROR)
             self.print(formatException(dump=True), LogType.DEBUG)
