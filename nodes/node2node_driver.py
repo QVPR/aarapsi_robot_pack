@@ -13,7 +13,7 @@ from pyaarapsi.core.ros_tools                   import NodeState, roslogger, Log
 from pyaarapsi.core.helper_tools                import formatException, p2p_dist_2d, plt_pause, m2m_dist
 from pyaarapsi.core.vars                        import C_I_GREEN, C_I_YELLOW, C_I_RED, C_I_BLUE, C_RESET
 from pyaarapsi.core.argparse_tools              import check_positive_float, check_string
-from pyaarapsi.vpr_classes.base                 import Base_ROS_Class, base_optional_args
+from pyaarapsi.vpr_classes.base                 import base_optional_args
 from pyaarapsi.vpr_classes.dataset_loader_base  import Dataset_Loader
 from pyaarapsi.vpr_simple.vpr_dataset_tool      import VPRDatasetProcessor, FeatureType
 from pyaarapsi.pathing.basic                    import calc_path_stats, make_speed_array
