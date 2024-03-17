@@ -70,6 +70,7 @@ add_message_files(
   ImageDetails.msg
   ImageStructure.msg
   Label.msg
+  LabelFlagged.msg
   ParamsSVM.msg
   RequestDataset.msg 
   RequestSVM.msg
