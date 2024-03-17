@@ -15,7 +15,7 @@ from pyaarapsi.vpr_classes.dataset_loader_base  import Dataset_Loader
 from pyaarapsi.vpr_simple.vpr_dataset_tool      import VPRDatasetProcessor, FeatureType
 from pyaarapsi.pathing.basic                    import calc_path_stats, make_speed_array
 
-from aarapsi_robot_pack.msg import Label, xyw
+from aarapsi_robot_pack.msg import Label, LabelFlagged, xyw
 
 '''
 State estimate spoofer
@@ -57,6 +57,8 @@ class Main_ROS_Class(Dataset_Loader):
         self.bias_growth_rate   = 0.3 # m/s; 5 mm per second
         self.current_bias       = 0
         self.start_time         = 0 # seconds
+        self.bias_time          = 0 # seconds
+        self.last_mode          = True
 
         self.state_msg      = Label()
         self.old_state_msg  = Label()
@@ -76,7 +78,7 @@ class Main_ROS_Class(Dataset_Loader):
         super().init_rospy()
 
         self.state_sub  = rospy.Subscriber( self.namespace + '/state', Label, self.state_cb, queue_size=1)
-        self.state_pub  = self.add_pub( self.namespace + '/state_corrupted', Label)
+        self.state_pub  = self.add_pub( self.namespace + '/state_corrupted', LabelFlagged)
 
     def state_cb(self, msg: Label):
         self.old_state_msg  = self.state_msg
@@ -148,21 +150,22 @@ class Main_ROS_Class(Dataset_Loader):
                     self.print('Main loop exception, attempting to handle; waiting for parameters to update. Details:\n' + formatException(), LogType.DEBUG, throttle=5)
                     rospy.sleep(0.5)
 
-    def attack_numeric(self, numeric: float, perc: float, minval: float) -> float:
+    def attack_numeric(self, numeric: float, minval: float) -> float:
         random_sign = 1 if np.random.rand() < 0.5 else -1
-        adj_minval  = (minval * (np.random.rand() * perc) * random_sign) + minval
+        adj_minval  = (minval * (np.random.randn()) + minval) * random_sign
         return numeric + adj_minval
     
-    def attack_yaw(self, numeric: float, perc: float, minval: float) -> float:
-        attacked_yaw = self.attack_numeric(numeric=numeric, perc=perc, minval=minval)
+    def attack_yaw(self, numeric: float, minval: float) -> float:
+        attacked_yaw = self.attack_numeric(numeric=numeric, minval=minval)
         return normalize_angle(attacked_yaw)
     
     def get_curr_path_ind(self, curr_xyw: xyw) -> int:
         return int(np.argmin(m2m_dist(self.path_xyws[:,0:2], np.array([curr_xyw.x, curr_xyw.y]))))
 
-    def generate_bias(self, msg: xyw, _sign: int) -> xyw:
+    def generate_bias(self, msg: xyw, _sign: int, reset: bool) -> xyw:
         time_now            = rospy.Time.now().to_sec()
-        bias_growth_amount  = _sign * self.bias_growth_rate * (time_now - self.start_time) # amount to bias in direction
+        if reset: self.bias_time = time_now
+        bias_growth_amount  = _sign * self.bias_growth_rate * (time_now - self.bias_time) # amount to bias in direction
         path_ind            = self.get_curr_path_ind(curr_xyw=msg) # closest path index to true position
         biased_dist         = (self.path_sum[path_ind] + bias_growth_amount) %  self.path_len# along-track biased position
         biased_path_mid_ind = int(np.argmin( (self.path_sum - biased_dist) % self.path_len )) # along-track biased index
@@ -175,32 +178,40 @@ class Main_ROS_Class(Dataset_Loader):
                                                           self.path_xyws[biased_path_mid_ind-1,2], mode='RAD'), mode='RAD')
         return xyw(x=_xy[0], y=_xy[1], w=_yaw)
     
-    def generate_attacked_xyw(self, msg: xyw, old_msg: xyw, curr_index: int) -> xyw:
+    def generate_attacked_xyw(self, msg: xyw, old_msg: xyw, reset: bool) -> xyw:
         if self.attack_type == Attack_Type.NONE:
             pass
         elif self.attack_type == Attack_Type.Corrupt:
-            msg.x = self.attack_numeric(numeric=msg.x, perc=0.2, minval=0.05)
-            msg.y = self.attack_numeric(numeric=msg.y, perc=0.2, minval=0.05)
-            msg.w = self.attack_yaw(numeric=msg.w, perc=0.2, minval=5*np.pi/180)
+            msg.x = self.attack_numeric(numeric=msg.x, minval=0.2)
+            msg.y = self.attack_numeric(numeric=msg.y, minval=0.2)
+            msg.w = self.attack_yaw(numeric=msg.w, minval=10*np.pi/180)
         elif self.attack_type == Attack_Type.Zero:
             msg = xyw(x=0, y=0, w=0)
         elif self.attack_type == Attack_Type.Hold:
             msg = old_msg
         elif self.attack_type == Attack_Type.BiasForward:
-            msg = self.generate_bias(msg, 1)
+            msg = self.generate_bias(msg=msg, _sign=1, reset=reset)
         elif self.attack_type == Attack_Type.BiasBackward:
-            msg = self.generate_bias(msg, -1)
+            msg = self.generate_bias(msg=msg, _sign=-1, reset=reset)
         elif self.attack_type == Attack_Type.Target:
             pass
         return msg
 
     def loop_contents(self):
+        new_msg = LabelFlagged(label=self.state_msg)
+        _attack_period  = 40
+        attack_time     = ((rospy.Time.now().to_sec() - self.start_time) % _attack_period) > (_attack_period * 0.5)
+        mode_change     = not (self.last_mode == attack_time)
+        self.last_mode  = attack_time
+        if attack_time:
+            new_msg.label.gt_ego = self.generate_attacked_xyw(msg=self.state_msg.gt_ego, old_msg=self.old_state_msg.gt_ego, reset=mode_change)
+            new_msg.flags = [1]
+            if mode_change: self.print('Attacking')
+        else:
+            new_msg.flags = [0]
+            if mode_change == 1: self.print('Normal operations')
 
-        self.state_msg.gt_ego = self.generate_attacked_xyw(msg=self.state_msg.gt_ego, 
-                                                           old_msg=self.old_state_msg.gt_ego,
-                                                           curr_index=self.state_msg.truth_index)
-        
-        self.state_pub.publish(self.state_msg)
+        self.state_pub.publish(new_msg)
 
 def do_args():
     parser = ap.ArgumentParser(prog="se_spoofer.py", 
