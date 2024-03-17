@@ -10,7 +10,7 @@ from enum import Enum
 from pyaarapsi.core.ros_tools                   import NodeState, roslogger, LogType
 from pyaarapsi.core.helper_tools                import formatException, normalize_angle, angle_wrap, m2m_dist
 from pyaarapsi.vpr_classes.base                 import base_optional_args
-from pyaarapsi.core.argparse_tools              import check_positive_float, check_string
+from pyaarapsi.core.argparse_tools              import check_positive_float, check_string, check_enum, check_positive_int, check_bounded_float
 from pyaarapsi.vpr_classes.dataset_loader_base  import Dataset_Loader
 from pyaarapsi.vpr_simple.vpr_dataset_tool      import VPRDatasetProcessor, FeatureType
 from pyaarapsi.pathing.basic                    import calc_path_stats, make_speed_array
@@ -46,15 +46,17 @@ class Main_ROS_Class(Dataset_Loader):
     def init_params(self, rate_num, log_level, reset):
         super().init_params(rate_num, log_level, reset)
 
-        self.PATH_SAMPLE_RATE       = self.params.add(self.namespace + "/path/sample_rate",         5.0,                    check_positive_float,                       force=False) # Hz
-        self.PATH_FILTERS           = self.params.add(self.namespace + "/path/filters",             "{}",                   check_string,                               force=False)
+        self.PATH_SAMPLE_RATE       = self.params.add(self.namespace + "/path/sample_rate",         5.0,                    check_positive_float,                           force=False) # Hz
+        self.PATH_FILTERS           = self.params.add(self.namespace + "/path/filters",             "{}",                   check_string,                                   force=False)
 
+        self.ATTACK_TYPE            = self.params.add(self.nodespace + "/attack/type",              Attack_Type.Corrupt,    lambda x: check_enum(x, Attack_Type),           force=False)
+        self.ATTACK_PERIOD          = self.params.add(self.nodespace + "/attack/period",            40,                     check_positive_int,                             force=False)
+        self.ATTACK_PERIOD_RATIO    = self.params.add(self.nodespace + "/attack/period_ratio",      0.5,                    lambda x: check_bounded_float(x, 0, 1, 'none'), force=False)
+        self.BIAS_GROWTH_RATE       = self.params.add(self.nodespace + "/bias/growth_rate",         0.3,                    check_positive_float,                           force=False)
+    
     def init_vars(self):
         super().init_vars()
 
-        self.attack_type    = Attack_Type.BiasBackward
-
-        self.bias_growth_rate   = 0.3 # m/s; 5 mm per second
         self.current_bias       = 0
         self.start_time         = 0 # seconds
         self.bias_time          = 0 # seconds
@@ -165,7 +167,7 @@ class Main_ROS_Class(Dataset_Loader):
     def generate_bias(self, msg: xyw, _sign: int, reset: bool) -> xyw:
         time_now            = rospy.Time.now().to_sec()
         if reset: self.bias_time = time_now
-        bias_growth_amount  = _sign * self.bias_growth_rate * (time_now - self.bias_time) # amount to bias in direction
+        bias_growth_amount  = _sign * self.BIAS_GROWTH_RATE.get() * (time_now - self.bias_time) # amount to bias in direction
         path_ind            = self.get_curr_path_ind(curr_xyw=msg) # closest path index to true position
         biased_dist         = (self.path_sum[path_ind] + bias_growth_amount) %  self.path_len# along-track biased position
         biased_path_mid_ind = int(np.argmin( (self.path_sum - biased_dist) % self.path_len )) # along-track biased index
@@ -179,34 +181,33 @@ class Main_ROS_Class(Dataset_Loader):
         return xyw(x=_xy[0], y=_xy[1], w=_yaw)
     
     def generate_attacked_xyw(self, msg: xyw, old_msg: xyw, reset: bool) -> xyw:
-        if self.attack_type == Attack_Type.NONE:
+        if self.ATTACK_TYPE.get() == Attack_Type.NONE:
             pass
-        elif self.attack_type == Attack_Type.Corrupt:
+        elif self.ATTACK_TYPE.get() == Attack_Type.Corrupt:
             msg.x = self.attack_numeric(numeric=msg.x, minval=0.2)
             msg.y = self.attack_numeric(numeric=msg.y, minval=0.2)
             msg.w = self.attack_yaw(numeric=msg.w, minval=10*np.pi/180)
-        elif self.attack_type == Attack_Type.Zero:
+        elif self.ATTACK_TYPE.get() == Attack_Type.Zero:
             msg = xyw(x=0, y=0, w=0)
-        elif self.attack_type == Attack_Type.Hold:
+        elif self.ATTACK_TYPE.get() == Attack_Type.Hold:
             msg = old_msg
-        elif self.attack_type == Attack_Type.BiasForward:
+        elif self.ATTACK_TYPE.get() == Attack_Type.BiasForward:
             msg = self.generate_bias(msg=msg, _sign=1, reset=reset)
-        elif self.attack_type == Attack_Type.BiasBackward:
+        elif self.ATTACK_TYPE.get() == Attack_Type.BiasBackward:
             msg = self.generate_bias(msg=msg, _sign=-1, reset=reset)
-        elif self.attack_type == Attack_Type.Target:
+        elif self.ATTACK_TYPE.get() == Attack_Type.Target:
             pass
         return msg
 
     def loop_contents(self):
-        new_msg = LabelFlagged(label=self.state_msg)
-        _attack_period  = 40
-        attack_time     = ((rospy.Time.now().to_sec() - self.start_time) % _attack_period) > (_attack_period * 0.5)
+        new_msg         = LabelFlagged(label=self.state_msg)
+        attack_time     = ((rospy.Time.now().to_sec() - self.start_time) % self.ATTACK_PERIOD.get()) > (self.ATTACK_PERIOD.get() * self.ATTACK_PERIOD_RATIO.get())
         mode_change     = not (self.last_mode == attack_time)
         self.last_mode  = attack_time
         if attack_time:
             new_msg.label.gt_ego = self.generate_attacked_xyw(msg=self.state_msg.gt_ego, old_msg=self.old_state_msg.gt_ego, reset=mode_change)
             new_msg.flags = [1]
-            if mode_change: self.print('Attacking')
+            if (mode_change and (self.ATTACK_TYPE.get() != Attack_Type.NONE)): self.print('Adversarial operations')
         else:
             new_msg.flags = [0]
             if mode_change == 1: self.print('Normal operations')
