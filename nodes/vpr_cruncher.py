@@ -130,10 +130,9 @@ class Main_ROS_Class(Base_ROS_Class):
 
         if self.ego_known and self.DVC_WEIGHT.get() < 1: # then perform biasing via distance:
             spd = fastdist.matrix_to_matrix_distance(np.transpose(np.matrix([_px, _py])), np.matrix([self.vpr_ego[0], self.vpr_ego[1]]), fastdist.euclidean, "euclidean")
-            spd_norm = spd/np.max(spd) 
+            spd_norm = spd/np.max(spd)
             dvc_norm = dvc/np.max(dvc)
             spd_x_dvc = ((1-self.DVC_WEIGHT.get())*spd_norm**2 + (self.DVC_WEIGHT.get())*dvc_norm) # TODO: vary bias with velocity, weighted sum
-
             mInd = int(np.argmin(spd_x_dvc))
             return mInd, spd_x_dvc
         else:
@@ -254,14 +253,16 @@ class Main_ROS_Class(Base_ROS_Class):
         self.publish_ros_info(trueInd, matchInd, dvc, tolState, tolError, tolMode)
 
 def do_args():
-    parser = ap.ArgumentParser(prog="vpr_cruncher", 
+    '''
+    Helper to handle argparse items
+    '''
+    parser = ap.ArgumentParser(prog="vpr_cruncher",
                                 description="ROS implementation of QVPR's VPR Primer",
                                 epilog="Maintainer: Owen Claxton (claxtono@qut.edu.au)")
-    
-    # Optional Arguments:
+    # Optional Arguments:except
     parser = base_optional_args(parser, node_name='vpr_cruncher')
-    parser.add_argument('--use-gpu', '-G', type=check_bool, default=True, help='Specify whether to use GPU (default: %(default)s).')
-
+    parser.add_argument('--use-gpu', '-G', type=check_bool, default=True,
+                        help='Specify whether to use GPU (default: %(default)s).')
     # Parse args...
     return vars(parser.parse_known_args()[0])
 
@@ -276,7 +277,9 @@ if __name__ == '__main__':
     except SystemExit as e:
         pass
     except ConnectionRefusedError as e:
-        roslogger("Error: Is the roscore running and accessible?", LogType.ERROR, ros=False) # False as rosnode likely terminated
-    except:
-        roslogger("Error state reached, system exit triggered.", LogType.WARN, ros=False) # False as rosnode likely terminated
+        # ros=False as rosnode likely terminated
+        roslogger("Error: Is the roscore running and accessible?", LogType.ERROR, ros=False)
+    finally:
+        # ros=False as rosnode likely terminated
+        roslogger("Error state reached, system exit triggered.", LogType.WARN, ros=False)
         roslogger(formatException(), LogType.ERROR, ros=False)
